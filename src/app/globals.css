@@ -1,0 +1,83 @@
+/*
+ * Lendshed design tokens (spec section 12).
+ * Tailwind CSS 4. Every colour, size and radius the app may use lives here.
+ * The default Tailwind palette, type scale and shadows are switched off on
+ * purpose, so only these values exist: bg-page, text-ink, bg-accent, etc.
+ * All text pairs below pass WCAG 2.2 AA (ratios are in spec section 12).
+ */
+@import "tailwindcss";
+
+@theme {
+  /* Colour: only these exist. */
+  --color-*: initial;
+  --color-white: #ffffff;
+
+  --color-page: #faf7f2;         /* page background */
+  --color-card: #ffffff;         /* cards, fields, header */
+  --color-line: #e6e0d6;         /* card and table borders (decorative) */
+  --color-field: #8c857b;        /* input and outline-button borders, 3.65:1 on card */
+  --color-ink: #26231f;          /* text, 14.6:1 on page */
+  --color-muted: #6b655d;        /* secondary text, 5.4:1 on page */
+
+  --color-accent: #2f5d46;       /* shed green: main button, links, current place */
+  --color-accent-hover: #244a37; /* main button hover and press */
+  --color-accent-soft: #e4eee7;  /* selected, Approved/Out/Listed/Active labels, initials */
+
+  --color-overdue: #c2410c;      /* the Overdue label and nothing else */
+
+  --color-neutral-soft: #efece7; /* Requested label, loading placeholders */
+  --color-done-soft: #f2f0ec;    /* finished, Hidden and Suspended labels */
+  --color-notice: #f6f1ea;       /* error notice background (dark left border) */
+
+  /* Type: one family, set by next/font in src/app/fonts.ts. */
+  --font-*: initial;
+  --font-sans: var(--font-atkinson), ui-sans-serif, system-ui, -apple-system,
+    "Segoe UI", Roboto, sans-serif;
+
+  --text-*: initial;
+  --text-sm: 0.875rem;        /* 14 px: captions, table meta */
+  --text-sm--line-height: 1.25rem;
+  --text-base: 1rem;          /* 16 px: body and all form text */
+  --text-base--line-height: 1.5rem;
+  --text-lg: 1.125rem;        /* 18 px: card titles */
+  --text-lg--line-height: 1.625rem;
+  --text-xl: 1.375rem;        /* 22 px: section headings */
+  --text-xl--line-height: 1.75rem;
+  --text-2xl: 1.75rem;        /* 28 px: page headings */
+  --text-2xl--line-height: 2.125rem;
+  --text-3xl: 2.25rem;        /* 36 px: "Elm Street" on Browse */
+  --text-3xl--line-height: 2.625rem;
+
+  /* Shape: flat, no shadows. */
+  --radius-card: 0.75rem;     /* 12 px: cards, panels, photos */
+  --radius-control: 0.625rem; /* 10 px: buttons, fields */
+  --shadow-*: initial;
+  --inset-shadow-*: initial;
+  --drop-shadow-*: initial;
+}
+
+@layer base {
+  html {
+    background-color: var(--color-page);
+    color: var(--color-ink);
+    font-family: var(--font-sans);
+    -webkit-text-size-adjust: 100%;
+  }
+
+  /* One visible focus style for everything. */
+  :focus-visible {
+    outline: 2px solid var(--color-accent);
+    outline-offset: 2px;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    ::before,
+    ::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
+  }
+}
