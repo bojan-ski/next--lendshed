@@ -1,0 +1,21 @@
+export const dates = {
+  weekdays: ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"],
+  months: [
+    "Jan",
+    "Feb",
+    "Mar",
+    "Apr",
+    "May",
+    "Jun",
+    "Jul",
+    "Aug",
+    "Sep",
+    "Oct",
+    "Nov",
+    "Dec",
+  ],
+  date: "{weekday} {day} {month}",
+  dateWithYear: "{weekday} {day} {month} {year}",
+  rangeStart: "{weekday} {day}",
+  range: "{start} – {end}",
+} as const;

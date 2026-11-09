@@ -1,4 +1,5 @@
 import { app } from "./app";
+import { dates } from "./dates";
 import { errors } from "./errors";
 import { fields } from "./fields";
 import { flash } from "./flash";
@@ -27,6 +28,7 @@ export const strings = {
   loanCard,
   houseRules,
   privacy,
+  dates,
 } as const;
 
 export type FlashKey = keyof typeof strings.flash;
