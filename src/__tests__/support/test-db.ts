@@ -1,7 +1,7 @@
-import { randomBytes, randomUUID } from "node:crypto";
+import { randomBytes } from "node:crypto";
 import { parseSetCookieHeader } from "better-auth/cookies";
-import { hashPassword } from "better-auth/crypto";
 import { db } from "@/db";
+import { createCredentialUser } from "@/db/credentials";
 import type { MemberStatus, Role } from "@/generated/prisma/client";
 import { auth } from "@/lib/auth";
 import { env } from "@/lib/env";
@@ -62,27 +62,21 @@ export function createTestScope() {
       password = TEST_PASSWORD,
       name = "Mira K.",
     }: TestUserOptions = {}): Promise<TestUser> {
-      const id = randomUUID();
       const email = this.email();
-      userIds.push(id);
-      await db.user.create({
-        data: {
-          id,
-          name,
-          email,
-          role,
-          status,
-          accounts: {
-            create: {
-              id: randomUUID(),
-              accountId: id,
-              providerId: "credential",
-              password: await hashPassword(password),
-            },
-          },
-        },
+      const { id } = await createCredentialUser(db, {
+        name,
+        email,
+        password,
+        role,
+        status,
       });
+      userIds.push(id);
       return { id, email, password };
+    },
+
+    // A user created outside createTestUser (a script, a seeder) joins the cleanup.
+    track: (userId: string) => {
+      userIds.push(userId);
     },
 
     // Rows belonging to this scope only: never global counts.

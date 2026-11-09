@@ -11,7 +11,9 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "e2e": "playwright test",
-    "db:generate": "prisma generate"
+    "db:generate": "prisma generate",
+    "db:bootstrap": "tsx scripts/bootstrap-organizer.ts",
+    "db:seed": "prisma db seed"
   },
   "dependencies": {
     "@prisma/adapter-pg": "^7.10.1",
@@ -43,6 +45,7 @@
     "prettier": "^3.9.10",
     "prisma": "^7.10.1",
     "tailwindcss": "^4",
+    "tsx": "^4.23.15",
     "typescript": "^5",
     "vite": "^8.3.6",
     "vite-tsconfig-paths": "^6.1.1",
@@ -50,6 +53,7 @@
   },
   "allowScripts": {
     "prisma@7.10.1": true,
-    "@prisma/engines@7.10.1": true
+    "@prisma/engines@7.10.1": true,
+    "esbuild@0.28.2": true
   }
 }
