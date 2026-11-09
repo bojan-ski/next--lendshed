@@ -1,4 +1,5 @@
-import type { IconName } from "@/components/icons";
+import type { IconName } from "@/components/ui/icons";
+import { status as labels } from "@/strings/status";
 
 // One place that decides how every status looks (spec section 12).
 // Loan statuses are the *effective* status from the helper in spec 7.3,
@@ -27,30 +28,34 @@ export type LoanStatus =
   | "lapsed";
 
 export const loanStatus: Record<LoanStatus, StatusStyle> = {
-  requested: { label: "Requested", icon: "clock", tone: "neutral" },
-  approved: { label: "Approved", icon: "check", tone: "positive" },
-  out: { label: "Out", icon: "arrow-up-right", tone: "positive" },
-  overdue: { label: "Overdue", icon: "alert", tone: "overdue" },
-  returned: { label: "Returned", icon: "dot", tone: "done" },
-  declined: { label: "Declined", icon: "dot", tone: "done" },
-  cancelled: { label: "Cancelled", icon: "dot", tone: "done" },
-  expired: { label: "Expired", icon: "dot", tone: "done" },
-  lapsed: { label: "Lapsed", icon: "dot", tone: "done" },
+  requested: { label: labels.loan.requested, icon: "clock", tone: "neutral" },
+  approved: { label: labels.loan.approved, icon: "check", tone: "positive" },
+  out: { label: labels.loan.out, icon: "arrow-up-right", tone: "positive" },
+  overdue: { label: labels.loan.overdue, icon: "alert", tone: "overdue" },
+  returned: { label: labels.loan.returned, icon: "dot", tone: "done" },
+  declined: { label: labels.loan.declined, icon: "dot", tone: "done" },
+  cancelled: { label: labels.loan.cancelled, icon: "dot", tone: "done" },
+  expired: { label: labels.loan.expired, icon: "dot", tone: "done" },
+  lapsed: { label: labels.loan.lapsed, icon: "dot", tone: "done" },
 };
 
 export type ItemState = "listed" | "hidden" | "retired";
 
 export const itemState: Record<ItemState, StatusStyle> = {
-  listed: { label: "Listed", icon: "eye", tone: "positive" },
-  hidden: { label: "Hidden", icon: "eye-off", tone: "done" },
-  retired: { label: "Retired", icon: "dot", tone: "done" },
+  listed: { label: labels.item.listed, icon: "eye", tone: "positive" },
+  hidden: { label: labels.item.hidden, icon: "eye-off", tone: "done" },
+  retired: { label: labels.item.retired, icon: "dot", tone: "done" },
 };
 
 export type MemberStatus = "active" | "suspended";
 
 export const memberStatus: Record<MemberStatus, StatusStyle> = {
-  active: { label: "Active", icon: "dot", tone: "positive" },
-  suspended: { label: "Suspended", icon: "pause", tone: "done" },
+  active: { label: labels.member.active, icon: "dot", tone: "positive" },
+  suspended: { label: labels.member.suspended, icon: "pause", tone: "done" },
 };
 
-export const freeToday: StatusStyle = { label: "Free today", icon: "dot", tone: "positive" };
+export const freeToday: StatusStyle = {
+  label: labels.freeToday,
+  icon: "dot",
+  tone: "positive",
+};

@@ -1,6 +1,6 @@
 // Regenerates the icon files from design/icons/icons.source.mjs:
 //   design/icons/svg/<name>.svg   standalone SVGs (24 px, currentColor)
-//   src/components/icons.tsx      React components + <Icon name="..."/>
+//   src/components/ui/icons.tsx     React components + <Icon name="..."/>
 // Usage (from the kit or repo root): node design/build-icons.mjs
 import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
@@ -80,6 +80,6 @@ export function Icon({ name, ...props }: IconProps & { name: IconName }) {
   return <Component {...props} />;
 }
 `;
-mkdirSync(join(root, "src", "components"), { recursive: true });
-writeFileSync(join(root, "src", "components", "icons.tsx"), tsx);
+mkdirSync(join(root, "src", "components", "ui"), { recursive: true });
+writeFileSync(join(root, "src", "components", "ui", "icons.tsx"), tsx);
 console.log(`Wrote ${names.length} icons.`);

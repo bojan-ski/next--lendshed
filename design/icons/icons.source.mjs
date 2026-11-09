@@ -2,7 +2,7 @@
 // Original drawings on a 24 x 24 grid, 1.75 px stroke, round caps and joins,
 // no fill unless stated, coloured with currentColor.
 // Run `node design/build-icons.mjs` after editing to regenerate the .svg files
-// and src/components/icons.tsx.
+// and src/components/ui/icons.tsx.
 
 export const icons = {
   // Navigation and controls
