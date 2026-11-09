@@ -1,4 +1,5 @@
 import { app } from "./app";
+import { avatarMenu } from "./avatarMenu";
 import { dates } from "./dates";
 import { errors } from "./errors";
 import { fields } from "./fields";
@@ -8,6 +9,7 @@ import { home } from "./home";
 import { houseRules } from "./houseRules";
 import { itemCard } from "./itemCard";
 import { loanCard } from "./loanCard";
+import { login } from "./login";
 import { nav } from "./nav";
 import { privacy } from "./privacy";
 import { status } from "./status";
@@ -29,6 +31,8 @@ export const strings = {
   houseRules,
   privacy,
   dates,
+  login,
+  avatarMenu,
 } as const;
 
 export type FlashKey = keyof typeof strings.flash;

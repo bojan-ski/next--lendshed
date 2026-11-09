@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Suspense } from "react";
+import { Suspense, type ReactNode } from "react";
 import Container from "@/components/shell/Container";
 import NavLink from "@/components/shell/NavLink";
 import { navLinkClasses } from "@/components/shell/nav-styles";
@@ -8,7 +8,7 @@ import { nav } from "@/strings/nav";
 
 const entries = [{ href: "/", label: nav.browse, activePrefixes: ["/items"] }];
 
-export default function MemberHeader() {
+export default function MemberHeader({ avatar }: { avatar?: ReactNode }) {
   return (
     <header className="border-b border-line bg-card">
       <Container className="flex flex-wrap items-center gap-x-6 py-2">
@@ -39,7 +39,7 @@ export default function MemberHeader() {
             ))}
           </ul>
         </nav>
-        <div className="ml-auto" />
+        <div className="ml-auto">{avatar}</div>
       </Container>
     </header>
   );

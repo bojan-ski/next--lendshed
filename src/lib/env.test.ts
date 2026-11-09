@@ -3,6 +3,8 @@ const VALID_SERVER = {
   DATABASE_URL_UNPOOLED:
     "postgresql://user:secret-direct@direct.example.test/db",
   COMMUNITY_NAME: "Elm Street",
+  AUTH_SECRET: "secret-auth-0123456789abcdefghijklmnop",
+  APP_URL: "http://localhost:3000",
 };
 
 function stubServerEnv(
@@ -33,6 +35,8 @@ describe("server env", () => {
     expect(env.COMMUNITY_NAME).toBe("Elm Street");
     expect(env.DATABASE_URL).toBe(VALID_SERVER.DATABASE_URL);
     expect(env.DATABASE_URL_UNPOOLED).toBe(VALID_SERVER.DATABASE_URL_UNPOOLED);
+    expect(env.AUTH_SECRET).toBe(VALID_SERVER.AUTH_SECRET);
+    expect(env.APP_URL).toBe(VALID_SERVER.APP_URL);
   });
 
   test("trims COMMUNITY_NAME", async () => {
@@ -50,6 +54,13 @@ describe("server env", () => {
       { DATABASE_URL_UNPOOLED: undefined },
       "DATABASE_URL_UNPOOLED",
     ],
+    ["missing AUTH_SECRET", { AUTH_SECRET: undefined }, "AUTH_SECRET"],
+    [
+      "31-character AUTH_SECRET",
+      { AUTH_SECRET: "secret-auth-0123456789abcdefghi" },
+      "AUTH_SECRET",
+    ],
+    ["non-URL APP_URL", { APP_URL: "not a url" }, "APP_URL"],
   ])(
     "rejects %s, naming the variable but no value",
     async (_case, overrides, name) => {
@@ -60,6 +71,7 @@ describe("server env", () => {
       expect(message).not.toContain("secret-pooled");
       expect(message).not.toContain("secret-direct");
       expect(message).not.toContain("not a url");
+      expect(message).not.toContain("secret-auth");
     },
   );
 });

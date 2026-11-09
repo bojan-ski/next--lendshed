@@ -9,6 +9,8 @@ export const serverEnvSchema = z.object({
   DATABASE_URL: z.url(),
   DATABASE_URL_UNPOOLED: z.url(),
   COMMUNITY_NAME: z.string().trim().min(1),
+  AUTH_SECRET: z.string().min(32),
+  APP_URL: z.url(),
 });
 
 export type ServerEnv = z.infer<typeof serverEnvSchema>;
