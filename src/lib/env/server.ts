@@ -1,6 +1,6 @@
 import "server-only";
 import { z } from "zod";
-import { parseEnv } from "@/lib/parse-env";
+import { parseEnv } from "@/lib/env/parse";
 
 export const serverEnvSchema = z.object({
   NODE_ENV: z

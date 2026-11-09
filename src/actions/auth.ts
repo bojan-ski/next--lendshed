@@ -4,9 +4,9 @@ import { parseSetCookieHeader, toCookieOptions } from "better-auth/cookies";
 import { cookies, headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { z } from "zod";
-import { auth } from "@/lib/auth";
-import { requireViewer } from "@/lib/auth-guards";
-import { env } from "@/lib/env";
+import { auth } from "@/lib/auth/auth";
+import { requireViewer } from "@/lib/auth/guards";
+import { env } from "@/lib/env/server";
 import { signInSchema } from "@/lib/schemas/auth";
 import type { SignInFormError, SignInState } from "@/types/auth";
 

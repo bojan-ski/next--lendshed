@@ -1,7 +1,7 @@
 import { act, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { usePathname } from "next/navigation";
-import { dismissToast, showToast } from "@/lib/toast";
+import { dismissToast, showToast } from "@/lib/feedback/toast";
 import type { FlashKey } from "@/strings";
 import { toast as toastStrings } from "@/strings/toast";
 import Toaster from "./Toaster";

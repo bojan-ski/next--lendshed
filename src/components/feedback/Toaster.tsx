@@ -9,7 +9,7 @@ import {
   getActiveToast,
   showToast,
   subscribeToToasts,
-} from "@/lib/toast";
+} from "@/lib/feedback/toast";
 import type { FlashKey } from "@/strings";
 import { flash } from "@/strings/flash";
 import { toast as toastStrings } from "@/strings/toast";

@@ -3,8 +3,8 @@ import { parseSetCookieHeader } from "better-auth/cookies";
 import { db } from "@/db";
 import { createCredentialUser } from "@/db/credentials";
 import type { MemberStatus, Role } from "@/generated/prisma/client";
-import { auth } from "@/lib/auth";
-import { env } from "@/lib/env";
+import { auth } from "@/lib/auth/auth";
+import { env } from "@/lib/env/server";
 
 // Database tests share the dev/test Neon project with seed data and with
 // other test files running in parallel. A file only ever touches rows it

@@ -1,8 +1,8 @@
 import type { Metadata } from "next";
 import "./globals.css";
 import { atkinson } from "./fonts";
-import { t } from "@/lib/interpolate";
-import { publicEnv } from "@/lib/public-env";
+import { t } from "@/lib/text/interpolate";
+import { publicEnv } from "@/lib/env/public";
 import { app } from "@/strings/app";
 
 const appName = publicEnv.NEXT_PUBLIC_APP_NAME;

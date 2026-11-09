@@ -1,5 +1,5 @@
-import { t } from "@/lib/interpolate";
-import { publicEnv } from "@/lib/public-env";
+import { t } from "@/lib/text/interpolate";
+import { publicEnv } from "@/lib/env/public";
 
 type StaticDocumentProps = {
   title: string;

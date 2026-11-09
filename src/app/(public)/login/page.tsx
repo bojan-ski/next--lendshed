@@ -3,8 +3,8 @@ import { Suspense } from "react";
 import LoginForm from "@/components/auth/LoginForm";
 import LoginFormSkeleton from "@/components/auth/LoginFormSkeleton";
 import Card from "@/components/ui/Card";
-import { env } from "@/lib/env";
-import { t } from "@/lib/interpolate";
+import { env } from "@/lib/env/server";
+import { t } from "@/lib/text/interpolate";
 import { login } from "@/strings/login";
 
 export const metadata: Metadata = { title: login.title };

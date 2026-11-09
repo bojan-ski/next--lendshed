@@ -3,8 +3,8 @@ import Card from "@/components/ui/Card";
 import { Icon } from "@/components/ui/icons";
 import PhotoPlaceholder from "@/components/ui/PhotoPlaceholder";
 import StatusLabel from "@/components/ui/StatusLabel";
-import { t } from "@/lib/interpolate";
-import { loanStatus } from "@/lib/status";
+import { t } from "@/lib/text/interpolate";
+import { loanStatus } from "@/lib/text/status";
 import { loanCard } from "@/strings/loanCard";
 import type { LoanCardDTO } from "@/types/loan";
 

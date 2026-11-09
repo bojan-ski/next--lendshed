@@ -1,5 +1,5 @@
-import { TIME_ZONE } from "@/lib/config";
-import { t } from "@/lib/interpolate";
+import { TIME_ZONE } from "@/lib/env/config";
+import { t } from "@/lib/text/interpolate";
 import { dates } from "@/strings/dates";
 
 type CalendarDate = { year: number; month: number; day: number };

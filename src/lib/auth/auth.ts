@@ -5,8 +5,8 @@ import { APIError } from "better-auth/api";
 import { nextCookies } from "better-auth/next-js";
 import { getMemberStatus } from "@/data/members";
 import { db } from "@/db";
-import { authSchemaOptions } from "@/lib/auth-schema-options";
-import { env } from "@/lib/env";
+import { authSchemaOptions } from "@/lib/auth/schema-options";
+import { env } from "@/lib/env/server";
 
 export const auth = betterAuth({
   ...authSchemaOptions,

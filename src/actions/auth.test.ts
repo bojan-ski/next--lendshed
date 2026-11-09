@@ -8,7 +8,7 @@ import {
 } from "@/__tests__/support/test-db";
 import { getViewer } from "@/data/viewer";
 import { db } from "@/db";
-import { auth } from "@/lib/auth";
+import { auth } from "@/lib/auth/auth";
 import type { SignInState } from "@/types/auth";
 import { signIn, signOut } from "./auth";
 

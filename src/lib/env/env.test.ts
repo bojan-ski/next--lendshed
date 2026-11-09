@@ -31,7 +31,7 @@ afterEach(() => {
 describe("server env", () => {
   test("valid input parses", async () => {
     stubServerEnv();
-    const { env } = await import("./env");
+    const { env } = await import("./server");
     expect(env.COMMUNITY_NAME).toBe("Elm Street");
     expect(env.DATABASE_URL).toBe(VALID_SERVER.DATABASE_URL);
     expect(env.DATABASE_URL_UNPOOLED).toBe(VALID_SERVER.DATABASE_URL_UNPOOLED);
@@ -41,7 +41,7 @@ describe("server env", () => {
 
   test("trims COMMUNITY_NAME", async () => {
     stubServerEnv({ COMMUNITY_NAME: "  Elm Street  " });
-    const { env } = await import("./env");
+    const { env } = await import("./server");
     expect(env.COMMUNITY_NAME).toBe("Elm Street");
   });
 
@@ -65,7 +65,7 @@ describe("server env", () => {
     "rejects %s, naming the variable but no value",
     async (_case, overrides, name) => {
       stubServerEnv(overrides);
-      const failure = import("./env");
+      const failure = import("./server");
       await expect(failure).rejects.toThrow(name);
       const message = await failure.catch((error: Error) => error.message);
       expect(message).not.toContain("secret-pooled");
@@ -79,14 +79,12 @@ describe("server env", () => {
 describe("public env", () => {
   test("valid input parses", async () => {
     vi.stubEnv("NEXT_PUBLIC_APP_NAME", "Lendshed");
-    const { publicEnv } = await import("./public-env");
+    const { publicEnv } = await import("./public");
     expect(publicEnv.NEXT_PUBLIC_APP_NAME).toBe("Lendshed");
   });
 
   test("rejects a missing NEXT_PUBLIC_APP_NAME by name", async () => {
     vi.stubEnv("NEXT_PUBLIC_APP_NAME", undefined);
-    await expect(import("./public-env")).rejects.toThrow(
-      "NEXT_PUBLIC_APP_NAME",
-    );
+    await expect(import("./public")).rejects.toThrow("NEXT_PUBLIC_APP_NAME");
   });
 });

@@ -1,5 +1,5 @@
 import { Icon } from "@/components/ui/icons";
-import { toneClasses, type StatusStyle } from "@/lib/status";
+import { toneClasses, type StatusStyle } from "@/lib/text/status";
 
 // A status is always text plus an icon, never colour alone.
 // Usage: <StatusLabel status={loanStatus[effectiveStatus(loan)]} />

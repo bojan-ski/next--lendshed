@@ -1,4 +1,4 @@
-import type { LoanStatus as StatusStyleKey } from "@/lib/status";
+import type { LoanStatus as StatusStyleKey } from "@/lib/text/status";
 
 export type LoanStatus =
   | "requested"

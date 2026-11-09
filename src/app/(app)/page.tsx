@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import EmptyState from "@/components/ui/EmptyState";
-import { env } from "@/lib/env";
+import { env } from "@/lib/env/server";
 import { home } from "@/strings/home";
 
 export const metadata: Metadata = { title: home.title };

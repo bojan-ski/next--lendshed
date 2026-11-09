@@ -1,7 +1,7 @@
 import "server-only";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "@/generated/prisma/client";
-import { env } from "@/lib/env";
+import { env } from "@/lib/env/server";
 
 const globalForPrisma = globalThis as unknown as { prisma?: PrismaClient };
 

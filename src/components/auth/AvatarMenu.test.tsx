@@ -1,7 +1,7 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { signOut } from "@/actions/auth";
-import { t } from "@/lib/interpolate";
+import { t } from "@/lib/text/interpolate";
 import { avatarMenu } from "@/strings/avatarMenu";
 import AvatarMenu from "./AvatarMenu";
 

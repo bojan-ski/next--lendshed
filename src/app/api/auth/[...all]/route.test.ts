@@ -1,6 +1,6 @@
 import { assertMigrated, createTestScope } from "@/__tests__/support/test-db";
 import { db } from "@/db";
-import { env } from "@/lib/env";
+import { env } from "@/lib/env/server";
 import * as route from "./route";
 
 vi.setConfig({ testTimeout: 30_000, hookTimeout: 60_000 });

@@ -1,6 +1,6 @@
 import { getSessionCookie } from "better-auth/cookies";
 import { NextResponse, type NextRequest } from "next/server";
-import { PATH_HEADER, safeNextPath } from "@/lib/safe-next";
+import { PATH_HEADER, safeNextPath } from "@/lib/auth/safe-next";
 
 const SIGNED_OUT_PATHS = ["/login", "/house-rules", "/privacy"];
 const SIGNED_OUT_PREFIXES = ["/invite/", "/reset/", "/api/auth/", "/api/cron/"];

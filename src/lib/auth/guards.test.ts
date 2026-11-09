@@ -1,7 +1,7 @@
 import { isRedirectError } from "next/dist/client/components/redirect-error";
 import { getViewer } from "@/data/viewer";
 import type { ViewerDTO } from "@/types/viewer";
-import { requireOrganizer, requireViewer } from "./auth-guards";
+import { requireOrganizer, requireViewer } from "./guards";
 
 vi.mock("@/data/viewer", () => ({ getViewer: vi.fn() }));
 

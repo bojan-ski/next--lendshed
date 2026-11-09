@@ -1,4 +1,4 @@
-import { parseEnv } from "@/lib/parse-env";
+import { parseEnv } from "@/lib/env/parse";
 import { demoSeedEnvSchema, organizerBootstrapEnvSchema } from "./bootstrap";
 
 const URL_VALUE = "postgresql://user:hunter2-secret@db.example.test/app";

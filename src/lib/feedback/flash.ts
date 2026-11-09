@@ -1,7 +1,7 @@
 import "server-only";
 import { cookies } from "next/headers";
 import type { FlashKey } from "@/strings";
-import { FLASH_COOKIE, FLASH_MAX_AGE_SECONDS } from "@/lib/toast";
+import { FLASH_COOKIE, FLASH_MAX_AGE_SECONDS } from "@/lib/feedback/toast";
 
 // Not httpOnly: the Toaster reads and clears it in the browser.
 export async function setFlash(key: FlashKey): Promise<void> {

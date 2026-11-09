@@ -1,4 +1,4 @@
-import { parseEnv } from "@/lib/parse-env";
+import { parseEnv } from "@/lib/env/parse";
 import { organizerBootstrapEnvSchema } from "@/lib/schemas/bootstrap";
 import { bootstrapOrganizer } from "./lib/bootstrap-organizer";
 import { failureLine, hostOf } from "./lib/cli";

@@ -1,4 +1,4 @@
-import { PATH_HEADER } from "@/lib/safe-next";
+import { PATH_HEADER } from "@/lib/auth/safe-next";
 
 // An in-memory stand-in for `next/headers`. Test files mock the module with:
 //   vi.mock("next/headers", async () =>

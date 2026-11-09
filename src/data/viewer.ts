@@ -1,8 +1,8 @@
 import "server-only";
 import { headers } from "next/headers";
 import { cache } from "react";
-import { auth } from "@/lib/auth";
-import { initialsOf } from "@/lib/initials";
+import { auth } from "@/lib/auth/auth";
+import { initialsOf } from "@/lib/text/initials";
 import type { ViewerDTO } from "@/types/viewer";
 
 type SessionUser = { id: string; name: string; role: ViewerDTO["role"] };

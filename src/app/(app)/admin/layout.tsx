@@ -1,4 +1,4 @@
-import { requireOrganizer } from "@/lib/auth-guards";
+import { requireOrganizer } from "@/lib/auth/guards";
 
 export default async function AdminLayout({
   children,

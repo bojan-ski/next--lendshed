@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { parseEnv } from "@/lib/parse-env";
+import { parseEnv } from "@/lib/env/parse";
 
 export const publicEnvSchema = z.object({
   NEXT_PUBLIC_APP_NAME: z.string().trim().min(1),

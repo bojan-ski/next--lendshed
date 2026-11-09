@@ -1,6 +1,6 @@
 import Image from "next/image";
 import Link from "next/link";
-import { publicEnv } from "@/lib/public-env";
+import { publicEnv } from "@/lib/env/public";
 
 export default function Wordmark() {
   return (

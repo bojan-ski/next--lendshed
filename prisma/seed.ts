@@ -1,7 +1,7 @@
 import "dotenv/config";
 import { failureLine, hostOf } from "../scripts/lib/cli";
 import { createScriptClient } from "../scripts/lib/script-db";
-import { parseEnv } from "@/lib/parse-env";
+import { parseEnv } from "@/lib/env/parse";
 import { demoSeedEnvSchema } from "@/lib/schemas/bootstrap";
 import { seedPeople, SEED_PEOPLE } from "./seed/people";
 

@@ -2,7 +2,7 @@ import { signOut } from "@/actions/auth";
 import Avatar from "@/components/ui/Avatar";
 import Card from "@/components/ui/Card";
 import { Icon } from "@/components/ui/icons";
-import { t } from "@/lib/interpolate";
+import { t } from "@/lib/text/interpolate";
 import { avatarMenu } from "@/strings/avatarMenu";
 import type { ViewerDTO } from "@/types/viewer";
 

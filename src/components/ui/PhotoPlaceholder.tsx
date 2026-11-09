@@ -1,4 +1,4 @@
-import { cn } from "@/lib/cn";
+import { cn } from "@/lib/text/cn";
 import { Icon } from "@/components/ui/icons";
 
 type PhotoPlaceholderProps = {

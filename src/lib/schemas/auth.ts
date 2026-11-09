@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { safeNextPath } from "@/lib/safe-next";
+import { safeNextPath } from "@/lib/auth/safe-next";
 import { login } from "@/strings/login";
 
 // No 10-character minimum here: sign-in must not tell anyone which passwords exist.
