@@ -114,11 +114,14 @@ describe("action enforcement — derivation", () => {
 
   test("the built actions are exactly the expected set", () => {
     expect(exportedNames).toEqual([
+      "changePassword",
       "createInvitation",
       "joinWithInvitation",
       "revokeInvitation",
       "signIn",
       "signOut",
+      "updateContactDetails",
+      "updateProfile",
     ]);
   });
 

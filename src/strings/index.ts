@@ -1,3 +1,4 @@
+import { account } from "./account";
 import { admin } from "./admin";
 import { app } from "./app";
 import { avatarMenu } from "./avatarMenu";
@@ -45,6 +46,7 @@ export const strings = {
   linkBroken,
   oneTimeLink,
   people,
+  account,
 } as const;
 
 export type FlashKey = keyof typeof strings.flash;

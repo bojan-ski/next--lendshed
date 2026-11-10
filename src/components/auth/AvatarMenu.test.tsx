@@ -38,4 +38,17 @@ describe("AvatarMenu", () => {
     await userEvent.click(button);
     expect(signOut).toHaveBeenCalledTimes(1);
   });
+
+  // A plain link, not next/link: the full load closes the disclosure.
+  test("Account is a plain link to /account above Sign out", () => {
+    const { container } = render(<AvatarMenu viewer={viewer} />);
+    const link = screen.getByRole("link", { name: avatarMenu.account });
+    expect(link).toHaveAttribute("href", "/account");
+    expect(link.tagName).toBe("A");
+
+    const entries = [...container.querySelectorAll("a, button")].map(
+      (element) => element.textContent,
+    );
+    expect(entries).toEqual([avatarMenu.account, avatarMenu.signOut]);
+  });
 });

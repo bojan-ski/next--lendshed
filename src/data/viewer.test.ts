@@ -1,4 +1,8 @@
-import { mockNextRequest } from "@/__tests__/support/next-request";
+import { cookies } from "next/headers";
+import {
+  freezeHeaderCookies,
+  mockNextRequest,
+} from "@/__tests__/support/next-request";
 import {
   assertMigrated,
   createTestScope,
@@ -70,6 +74,26 @@ describe("getViewer", () => {
       where: { userId: user.id },
       data: { expiresAt: new Date(Date.now() - 60_000) },
     });
+    expect(await getViewer()).toBeNull();
+  });
+
+  // A password change deletes the session and sets a new cookie; Next then
+  // re-renders with the new cookie in cookies() and the old one in headers().
+  test("reads a session rotated by an action from cookies(), not the stale Cookie header", async () => {
+    const user = await signedIn({ name: "Mira K." });
+    freezeHeaderCookies();
+    await db.session.deleteMany({ where: { userId: user.id } });
+    const rotated = await signInForCookie({ ...user, ip: scope.ip() });
+    (await cookies()).set(SESSION_COOKIE, rotated);
+
+    expect(await getViewer()).toMatchObject({ id: user.id });
+  });
+
+  test("a cookie an action deleted reads as signed out, whatever the stale header says", async () => {
+    await signedIn();
+    freezeHeaderCookies();
+    (await cookies()).delete(SESSION_COOKIE);
+
     expect(await getViewer()).toBeNull();
   });
 

@@ -24,6 +24,7 @@ const jar = new Map<string, string>();
 // The options of the last set() per name, kept after a deletion.
 const setOptions = new Map<string, CookieOptions>();
 let baseHeaders = new Headers();
+let frozenCookieHeader: string | null = null;
 
 export function mockNextRequest({
   cookies = {},
@@ -33,10 +34,23 @@ export function mockNextRequest({
 }: RequestOptions = {}) {
   jar.clear();
   setOptions.clear();
+  frozenCookieHeader = null;
   for (const [name, value] of Object.entries(cookies)) jar.set(name, value);
   baseHeaders = new Headers({ "user-agent": userAgent });
   if (ip) baseHeaders.set("x-forwarded-for", ip);
   if (path) baseHeaders.set(PATH_HEADER, path);
+}
+
+// As Next renders after an action's cookie write: cookies() sees the new
+// values, headers() keeps the request's original Cookie header.
+export function freezeHeaderCookies(): void {
+  frozenCookieHeader = cookieHeader();
+}
+
+function cookieHeader(): string {
+  return [...jar]
+    .map(([name, value]) => `${name}=${encodeURIComponent(value)}`)
+    .join("; ");
 }
 
 export function readCookie(name: string): string | undefined {
@@ -68,14 +82,8 @@ export const nextHeadersModule = {
   cookies: async () => cookieStore,
   headers: async () => {
     const headers = new Headers(baseHeaders);
-    if (jar.size > 0) {
-      headers.set(
-        "cookie",
-        [...jar]
-          .map(([name, value]) => `${name}=${encodeURIComponent(value)}`)
-          .join("; "),
-      );
-    }
+    const cookie = frozenCookieHeader ?? cookieHeader();
+    if (cookie) headers.set("cookie", cookie);
     return headers;
   },
 };

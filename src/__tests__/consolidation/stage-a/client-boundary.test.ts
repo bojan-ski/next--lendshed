@@ -37,6 +37,9 @@ describe("client boundary", () => {
         "src/components/auth/JoinForm.tsx",
         "src/components/invitations/NewInvitationForm.tsx",
         "src/components/invitations/RevokeInvitationButton.tsx",
+        "src/components/account/ProfileForm.tsx",
+        "src/components/account/ContactDetailsForm.tsx",
+        "src/components/account/ChangePasswordForm.tsx",
       ]),
     );
   });

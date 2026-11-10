@@ -26,6 +26,14 @@ export default function AvatarMenu({ viewer }: AvatarMenuProps) {
         />
       </summary>
       <Card className="absolute top-full right-0 z-10 mt-2 w-48 p-1">
+        {/* A plain link: the full load closes this disclosure, which a soft
+            navigation would leave open over the next page. */}
+        <a
+          href="/account"
+          className="flex h-11 w-full items-center rounded-control px-3 text-ink"
+        >
+          {avatarMenu.account}
+        </a>
         <form action={signOut}>
           <button
             type="submit"
