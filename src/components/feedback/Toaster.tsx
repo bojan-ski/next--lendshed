@@ -1,9 +1,10 @@
 "use client";
 
 import { usePathname } from "next/navigation";
-import { useEffect, useSyncExternalStore } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { Icon } from "@/components/ui/icons";
 import {
+  type ActiveToast,
   FLASH_COOKIE,
   dismissToast,
   getActiveToast,
@@ -22,7 +23,11 @@ function takeFlashCookie(): string | null {
   if (entry === undefined) return null;
   // Must match setFlash's path, or the browser keeps the cookie.
   document.cookie = `${FLASH_COOKIE}=; Max-Age=0; Path=/; SameSite=Lax`;
-  return decodeURIComponent(entry.slice(prefix.length));
+  try {
+    return decodeURIComponent(entry.slice(prefix.length));
+  } catch {
+    return null; // a malformed value is dropped, never thrown into the shell
+  }
 }
 
 function isFlashKey(value: string): value is FlashKey {
@@ -43,35 +48,68 @@ export default function Toaster() {
     if (value !== null && isFlashKey(value)) showToast(value);
   }, [pathname]);
 
-  useEffect(() => {
-    if (toast === null) return;
-    const timer = setTimeout(() => dismissToast(toast.id), AUTO_DISMISS_MS);
-    return () => clearTimeout(timer);
-  }, [toast]);
-
   return (
     <div
       role="status"
       aria-live="polite"
       className="pointer-events-none fixed inset-x-4 bottom-4 z-50 flex justify-center sm:inset-x-auto sm:right-6 sm:bottom-6"
     >
-      {toast !== null && (
-        <div
-          key={toast.id}
-          className="pointer-events-auto flex w-full max-w-sm items-center gap-3 rounded-card border border-line bg-card py-1 pr-1 pl-4 text-ink motion-safe:transition-opacity motion-safe:duration-200 motion-safe:starting:opacity-0"
-        >
-          <Icon name="check" aria-hidden className="shrink-0 text-accent" />
-          <p className="flex-1">{flash[toast.key]}</p>
-          <button
-            type="button"
-            onClick={() => dismissToast(toast.id)}
-            aria-label={toastStrings.close}
-            className="inline-flex size-11 shrink-0 items-center justify-center rounded-control"
-          >
-            <Icon name="close" aria-hidden />
-          </button>
-        </div>
-      )}
+      {toast !== null && <ToastCard key={toast.id} toast={toast} />}
+    </div>
+  );
+}
+
+// Keyed by toast id, so a new toast starts unpaused with a fresh timer.
+// Hover or focus inside pauses the auto-dismiss; leaving restarts the full 5 s.
+function ToastCard({ toast }: { toast: ActiveToast }) {
+  const [hovered, setHovered] = useState(false);
+  const [focused, setFocused] = useState(false);
+  const paused = hovered || focused;
+  // Where keyboard focus came from, so closing doesn't drop it to <body>.
+  const cameFrom = useRef<HTMLElement | null>(null);
+
+  useEffect(() => {
+    if (paused) return;
+    const timer = setTimeout(() => dismissToast(toast.id), AUTO_DISMISS_MS);
+    return () => clearTimeout(timer);
+  }, [paused, toast.id]);
+
+  function close() {
+    const target = cameFrom.current ?? document.getElementById("main");
+    dismissToast(toast.id);
+    target?.focus();
+  }
+
+  return (
+    <div
+      onPointerEnter={() => setHovered(true)}
+      onPointerLeave={() => setHovered(false)}
+      onFocus={(event) => {
+        setFocused(true);
+        const from = event.relatedTarget;
+        if (
+          from instanceof HTMLElement &&
+          !event.currentTarget.contains(from)
+        ) {
+          cameFrom.current = from;
+        }
+      }}
+      onBlur={(event) => {
+        if (!event.currentTarget.contains(event.relatedTarget))
+          setFocused(false);
+      }}
+      className="pointer-events-auto flex w-full max-w-sm items-center gap-3 rounded-card border border-line bg-card py-1 pr-1 pl-4 text-ink motion-safe:transition-opacity motion-safe:duration-200 motion-safe:starting:opacity-0"
+    >
+      <Icon name="check" aria-hidden className="shrink-0 text-accent" />
+      <p className="flex-1">{flash[toast.key]}</p>
+      <button
+        type="button"
+        onClick={close}
+        aria-label={toastStrings.close}
+        className="inline-flex size-11 shrink-0 items-center justify-center rounded-control"
+      >
+        <Icon name="close" aria-hidden />
+      </button>
     </div>
   );
 }

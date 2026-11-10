@@ -16,8 +16,11 @@ const loan: LoanCardDTO = {
   changed: false,
 };
 
+// The visible label first, then the item title for screen readers (WCAG 2.4.4, 2.5.3).
 const openLoan = () =>
-  screen.getByRole("link", { name: strings.loanCard.openLoan });
+  screen.getByRole("link", {
+    name: `${strings.loanCard.openLoan} ${loan.item.title}`,
+  });
 const accentButtons = (container: HTMLElement) =>
   container.querySelectorAll("a.bg-accent, button.bg-accent");
 

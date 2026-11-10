@@ -6,12 +6,19 @@ type NoticeProps = {
   tone: "error" | "info";
   children: ReactNode;
   className?: string;
+  // Off where focus moves to the content instead (it would be read twice).
+  alert?: boolean;
 };
 
-export default function Notice({ tone, children, className }: NoticeProps) {
+export default function Notice({
+  tone,
+  children,
+  className,
+  alert = tone === "error",
+}: NoticeProps) {
   return (
     <div
-      role={tone === "error" ? "alert" : undefined}
+      role={alert ? "alert" : undefined}
       className={cn(
         "flex items-start gap-2 bg-notice text-ink",
         tone === "error"

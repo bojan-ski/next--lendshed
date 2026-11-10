@@ -1,10 +1,14 @@
 import { cookies } from "next/headers";
+import { env } from "@/lib/env/server";
 import type { FlashKey } from "@/strings";
 import { setFlash } from "./flash";
 
 vi.mock("next/headers", () => ({ cookies: vi.fn() }));
+// The parsed env, not process.env, decides Secure (it is read once at boot).
+vi.mock("@/lib/env/server", () => ({ env: { NODE_ENV: "development" } }));
 
 const set = vi.fn();
+const mutableEnv = env as { NODE_ENV: string };
 
 beforeEach(() => {
   vi.mocked(cookies).mockResolvedValue({ set } as unknown as Awaited<
@@ -14,13 +18,13 @@ beforeEach(() => {
 
 afterEach(() => {
   vi.unstubAllEnvs();
+  mutableEnv.NODE_ENV = "development";
 });
 
 const key = "itemSaved" as FlashKey;
 
 describe("setFlash", () => {
   test("sets exactly the flash cookie from the spec table", async () => {
-    vi.stubEnv("NODE_ENV", "development");
     await setFlash(key);
     expect(set).toHaveBeenCalledOnce();
     expect(set).toHaveBeenCalledWith("flash", "itemSaved", {
@@ -32,8 +36,9 @@ describe("setFlash", () => {
     });
   });
 
-  test("is Secure in production only", async () => {
-    vi.stubEnv("NODE_ENV", "production");
+  test("is Secure in production only, by the parsed env", async () => {
+    vi.stubEnv("NODE_ENV", "development"); // process.env must not decide
+    mutableEnv.NODE_ENV = "production";
     await setFlash(key);
     expect(set).toHaveBeenCalledWith(
       "flash",

@@ -1,5 +1,5 @@
 import { strings } from "@/strings";
-import { freeToday, itemState, loanStatus, memberStatus } from "./status";
+import { freeToday, itemStatus, loanStatus, memberStatus } from "./status";
 
 const labels = (map: Record<string, { label: string }>) =>
   Object.fromEntries(
@@ -11,8 +11,8 @@ describe("status labels come from the strings module", () => {
     expect(labels(loanStatus)).toEqual(strings.status.loan);
   });
 
-  test("item states", () => {
-    expect(labels(itemState)).toEqual(strings.status.item);
+  test("item statuses", () => {
+    expect(labels(itemStatus)).toEqual(strings.status.item);
   });
 
   test("member statuses", () => {

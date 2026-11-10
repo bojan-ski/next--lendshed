@@ -1,5 +1,7 @@
 import type { IconName } from "@/components/ui/icons";
+import type { MemberStatus } from "@/generated/prisma/enums";
 import { status as labels } from "@/strings/status";
+import type { EffectiveLoanStatus } from "@/types/loan";
 
 // One place that decides how every status looks (spec section 12).
 // Loan statuses are the *effective* status from the helper in spec 7.3,
@@ -16,18 +18,7 @@ export const toneClasses: Record<Tone, string> = {
 
 export type StatusStyle = { label: string; icon: IconName; tone: Tone };
 
-export type LoanStatus =
-  | "requested"
-  | "approved"
-  | "out"
-  | "overdue"
-  | "returned"
-  | "declined"
-  | "cancelled"
-  | "expired"
-  | "lapsed";
-
-export const loanStatus: Record<LoanStatus, StatusStyle> = {
+export const loanStatus: Record<EffectiveLoanStatus, StatusStyle> = {
   requested: { label: labels.loan.requested, icon: "clock", tone: "neutral" },
   approved: { label: labels.loan.approved, icon: "check", tone: "positive" },
   out: { label: labels.loan.out, icon: "arrow-up-right", tone: "positive" },
@@ -39,15 +30,14 @@ export const loanStatus: Record<LoanStatus, StatusStyle> = {
   lapsed: { label: labels.loan.lapsed, icon: "dot", tone: "done" },
 };
 
-export type ItemState = "listed" | "hidden" | "retired";
+// The Prisma enum arrives with items (spec 09); until then this union is the contract.
+export type ItemStatus = "listed" | "hidden" | "retired";
 
-export const itemState: Record<ItemState, StatusStyle> = {
+export const itemStatus: Record<ItemStatus, StatusStyle> = {
   listed: { label: labels.item.listed, icon: "eye", tone: "positive" },
   hidden: { label: labels.item.hidden, icon: "eye-off", tone: "done" },
   retired: { label: labels.item.retired, icon: "dot", tone: "done" },
 };
-
-export type MemberStatus = "active" | "suspended";
 
 export const memberStatus: Record<MemberStatus, StatusStyle> = {
   active: { label: labels.member.active, icon: "dot", tone: "positive" },

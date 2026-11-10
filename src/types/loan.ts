@@ -1,5 +1,3 @@
-import type { LoanStatus as StatusStyleKey } from "@/lib/text/status";
-
 export type LoanStatus =
   | "requested"
   | "approved"
@@ -34,15 +32,3 @@ export type LoanCardDTO = {
     | null;
   changed: boolean;
 };
-
-// Typecheck fails here if this union drifts from status.ts's LoanStatus.
-type MutuallyAssignable<A, B> = [A] extends [B]
-  ? [B] extends [A]
-    ? true
-    : false
-  : false;
-const effectiveStatusMatchesStatusStyles: MutuallyAssignable<
-  EffectiveLoanStatus,
-  StatusStyleKey
-> = true;
-void effectiveStatusMatchesStatusStyles;

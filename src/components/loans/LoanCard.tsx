@@ -45,7 +45,9 @@ export default function LoanCard({ loan, dateRange, nextStep }: LoanCardProps) {
             variant={loan.needsYou === null ? "outline" : "primary"}
             className="shrink-0"
           >
-            {loanCard.openLoan}
+            {/* A list of cards would otherwise read as a column of identical links. */}
+            {loanCard.openLoan}{" "}
+            <span className="sr-only">{loan.item.title}</span>
           </ButtonLink>
         </div>
         {nextStep !== null && <p>{nextStep}</p>}

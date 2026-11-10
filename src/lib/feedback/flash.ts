@@ -1,6 +1,7 @@
 import "server-only";
 import { cookies } from "next/headers";
 import type { FlashKey } from "@/strings";
+import { env } from "@/lib/env/server";
 import { FLASH_COOKIE, FLASH_MAX_AGE_SECONDS } from "@/lib/feedback/toast";
 
 // Not httpOnly: the Toaster reads and clears it in the browser.
@@ -11,6 +12,6 @@ export async function setFlash(key: FlashKey): Promise<void> {
     path: "/",
     sameSite: "lax",
     httpOnly: false,
-    secure: process.env.NODE_ENV === "production",
+    secure: env.NODE_ENV === "production",
   });
 }

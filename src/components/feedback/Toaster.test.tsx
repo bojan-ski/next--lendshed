@@ -74,6 +74,70 @@ describe("Toaster", () => {
     expect(screen.getByRole("status")).toBeEmptyDOMElement();
   });
 
+  // userEvent awaits a real tick between steps, so fake time also follows the
+  // clock (shouldAdvanceTime); the margins absorb those few real milliseconds.
+  test("hovering pauses the auto-dismiss; leaving restarts the full 5 s", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const user = userEvent.setup({ delay: null });
+    render(<Toaster />);
+    act(() => showToast(key));
+    const card = screen.getByText("Item saved.").parentElement!;
+
+    await user.hover(card);
+    act(() => vi.advanceTimersByTime(60_000));
+    expect(screen.getByRole("status")).toHaveTextContent("Item saved.");
+
+    await user.unhover(card);
+    act(() => vi.advanceTimersByTime(4800));
+    expect(screen.getByRole("status")).toHaveTextContent("Item saved.");
+    act(() => vi.advanceTimersByTime(200));
+    expect(screen.getByRole("status")).toBeEmptyDOMElement();
+  });
+
+  test("focus inside the toast pauses the auto-dismiss", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const user = userEvent.setup({ delay: null });
+    render(<Toaster />);
+    act(() => showToast(key));
+
+    await user.tab();
+    expect(
+      screen.getByRole("button", { name: toastStrings.close }),
+    ).toHaveFocus();
+    act(() => vi.advanceTimersByTime(60_000));
+    expect(screen.getByRole("status")).toHaveTextContent("Item saved.");
+
+    await user.tab(); // focus leaves the toast
+    act(() => vi.advanceTimersByTime(5000));
+    expect(screen.getByRole("status")).toBeEmptyDOMElement();
+  });
+
+  test("closing by keyboard returns focus to where it came from", async () => {
+    const user = userEvent.setup();
+    render(
+      <>
+        <button type="button">Before</button>
+        <Toaster />
+      </>,
+    );
+    act(() => showToast(key));
+
+    await user.tab();
+    expect(screen.getByRole("button", { name: "Before" })).toHaveFocus();
+    await user.tab();
+    await user.keyboard("{Enter}");
+
+    expect(screen.getByRole("status")).toBeEmptyDOMElement();
+    expect(screen.getByRole("button", { name: "Before" })).toHaveFocus();
+  });
+
+  test("a malformed cookie value shows nothing, doesn't throw, and is deleted", () => {
+    setFlashCookie("%E0%A4%A");
+    render(<Toaster />);
+    expect(screen.getByRole("status")).toBeEmptyDOMElement();
+    expect(hasFlashCookie()).toBe(false);
+  });
+
   test("the close button dismisses at once", async () => {
     setFlashCookie("itemSaved");
     render(<Toaster />);

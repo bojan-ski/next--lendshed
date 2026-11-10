@@ -33,7 +33,14 @@ describe("LoginForm", () => {
       "type",
       "password",
     );
-    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    for (const text of [
+      login.invalidCredentials,
+      login.suspended,
+      login.tooManyAttempts,
+      errors.actionFailed,
+    ]) {
+      expect(screen.queryByText(text)).not.toBeInTheDocument();
+    }
   });
 
   test("passes next through untouched as a hidden input", () => {
@@ -57,7 +64,7 @@ describe("LoginForm", () => {
     "a %s refusal shows its notice, keeps the email and clears the password",
     async (formError, text) => {
       await submitWith({ formError, email: "mira@example.com" });
-      expect(await screen.findByRole("alert")).toHaveTextContent(text);
+      expect(await screen.findByText(text)).toBeInTheDocument();
       expect(screen.getByLabelText(login.emailLabel)).toHaveValue(
         "mira@example.com",
       );
@@ -79,5 +86,19 @@ describe("LoginForm", () => {
     expect(email).toHaveAttribute("aria-invalid", "true");
     expect(email).toHaveAccessibleDescription(login.emailInvalid);
     expect(email).toHaveValue("mira@");
+  });
+
+  test("a form error moves focus to the notice, not <body>", async () => {
+    await submitWith({ formError: "invalidCredentials" });
+    await screen.findByText(login.invalidCredentials);
+    expect(document.activeElement).toHaveTextContent(login.invalidCredentials);
+    // Focus announces it; an alert region as well would read it twice.
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  });
+
+  test("field errors move focus to the first invalid field", async () => {
+    await submitWith({ fieldErrors: { password: [login.passwordRequired] } });
+    await screen.findByText(login.passwordRequired);
+    expect(screen.getByLabelText(login.passwordLabel)).toHaveFocus();
   });
 });

@@ -12,7 +12,17 @@ type RequestOptions = {
   userAgent?: string;
 };
 
+export type CookieOptions = {
+  maxAge?: number;
+  path?: string;
+  httpOnly?: boolean;
+  sameSite?: string | boolean;
+  secure?: boolean;
+};
+
 const jar = new Map<string, string>();
+// The options of the last set() per name, kept after a deletion.
+const setOptions = new Map<string, CookieOptions>();
 let baseHeaders = new Headers();
 
 export function mockNextRequest({
@@ -22,6 +32,7 @@ export function mockNextRequest({
   userAgent = "vitest",
 }: RequestOptions = {}) {
   jar.clear();
+  setOptions.clear();
   for (const [name, value] of Object.entries(cookies)) jar.set(name, value);
   baseHeaders = new Headers({ "user-agent": userAgent });
   if (ip) baseHeaders.set("x-forwarded-for", ip);
@@ -36,13 +47,18 @@ export function cookieNames(): string[] {
   return [...jar.keys()];
 }
 
+export function readCookieOptions(name: string): CookieOptions | undefined {
+  return setOptions.get(name);
+}
+
 const cookieStore = {
   get: (name: string) =>
     jar.has(name) ? { name, value: jar.get(name)! } : undefined,
   getAll: () => [...jar].map(([name, value]) => ({ name, value })),
   has: (name: string) => jar.has(name),
-  set: (name: string, value: string, options?: { maxAge?: number }) => {
-    if (options?.maxAge === 0) jar.delete(name);
+  set: (name: string, value: string, options: CookieOptions = {}) => {
+    setOptions.set(name, options);
+    if (options.maxAge === 0) jar.delete(name);
     else jar.set(name, value);
   },
   delete: (name: string) => jar.delete(name),

@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useEffect, useRef } from "react";
 import { signIn } from "@/actions/auth";
 import Button from "@/components/ui/Button";
 import Field from "@/components/ui/Field";
@@ -23,11 +23,34 @@ const initialState: SignInState = {};
 // `next` is passed through untouched; only signIn validates it.
 export default function LoginForm({ next }: { next?: string }) {
   const [state, formAction] = useActionState(signIn, initialState);
+  const form = useRef<HTMLFormElement>(null);
+  const notice = useRef<HTMLDivElement>(null);
+
+  // The submit is disabled while pending, so focus would fall to <body>: move it
+  // to what the user must read or fix next.
+  useEffect(() => {
+    if (state === initialState) return;
+    if (state.formError) notice.current?.focus();
+    else {
+      form.current
+        ?.querySelector<HTMLElement>('[aria-invalid="true"]')
+        ?.focus();
+    }
+  }, [state]);
 
   return (
-    <form action={formAction} noValidate className="flex flex-col gap-4">
+    <form
+      ref={form}
+      action={formAction}
+      noValidate
+      className="flex flex-col gap-4"
+    >
       {state.formError && (
-        <Notice tone="error">{formErrorText[state.formError]}</Notice>
+        <div ref={notice} tabIndex={-1}>
+          <Notice tone="error" alert={false}>
+            {formErrorText[state.formError]}
+          </Notice>
+        </div>
       )}
       {next && <input type="hidden" name="next" value={next} />}
       <Field

@@ -1,5 +1,9 @@
 import { isRedirectError } from "next/dist/client/components/redirect-error";
-import { mockNextRequest, readCookie } from "@/__tests__/support/next-request";
+import {
+  mockNextRequest,
+  readCookie,
+  readCookieOptions,
+} from "@/__tests__/support/next-request";
 import {
   assertMigrated,
   createTestScope,
@@ -9,6 +13,7 @@ import {
 import { getViewer } from "@/data/viewer";
 import { db } from "@/db";
 import { auth } from "@/lib/auth/auth";
+import { env } from "@/lib/env/server";
 import type { SignInState } from "@/types/auth";
 import { signIn, signOut } from "./auth";
 
@@ -88,6 +93,48 @@ describe("signIn", () => {
     expect(sessions[0].userAgent).toBe("Lendshed test agent");
     // The bridged cookie round-trips: the next read finds the session.
     expect(await getViewer()).toMatchObject({ id: user.id });
+  });
+
+  test("the session cookie keeps the library's attributes: httpOnly, lax, /, 30 days", async () => {
+    const user = await scope.createTestUser();
+    mockNextRequest({ ip: scope.ip() });
+    await redirectTarget(
+      signIn(idle, form({ email: user.email, password: user.password })),
+    );
+
+    expect(readCookieOptions(SESSION_COOKIE)).toEqual({
+      httpOnly: true,
+      sameSite: "lax",
+      path: "/",
+      maxAge: 30 * 24 * 60 * 60,
+      // The library marks it Secure for an https base URL or in production.
+      secure: new URL(env.APP_URL).protocol === "https:" || undefined,
+    });
+  });
+
+  // The test APP_URL is http, so the real library sends no Secure; production does.
+  test("copies Secure when the library sets it (https / production)", async () => {
+    mockNextRequest({ ip: scope.ip() });
+    vi.spyOn(auth, "handler").mockResolvedValue(
+      new Response("{}", {
+        status: 200,
+        headers: {
+          "set-cookie": `${SESSION_COOKIE}=token.sig; Max-Age=2592000; Path=/; HttpOnly; Secure; SameSite=Lax`,
+        },
+      }),
+    );
+
+    await redirectTarget(
+      signIn(
+        idle,
+        form({ email: "mira@example.com", password: "whatever-10" }),
+      ),
+    );
+
+    expect(readCookieOptions(SESSION_COOKIE)).toMatchObject({
+      secure: true,
+      httpOnly: true,
+    });
   });
 
   test("signs in with a differently cased, padded email", async () => {
@@ -248,6 +295,10 @@ describe("signOut", () => {
     expect(remaining).toHaveLength(1);
     expect(other.startsWith(remaining[0].token)).toBe(true);
     expect(readCookie(SESSION_COOKIE)).toBeUndefined();
+    expect(readCookieOptions(SESSION_COOKIE)).toMatchObject({
+      maxAge: 0,
+      path: "/",
+    });
   });
 
   test("a forged call with no valid session redirects before any write", async () => {
