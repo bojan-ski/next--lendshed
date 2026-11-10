@@ -3,6 +3,8 @@
 // dynamic segment without an entry here fails the matrix. Never add a skip list.
 export const routeParams: Record<string, Record<string, string | string[]>> = {
   "/invite/[token]": { token: "A".repeat(43) },
+  "/reset/[token]": { token: "A".repeat(43) },
+  "/admin/members/[id]": { id: "member-1" },
 };
 
 const DYNAMIC_SEGMENT = /^\[{1,2}(?:\.\.\.)?([^\]]+)\]{1,2}$/;

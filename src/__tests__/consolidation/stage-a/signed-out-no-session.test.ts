@@ -12,6 +12,9 @@ import InvitePage, {
 import PublicLayout from "@/app/(public)/layout";
 import LoginPage from "@/app/(public)/login/page";
 import PrivacyPage from "@/app/(public)/privacy/page";
+import ResetPage, {
+  metadata as resetMetadata,
+} from "@/app/(public)/reset/[token]/page";
 import RootLayout from "@/app/layout";
 import NotFound, { metadata as notFoundMetadata } from "@/app/not-found";
 import { env } from "@/lib/env/server";
@@ -21,6 +24,7 @@ import { houseRules } from "@/strings/houseRules";
 import { join } from "@/strings/join";
 import { login } from "@/strings/login";
 import { privacy } from "@/strings/privacy";
+import { resetPassword } from "@/strings/resetPassword";
 
 // Every way a render could read a session, a cookie, a header or the database
 // throws, so a signed-out surface that renders proves it reads none of them.
@@ -135,6 +139,22 @@ describe("signed-out surfaces read no session, cookie, header or database", () =
     expect(html).toContain(`name="token" value="${token}"`);
     expect(html).toContain('name="password"');
     expect(inviteMetadata.referrer).toBe("no-referrer");
+  });
+
+  test("/reset/[token] resolves its Suspense part: the reset form, any token", async () => {
+    const token = "A".repeat(43);
+    const { html, renderErrors } = await render(
+      inPublicShell(
+        createElement(ResetPage, {
+          params: Promise.resolve({ token }),
+        } as never),
+      ),
+    );
+    expect(renderErrors).toEqual([]);
+    expect(h1Of(html)).toBe(resetPassword.heading);
+    expect(html).toContain(`name="token" value="${token}"`);
+    expect(html).toContain('name="password"');
+    expect(resetMetadata.referrer).toBe("no-referrer");
   });
 
   test("(public)/error.tsx renders its message", async () => {

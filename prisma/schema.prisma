@@ -27,21 +27,23 @@ enum MemberStatus {
 }
 
 model User {
-  id             String       @id
-  name           String
-  email          String
-  emailVerified  Boolean      @default(false)
-  image          String?
-  createdAt      DateTime     @default(now()) @db.Timestamptz(3)
-  updatedAt      DateTime     @updatedAt @db.Timestamptz(3)
-  role           Role         @default(member)
-  status         MemberStatus @default(active)
-  area           String?
-  contactDetails String?
+  id                 String               @id
+  name               String
+  email              String
+  emailVerified      Boolean              @default(false)
+  image              String?
+  createdAt          DateTime             @default(now()) @db.Timestamptz(3)
+  updatedAt          DateTime             @updatedAt @db.Timestamptz(3)
+  role               Role                 @default(member)
+  status             MemberStatus         @default(active)
+  area               String?
+  contactDetails     String?
   sessions           Session[]
   accounts           Account[]
-  invitationsCreated Invitation[] @relation("InvitationCreatedBy")
-  invitationsUsed    Invitation[] @relation("InvitationUsedBy")
+  invitationsCreated Invitation[]         @relation("InvitationCreatedBy")
+  invitationsUsed    Invitation[]         @relation("InvitationUsedBy")
+  resetGrants        PasswordResetGrant[] @relation("PasswordResetGrantUser")
+  resetGrantsCreated PasswordResetGrant[] @relation("PasswordResetGrantCreatedBy")
 
   @@unique([email])
   @@index([role, status])
@@ -124,4 +126,20 @@ model Invitation {
 
   @@index([expiresAt])
   @@map("invitation")
+}
+
+model PasswordResetGrant {
+  id          String    @id @default(uuid())
+  userId      String
+  user        User      @relation("PasswordResetGrantUser", fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash   String    @unique
+  createdById String?
+  createdBy   User?     @relation("PasswordResetGrantCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  createdAt   DateTime  @default(now()) @db.Timestamptz(3)
+  expiresAt   DateTime  @db.Timestamptz(3)
+  usedAt      DateTime? @db.Timestamptz(3)
+
+  @@index([userId, usedAt])
+  @@index([expiresAt])
+  @@map("password_reset_grant")
 }

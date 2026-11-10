@@ -26,7 +26,11 @@ vi.setConfig({ testTimeout: 30_000, hookTimeout: 60_000 });
 
 // The actions anyone may call. Must equal the inventory's `public` and
 // `public (token)` rows that exist in code; anything else needs a session.
-const PUBLIC_ACTIONS = ["signIn", "joinWithInvitation"];
+const PUBLIC_ACTIONS = [
+  "signIn",
+  "joinWithInvitation",
+  "resetPasswordWithGrant",
+];
 
 type Action = (...args: unknown[]) => Promise<unknown>;
 type InventoryRow = { name: string; auth: string };
@@ -59,7 +63,9 @@ function serverActionExports(): { file: string; name: string }[] {
     );
 }
 
-// The rows of the first table under "### Server Actions" in project-data.md.
+// The rows of the first table under "### Server Actions" in project-data.md. A
+// name cell may hold several actions ("`promoteMember` / `demoteMember`"):
+// each becomes its own row with the shared auth cell.
 function inventoryRows(): InventoryRow[] {
   const document = readSource("context/project-data.md");
   const section = document.split("### Server Actions")[1] ?? "";
@@ -67,11 +73,16 @@ function inventoryRows(): InventoryRow[] {
   for (const line of section.split("\n")) {
     if (line.startsWith("### ")) break;
     const cells = line.split("|").map((cell) => cell.trim());
-    const name = /^`(\w+)`$/.exec(cells[1] ?? "")?.[1];
-    if (name) rows.push({ name, auth: cells[3] });
+    if (!/^`\w+`( \/ `\w+`)*$/.test(cells[1] ?? "")) continue;
+    for (const [, name] of cells[1].matchAll(/`(\w+)`/g)) {
+      rows.push({ name, auth: cells[3] });
+    }
   }
   return rows;
 }
+
+// The role an auth cell leads with: "organizer, not self; …" → "organizer".
+const leadingRole = (auth: string) => auth.split(/[,;]/)[0].trim();
 
 const exported = serverActionExports();
 const inventory = inventoryRows();
@@ -116,13 +127,24 @@ describe("action enforcement — derivation", () => {
     expect(exportedNames).toEqual([
       "changePassword",
       "createInvitation",
+      "createResetLink",
+      "demoteMember",
       "joinWithInvitation",
+      "promoteMember",
+      "resetPasswordWithGrant",
       "revokeInvitation",
       "signIn",
       "signOut",
       "updateContactDetails",
       "updateProfile",
     ]);
+  });
+
+  test("a name cell with several actions yields one row per action", () => {
+    const promote = inventory.find(({ name }) => name === "promoteMember");
+    const demote = inventory.find(({ name }) => name === "demoteMember");
+    expect(promote?.auth).toMatch(/^organizer, not self/);
+    expect(demote?.auth).toBe(promote?.auth);
   });
 
   test("every exported action has an inventory row", () => {
@@ -228,29 +250,67 @@ describe("joinWithInvitation is public", () => {
   });
 });
 
+describe("resetPasswordWithGrant is public", () => {
+  test("an anonymous reset with an unknown token writes nothing", async () => {
+    const action = await loadAction(
+      "src/actions/reset.ts",
+      "resetPasswordWithGrant",
+    );
+    const member = await scope.createTestUser();
+    const ip = scope.ip();
+    await signInForCookie({ ...member, ip });
+    const hashBefore = await db.account.findFirstOrThrow({
+      where: { userId: member.id },
+    });
+    mockNextRequest({ ip: scope.ip() });
+    const form = new FormData();
+    form.set("token", "A".repeat(43));
+    form.set("password", "a-brand-new-password");
+
+    expect(await action({}, form)).toEqual({ linkBroken: true });
+    expect(
+      await db.account.findFirstOrThrow({ where: { userId: member.id } }),
+    ).toEqual(hashBefore);
+    expect(await scope.sessionsOf(member.id)).toHaveLength(1);
+  });
+});
+
 describe("wrong role", () => {
+  // Every exported action whose inventory auth leads with "organizer".
   const organizerOnly = exported.filter(({ name }) =>
-    inventory.some((row) => row.name === name && row.auth === "organizer"),
+    inventory.some(
+      (row) => row.name === name && leadingRole(row.auth) === "organizer",
+    ),
   );
 
-  test("the organizer-only actions in code are the invitation actions", () => {
+  test("the organizer-only actions in code are the invitation and member actions", () => {
     expect(organizerOnly.map(({ name }) => name).sort()).toEqual([
       "createInvitation",
+      "createResetLink",
+      "demoteMember",
+      "promoteMember",
       "revokeInvitation",
     ]);
   });
 
   describe.each(organizerOnly)("$name called by a member", ({ file, name }) => {
-    test("gets not-found and writes or changes no invitation", async () => {
+    test("gets not-found and writes or changes no invitation, role or grant", async () => {
       const action = await loadAction(file, name);
       const member = await scope.createTestUser({ role: "member" });
       const ip = scope.ip();
       const cookie = await signInForCookie({ ...member, ip });
-      const { id } = await scope.createInvitation();
-      const before = await db.invitation.findUniqueOrThrow({ where: { id } });
+      const { id: invitationId } = await scope.createInvitation();
+      // An organizer target makes a demote meaningful, an active one the rest.
+      const target = await scope.createTestUser({ role: "organizer" });
+      const before = {
+        invitation: await db.invitation.findUniqueOrThrow({
+          where: { id: invitationId },
+        }),
+        target: await db.user.findUniqueOrThrow({ where: { id: target.id } }),
+      };
       mockNextRequest({ ip, cookies: { [SESSION_COOKIE]: cookie } });
       const form = new FormData();
-      form.set("id", id);
+      form.set("id", file.endsWith("members.ts") ? target.id : invitationId);
       form.set("note", "from a member");
 
       const error = await thrownBy(action({}, form));
@@ -262,9 +322,17 @@ describe("wrong role", () => {
       expect(
         await db.invitation.count({ where: { createdById: member.id } }),
       ).toBe(0);
-      expect(await db.invitation.findUniqueOrThrow({ where: { id } })).toEqual(
-        before,
-      );
+      expect(
+        await db.invitation.findUniqueOrThrow({ where: { id: invitationId } }),
+      ).toEqual(before.invitation);
+      expect(
+        await db.user.findUniqueOrThrow({ where: { id: target.id } }),
+      ).toEqual(before.target);
+      expect(
+        await db.passwordResetGrant.count({
+          where: { OR: [{ userId: target.id }, { createdById: member.id }] },
+        }),
+      ).toBe(0);
     });
   });
 });

@@ -93,28 +93,31 @@ describe("proxy guard", () => {
 
 describe("proxy Referrer-Policy", () => {
   // A POST is how a Server Action on the page reaches the server.
-  test.each(["GET", "POST"])(
-    "%s /invite/{token} sends no-referrer alongside X-Robots-Tag",
-    (method) => {
+  test.each([
+    ["GET", "/invite/"],
+    ["POST", "/invite/"],
+    ["GET", "/reset/"],
+    ["POST", "/reset/"],
+  ])(
+    "%s %s{token} sends no-referrer alongside X-Robots-Tag",
+    (method, prefix) => {
       const response = proxy(
-        new NextRequest(`${ORIGIN}/invite/${"A".repeat(43)}`, { method }),
+        new NextRequest(`${ORIGIN}${prefix}${"A".repeat(43)}`, { method }),
       );
       expect(response.headers.get("Referrer-Policy")).toBe("no-referrer");
       expect(response.headers.get("X-Robots-Tag")).toBe("noindex, nofollow");
     },
   );
 
-  test.each(["/login", "/", "/invite"])(
+  test.each(["/login", "/", "/invite", "/reset", "/admin/members"])(
     "%s gets no Referrer-Policy",
     (path) => {
       expect(proxy(request(path)).headers.get("Referrer-Policy")).toBeNull();
     },
   );
 
-  test("the matcher covers /invite/{token}", () => {
-    expect(unstable_doesMiddlewareMatch({ config, url: "/invite/abc" })).toBe(
-      true,
-    );
+  test.each(["/invite/abc", "/reset/abc"])("the matcher covers %s", (url) => {
+    expect(unstable_doesMiddlewareMatch({ config, url })).toBe(true);
   });
 });
 

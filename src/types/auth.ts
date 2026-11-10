@@ -17,6 +17,15 @@ export type JoinState = {
   email?: string;
 };
 
+export type ResetPasswordState = {
+  fieldErrors?: Partial<Record<"password", string[]>>;
+  formError?: "unexpected";
+  linkBroken?: true;
+};
+
+export type ResetOutcome =
+  { kind: "reset"; userId: string } | { kind: "invalidToken" };
+
 export type JoinOutcome =
   | { kind: "joined"; userId: string }
   | { kind: "invalidToken" }

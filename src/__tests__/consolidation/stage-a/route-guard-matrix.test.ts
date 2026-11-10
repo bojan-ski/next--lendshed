@@ -35,7 +35,7 @@ const GUARDING_LAYOUTS: Record<
   },
 };
 
-const PAGE_COUNT = 8;
+const PAGE_COUNT = 11;
 const ORIGIN = "http://localhost:3000";
 const SEARCH = "?probe=1";
 

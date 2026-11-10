@@ -40,6 +40,9 @@ describe("client boundary", () => {
         "src/components/account/ProfileForm.tsx",
         "src/components/account/ContactDetailsForm.tsx",
         "src/components/account/ChangePasswordForm.tsx",
+        "src/components/members/RoleChangeButton.tsx",
+        "src/components/members/ResetLinkForm.tsx",
+        "src/components/auth/ResetPasswordForm.tsx",
       ]),
     );
   });

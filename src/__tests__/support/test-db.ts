@@ -1,6 +1,7 @@
 import { randomBytes } from "node:crypto";
 import { parseSetCookieHeader } from "better-auth/cookies";
 import { db } from "@/db";
+import { lockActiveOrganizerIds } from "@/data/members";
 import { createCredentialUser } from "@/db/credentials";
 import type { MemberStatus, Role } from "@/generated/prisma/client";
 import { auth } from "@/lib/auth/auth";
@@ -15,7 +16,7 @@ import { env } from "@/lib/env/server";
 export const SESSION_COOKIE = "better-auth.session_token";
 export const TEST_PASSWORD = "correct-horse-battery";
 
-const REQUIRED_MIGRATIONS = ["auth", "invitations"];
+const REQUIRED_MIGRATIONS = ["auth", "invitations", "password_reset_grants"];
 
 export async function assertMigrated(): Promise<void> {
   const failure = (name: string) =>
@@ -55,7 +56,17 @@ type TestInvitationOptions = {
   createdAt?: Date;
 };
 
-const DAY_MS = 24 * 60 * 60 * 1000;
+// Superseded is stored exactly like used: `usedAt` set by the next grant.
+export type ResetGrantState = "open" | "used" | "superseded" | "expired";
+
+type TestResetGrantOptions = {
+  userId: string;
+  state?: ResetGrantState;
+  createdById?: string | null;
+};
+
+const HOUR_MS = 60 * 60 * 1000;
+const DAY_MS = 24 * HOUR_MS;
 
 // One per test file: a run-unique tag, the users it made and the addresses it used.
 export function createTestScope() {
@@ -126,6 +137,31 @@ export function createTestScope() {
       return { id, token };
     },
 
+    // A reset grant for one of this scope's users (it cascades with them); the
+    // raw token is returned, the row holds its hash.
+    async createResetGrant({
+      userId,
+      state = "open",
+      createdById = null,
+    }: TestResetGrantOptions): Promise<{ id: string; token: string }> {
+      const { token, tokenHash } = createLinkToken();
+      const now = Date.now();
+      const created = new Date(state === "expired" ? now - 2 * HOUR_MS : now);
+      const { id } = await db.passwordResetGrant.create({
+        data: {
+          userId,
+          tokenHash,
+          createdById,
+          createdAt: created,
+          expiresAt: new Date(created.getTime() + HOUR_MS),
+          usedAt:
+            state === "used" || state === "superseded" ? new Date(now) : null,
+        },
+        select: { id: true },
+      });
+      return { id, token };
+    },
+
     // Rows belonging to this scope only: never global counts.
     sessionsOf: (userId: string) => db.session.findMany({ where: { userId } }),
     rateLimitRows: () =>
@@ -147,7 +183,25 @@ export function createTestScope() {
           ],
         },
       });
-      await db.user.deleteMany({ where: users });
+      // A role change in another file locks every active organizer in id order,
+      // then its target: deleting several users in scan order could deadlock
+      // with it. Take the organizer locks first, then this scope's rows in id
+      // order, as every organizer guard does.
+      await db.$transaction(
+        async (tx) => {
+          await lockActiveOrganizerIds(tx);
+          const own = await tx.user.findMany({
+            where: users,
+            select: { id: true },
+            orderBy: { id: "asc" },
+          });
+          const ids = own.map(({ id }) => id);
+          await tx.$queryRaw`
+            SELECT id FROM "user" WHERE id = ANY(${ids}) ORDER BY id FOR UPDATE`;
+          await tx.user.deleteMany({ where: { id: { in: ids } } });
+        },
+        { maxWait: 15_000, timeout: 30_000 },
+      );
       if (ips.length > 0) {
         await db.rateLimit.deleteMany({
           where: { OR: ips.map((ip) => ({ key: { startsWith: `${ip}|` } })) },

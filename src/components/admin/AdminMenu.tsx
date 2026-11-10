@@ -30,7 +30,7 @@ export default function AdminMenu() {
                 </Link>
               }
             >
-              <NavLink href={area.href}>
+              <NavLink href={area.href} activePrefixes={area.activePrefixes}>
                 <Label icon={area.icon}>{area.label}</Label>
               </NavLink>
             </Suspense>

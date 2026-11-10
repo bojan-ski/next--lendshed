@@ -15,10 +15,12 @@ import { join } from "./join";
 import { linkBroken } from "./linkBroken";
 import { loanCard } from "./loanCard";
 import { login } from "./login";
+import { members } from "./members";
 import { nav } from "./nav";
 import { oneTimeLink } from "./oneTimeLink";
 import { people } from "./people";
 import { privacy } from "./privacy";
+import { resetPassword } from "./resetPassword";
 import { status } from "./status";
 import { toast } from "./toast";
 
@@ -47,6 +49,8 @@ export const strings = {
   oneTimeLink,
   people,
   account,
+  members,
+  resetPassword,
 } as const;
 
 export type FlashKey = keyof typeof strings.flash;

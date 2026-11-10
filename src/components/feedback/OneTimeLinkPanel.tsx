@@ -11,8 +11,16 @@ const COPIED_MS = 2000;
 type CopyStatus = "idle" | "copied" | "failed";
 
 // Rendered only inside client islands (it uses hooks). Key it by the URL so a
-// new link remounts it and takes focus again.
-export default function OneTimeLinkPanel({ link }: { link: CreatedLinkDTO }) {
+// new link remounts it and takes focus again. Inside a card that has its own
+// h2, pass headingLevel 3.
+export default function OneTimeLinkPanel({
+  link,
+  headingLevel = 2,
+}: {
+  link: CreatedLinkDTO;
+  headingLevel?: 2 | 3;
+}) {
+  const Heading = headingLevel === 3 ? "h3" : "h2";
   const [status, setStatus] = useState<CopyStatus>("idle");
   const heading = useRef<HTMLHeadingElement>(null);
   const field = useRef<HTMLInputElement>(null);
@@ -46,11 +54,11 @@ export default function OneTimeLinkPanel({ link }: { link: CreatedLinkDTO }) {
 
   return (
     <section className="flex flex-col gap-3 rounded-card bg-accent-soft p-4">
-      <h2 ref={heading} tabIndex={-1} className="text-lg font-bold">
+      <Heading ref={heading} tabIndex={-1} className="text-lg font-bold">
         {link.note
           ? t(oneTimeLink.headingFor, { note: link.note })
           : oneTimeLink.heading}
-      </h2>
+      </Heading>
       <div className="flex flex-col gap-1.5">
         <label htmlFor={fieldId} className="font-bold">
           {oneTimeLink.fieldLabel}
@@ -65,7 +73,8 @@ export default function OneTimeLinkPanel({ link }: { link: CreatedLinkDTO }) {
             aria-describedby={
               status === "failed" ? `${statusId} ${warningId}` : warningId
             }
-            className="min-w-0 flex-1"
+            // flex-1 only in the row: in the stacked column it would override h-12.
+            className="min-w-0 sm:flex-1"
           />
           <Button variant="outline" onClick={copy} className="shrink-0">
             <Icon name={status === "copied" ? "check" : "copy"} aria-hidden />

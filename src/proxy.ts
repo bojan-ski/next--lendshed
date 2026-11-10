@@ -5,7 +5,7 @@ import { PATH_HEADER, safeNextPath } from "@/lib/auth/safe-next";
 const SIGNED_OUT_PATHS = ["/login", "/house-rules", "/privacy"];
 const SIGNED_OUT_PREFIXES = ["/invite/", "/reset/", "/api/auth/", "/api/cron/"];
 // Token links: the token must not leave in a Referer header.
-const NO_REFERRER_PREFIXES = ["/invite/"];
+const NO_REFERRER_PREFIXES = ["/invite/", "/reset/"];
 
 function isSignedOutPath(pathname: string): boolean {
   if (SIGNED_OUT_PATHS.includes(pathname)) return true;
