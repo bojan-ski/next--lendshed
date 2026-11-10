@@ -6,13 +6,19 @@ import {
 } from "@/__tests__/support/import-graph";
 import PublicError from "@/app/(public)/error";
 import HouseRulesPage from "@/app/(public)/house-rules/page";
+import InvitePage, {
+  metadata as inviteMetadata,
+} from "@/app/(public)/invite/[token]/page";
 import PublicLayout from "@/app/(public)/layout";
 import LoginPage from "@/app/(public)/login/page";
 import PrivacyPage from "@/app/(public)/privacy/page";
 import RootLayout from "@/app/layout";
 import NotFound, { metadata as notFoundMetadata } from "@/app/not-found";
+import { env } from "@/lib/env/server";
+import { t } from "@/lib/text/interpolate";
 import { errors } from "@/strings/errors";
 import { houseRules } from "@/strings/houseRules";
+import { join } from "@/strings/join";
 import { login } from "@/strings/login";
 import { privacy } from "@/strings/privacy";
 
@@ -113,6 +119,22 @@ describe("signed-out surfaces read no session, cookie, header or database", () =
     expect(html).toContain('name="password"');
     expect(html).toContain('name="next" value="/items"');
     expect(decode(html)).toContain(login.emailLabel);
+  });
+
+  test("/invite/[token] resolves its Suspense part: the join form, any token", async () => {
+    const token = "A".repeat(43);
+    const { html, renderErrors } = await render(
+      inPublicShell(
+        createElement(InvitePage, {
+          params: Promise.resolve({ token }),
+        } as never),
+      ),
+    );
+    expect(renderErrors).toEqual([]);
+    expect(h1Of(html)).toBe(t(join.heading, { community: env.COMMUNITY_NAME }));
+    expect(html).toContain(`name="token" value="${token}"`);
+    expect(html).toContain('name="password"');
+    expect(inviteMetadata.referrer).toBe("no-referrer");
   });
 
   test("(public)/error.tsx renders its message", async () => {

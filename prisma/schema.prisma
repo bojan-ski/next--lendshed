@@ -38,8 +38,10 @@ model User {
   status         MemberStatus @default(active)
   area           String?
   contactDetails String?
-  sessions       Session[]
-  accounts       Account[]
+  sessions           Session[]
+  accounts           Account[]
+  invitationsCreated Invitation[] @relation("InvitationCreatedBy")
+  invitationsUsed    Invitation[] @relation("InvitationUsedBy")
 
   @@unique([email])
   @@index([role, status])
@@ -102,4 +104,24 @@ model RateLimit {
 
   @@unique([key])
   @@map("rateLimit")
+}
+
+// App models below; `npx auth generate` leaves them and the two User
+// relations above untouched (re-run checked at spec 05 clarify).
+
+model Invitation {
+  id          String    @id @default(uuid())
+  tokenHash   String    @unique
+  note        String?
+  createdById String?
+  createdBy   User?     @relation("InvitationCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  createdAt   DateTime  @default(now()) @db.Timestamptz(3)
+  expiresAt   DateTime  @db.Timestamptz(3)
+  usedAt      DateTime? @db.Timestamptz(3)
+  usedById    String?
+  usedBy      User?     @relation("InvitationUsedBy", fields: [usedById], references: [id], onDelete: SetNull)
+  revokedAt   DateTime? @db.Timestamptz(3)
+
+  @@index([expiresAt])
+  @@map("invitation")
 }

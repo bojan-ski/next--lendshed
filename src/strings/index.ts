@@ -1,3 +1,4 @@
+import { admin } from "./admin";
 import { app } from "./app";
 import { avatarMenu } from "./avatarMenu";
 import { dates } from "./dates";
@@ -7,10 +8,15 @@ import { flash } from "./flash";
 import { footer } from "./footer";
 import { home } from "./home";
 import { houseRules } from "./houseRules";
+import { invitations } from "./invitations";
 import { itemCard } from "./itemCard";
+import { join } from "./join";
+import { linkBroken } from "./linkBroken";
 import { loanCard } from "./loanCard";
 import { login } from "./login";
 import { nav } from "./nav";
+import { oneTimeLink } from "./oneTimeLink";
+import { people } from "./people";
 import { privacy } from "./privacy";
 import { status } from "./status";
 import { toast } from "./toast";
@@ -33,6 +39,12 @@ export const strings = {
   dates,
   login,
   avatarMenu,
+  join,
+  invitations,
+  admin,
+  linkBroken,
+  oneTimeLink,
+  people,
 } as const;
 
 export type FlashKey = keyof typeof strings.flash;

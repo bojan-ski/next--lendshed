@@ -4,6 +4,8 @@ import { PATH_HEADER, safeNextPath } from "@/lib/auth/safe-next";
 
 const SIGNED_OUT_PATHS = ["/login", "/house-rules", "/privacy"];
 const SIGNED_OUT_PREFIXES = ["/invite/", "/reset/", "/api/auth/", "/api/cron/"];
+// Token links: the token must not leave in a Referer header.
+const NO_REFERRER_PREFIXES = ["/invite/"];
 
 function isSignedOutPath(pathname: string): boolean {
   if (SIGNED_OUT_PATHS.includes(pathname)) return true;
@@ -22,6 +24,9 @@ export function proxy(request: NextRequest) {
       ? passThrough(request, pathname + search)
       : redirectToLogin(request, pathname + search);
   response.headers.set("X-Robots-Tag", "noindex, nofollow");
+  if (NO_REFERRER_PREFIXES.some((prefix) => pathname.startsWith(prefix))) {
+    response.headers.set("Referrer-Policy", "no-referrer");
+  }
   return response;
 }
 

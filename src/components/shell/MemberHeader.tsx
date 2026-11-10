@@ -8,7 +8,16 @@ import { nav } from "@/strings/nav";
 
 const entries = [{ href: "/", label: nav.browse, activePrefixes: ["/items"] }];
 
-export default function MemberHeader({ avatar }: { avatar?: ReactNode }) {
+type MemberHeaderProps = {
+  avatar?: ReactNode;
+  // The last nav item, rendered as its own <li> (or nothing) by the slot.
+  organizerEntry?: ReactNode;
+};
+
+export default function MemberHeader({
+  avatar,
+  organizerEntry,
+}: MemberHeaderProps) {
   return (
     <header className="border-b border-line bg-card">
       <Container className="flex flex-wrap items-center gap-x-6 py-2">
@@ -37,6 +46,7 @@ export default function MemberHeader({ avatar }: { avatar?: ReactNode }) {
                 </Suspense>
               </li>
             ))}
+            {organizerEntry}
           </ul>
         </nav>
         <div className="ml-auto">{avatar}</div>

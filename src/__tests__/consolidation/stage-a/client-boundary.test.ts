@@ -34,6 +34,9 @@ describe("client boundary", () => {
       expect.arrayContaining([
         "src/components/feedback/Toaster.tsx",
         "src/components/auth/LoginForm.tsx",
+        "src/components/auth/JoinForm.tsx",
+        "src/components/invitations/NewInvitationForm.tsx",
+        "src/components/invitations/RevokeInvitationButton.tsx",
       ]),
     );
   });

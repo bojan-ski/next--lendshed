@@ -4,6 +4,7 @@ import { db } from "@/db";
 import { createCredentialUser } from "@/db/credentials";
 import type { MemberStatus, Role } from "@/generated/prisma/client";
 import { auth } from "@/lib/auth/auth";
+import { createLinkToken } from "@/lib/auth/link-tokens";
 import { env } from "@/lib/env/server";
 
 // Database tests share the dev/test Neon project with seed data and with
@@ -14,19 +15,26 @@ import { env } from "@/lib/env/server";
 export const SESSION_COOKIE = "better-auth.session_token";
 export const TEST_PASSWORD = "correct-horse-battery";
 
+const REQUIRED_MIGRATIONS = ["auth", "invitations"];
+
 export async function assertMigrated(): Promise<void> {
-  const failure = new Error(
-    "The test database is missing the `auth` migration: run `npx prisma migrate deploy` against it.",
-  );
-  let applied: { count: bigint }[];
+  const failure = (name: string) =>
+    new Error(
+      `The test database is missing the \`${name}\` migration: run \`npx prisma migrate deploy\` against it.`,
+    );
+  let applied: { migration_name: string }[];
   try {
-    applied = await db.$queryRaw<{ count: bigint }[]>`
-      SELECT count(*) AS count FROM "_prisma_migrations"
-      WHERE migration_name LIKE '%\_auth' AND finished_at IS NOT NULL`;
+    applied = await db.$queryRaw<{ migration_name: string }[]>`
+      SELECT migration_name FROM "_prisma_migrations"
+      WHERE finished_at IS NOT NULL`;
   } catch {
-    throw failure;
+    throw failure(REQUIRED_MIGRATIONS[0]);
   }
-  if (Number(applied[0]?.count ?? 0) === 0) throw failure;
+  for (const name of REQUIRED_MIGRATIONS) {
+    if (!applied.some((row) => row.migration_name.endsWith(`_${name}`))) {
+      throw failure(name);
+    }
+  }
 }
 
 type TestUserOptions = {
@@ -38,10 +46,22 @@ type TestUserOptions = {
 
 export type TestUser = { id: string; email: string; password: string };
 
+export type InvitationState = "open" | "used" | "revoked" | "expired";
+
+type TestInvitationOptions = {
+  state?: InvitationState;
+  note?: string | null;
+  createdById?: string | null;
+  createdAt?: Date;
+};
+
+const DAY_MS = 24 * 60 * 60 * 1000;
+
 // One per test file: a run-unique tag, the users it made and the addresses it used.
 export function createTestScope() {
   const tag = `t${Date.now().toString(36)}${randomBytes(3).toString("hex")}`;
   const userIds: string[] = [];
+  const invitationIds: string[] = [];
   const ips: string[] = [];
   let count = 0;
 
@@ -79,6 +99,33 @@ export function createTestScope() {
       userIds.push(userId);
     },
 
+    // An invitation in a chosen state; the raw token is returned, the row holds its hash.
+    async createInvitation({
+      state = "open",
+      note = null,
+      createdById = null,
+      createdAt,
+    }: TestInvitationOptions = {}): Promise<{ id: string; token: string }> {
+      const { token, tokenHash } = createLinkToken();
+      const now = Date.now();
+      const created =
+        createdAt ?? new Date(state === "expired" ? now - 8 * DAY_MS : now);
+      const { id } = await db.invitation.create({
+        data: {
+          tokenHash,
+          note,
+          createdById,
+          createdAt: created,
+          expiresAt: new Date(created.getTime() + 7 * DAY_MS),
+          usedAt: state === "used" ? new Date(now) : null,
+          revokedAt: state === "revoked" ? new Date(now) : null,
+        },
+        select: { id: true },
+      });
+      invitationIds.push(id);
+      return { id, token };
+    },
+
     // Rows belonging to this scope only: never global counts.
     sessionsOf: (userId: string) => db.session.findMany({ where: { userId } }),
     rateLimitRows: () =>
@@ -87,9 +134,20 @@ export function createTestScope() {
       }),
 
     async cleanup() {
-      if (userIds.length > 0) {
-        await db.user.deleteMany({ where: { id: { in: userIds } } });
-      }
+      // Users made through a join carry the scope's email, not a tracked id.
+      const users = {
+        OR: [{ id: { in: userIds } }, { email: { startsWith: `${tag}-` } }],
+      };
+      await db.invitation.deleteMany({
+        where: {
+          OR: [
+            { id: { in: invitationIds } },
+            { createdBy: users },
+            { usedBy: users },
+          ],
+        },
+      });
+      await db.user.deleteMany({ where: users });
       if (ips.length > 0) {
         await db.rateLimit.deleteMany({
           where: { OR: ips.map((ip) => ({ key: { startsWith: `${ip}|` } })) },

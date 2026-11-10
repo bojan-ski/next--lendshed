@@ -1,10 +1,9 @@
 // The params each dynamic page receives in the consolidation route matrix, keyed by
 // route pattern with groups stripped ("/invite/[token]"). The ONLY allow-list: a
 // dynamic segment without an entry here fails the matrix. Never add a skip list.
-export const routeParams: Record<
-  string,
-  Record<string, string | string[]>
-> = {};
+export const routeParams: Record<string, Record<string, string | string[]>> = {
+  "/invite/[token]": { token: "A".repeat(43) },
+};
 
 const DYNAMIC_SEGMENT = /^\[{1,2}(?:\.\.\.)?([^\]]+)\]{1,2}$/;
 

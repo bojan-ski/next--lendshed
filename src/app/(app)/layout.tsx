@@ -1,4 +1,5 @@
 import { Suspense } from "react";
+import OrganizerNavSlot from "@/components/admin/OrganizerNavSlot";
 import AvatarMenuSkeleton from "@/components/auth/AvatarMenuSkeleton";
 import AvatarMenuSlot from "@/components/auth/AvatarMenuSlot";
 import ContentSkeleton from "@/components/auth/ContentSkeleton";
@@ -14,6 +15,11 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           avatar={
             <Suspense fallback={<AvatarMenuSkeleton />}>
               <AvatarMenuSlot />
+            </Suspense>
+          }
+          organizerEntry={
+            <Suspense fallback={null}>
+              <OrganizerNavSlot />
             </Suspense>
           }
         />

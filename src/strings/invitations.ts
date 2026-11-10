@@ -1,0 +1,22 @@
+export const invitations = {
+  title: "Invitations",
+  description: "Create and revoke join links",
+  noteLabel: "Note (optional)",
+  noteHint: "Who it's for, like Mira, no. 14",
+  noteTooLong: "Notes are at most 80 characters.",
+  submit: "New invitation",
+  openHeading: "Open invitations",
+  columnNote: "Note",
+  columnCreatedBy: "Created by",
+  columnExpires: "Expires",
+  columnActions: "Actions",
+  noNote: "No note",
+  createdBy: "Created by {name}",
+  expires: "Expires {date}",
+  revoke: "Revoke",
+  revokeFor: "Revoke the invitation for {note}",
+  revokeExpiring: "Revoke the invitation that expires {date}",
+  emptyHeading: "No open invitations",
+  emptyBody:
+    "Invitations stay here until they're used, revoked or expire after 7 days.",
+} as const;

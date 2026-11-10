@@ -7,4 +7,6 @@ export const errors = {
   somethingWentWrong: "Something went wrong",
   tryAgain: "Try again",
   actionFailed: "Something went wrong. Your change wasn't saved.",
+  stale:
+    "This changed since you opened the page, so nothing was saved. Reload to see where it stands.",
 } as const;

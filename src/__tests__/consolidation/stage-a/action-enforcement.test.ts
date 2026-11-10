@@ -26,7 +26,7 @@ vi.setConfig({ testTimeout: 30_000, hookTimeout: 60_000 });
 
 // The actions anyone may call. Must equal the inventory's `public` and
 // `public (token)` rows that exist in code; anything else needs a session.
-const PUBLIC_ACTIONS = ["signIn"];
+const PUBLIC_ACTIONS = ["signIn", "joinWithInvitation"];
 
 type Action = (...args: unknown[]) => Promise<unknown>;
 type InventoryRow = { name: string; auth: string };
@@ -112,8 +112,14 @@ describe("action enforcement — derivation", () => {
     expect(inventory.map(({ name }) => name)).toContain("signOut");
   });
 
-  test("Stage A exports exactly signIn and signOut", () => {
-    expect(exportedNames).toEqual(["signIn", "signOut"]);
+  test("the built actions are exactly the expected set", () => {
+    expect(exportedNames).toEqual([
+      "createInvitation",
+      "joinWithInvitation",
+      "revokeInvitation",
+      "signIn",
+      "signOut",
+    ]);
   });
 
   test("every exported action has an inventory row", () => {
@@ -195,20 +201,67 @@ describe("signIn is public", () => {
   });
 });
 
-describe("wrong role", () => {
-  const organizerOnly = inventory
-    .filter(
-      (row) => row.auth === "organizer" && exportedNames.includes(row.name),
-    )
-    .map(({ name }) => name);
+describe("joinWithInvitation is public", () => {
+  test("an anonymous join with an unknown token writes nothing", async () => {
+    const action = await loadAction(
+      "src/actions/invitations.ts",
+      "joinWithInvitation",
+    );
+    const email = scope.email();
+    mockNextRequest({ ip: scope.ip() });
+    const form = new FormData();
+    for (const [name, value] of Object.entries({
+      token: "A".repeat(43),
+      name: "Mira K.",
+      email,
+      password: "correct-horse-battery",
+      acceptHouseRules: "on",
+    })) {
+      form.set(name, value);
+    }
 
-  test("Stage A has no organizer-only action in code", () => {
-    // Spec 05 adds createInvitation/revokeInvitation and replaces this with the
-    // member-calls-organizer-action rows.
-    expect(organizerOnly).toEqual([]);
+    expect(await action({}, form)).toEqual({ linkBroken: true });
+    expect(await db.user.count({ where: { email } })).toBe(0);
+  });
+});
+
+describe("wrong role", () => {
+  const organizerOnly = exported.filter(({ name }) =>
+    inventory.some((row) => row.name === name && row.auth === "organizer"),
+  );
+
+  test("the organizer-only actions in code are the invitation actions", () => {
+    expect(organizerOnly.map(({ name }) => name).sort()).toEqual([
+      "createInvitation",
+      "revokeInvitation",
+    ]);
   });
 
-  test.todo(
-    "a member calling an organizer-only action is refused (FORWARD 05)",
-  );
+  describe.each(organizerOnly)("$name called by a member", ({ file, name }) => {
+    test("gets not-found and writes or changes no invitation", async () => {
+      const action = await loadAction(file, name);
+      const member = await scope.createTestUser({ role: "member" });
+      const ip = scope.ip();
+      const cookie = await signInForCookie({ ...member, ip });
+      const { id } = await scope.createInvitation();
+      const before = await db.invitation.findUniqueOrThrow({ where: { id } });
+      mockNextRequest({ ip, cookies: { [SESSION_COOKIE]: cookie } });
+      const form = new FormData();
+      form.set("id", id);
+      form.set("note", "from a member");
+
+      const error = await thrownBy(action({}, form));
+
+      expect(isRedirectError(error)).toBe(false);
+      expect((error as { digest?: string }).digest).toBe(
+        "NEXT_HTTP_ERROR_FALLBACK;404",
+      );
+      expect(
+        await db.invitation.count({ where: { createdById: member.id } }),
+      ).toBe(0);
+      expect(await db.invitation.findUniqueOrThrow({ where: { id } })).toEqual(
+        before,
+      );
+    });
+  });
 });

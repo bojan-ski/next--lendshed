@@ -35,7 +35,7 @@ const GUARDING_LAYOUTS: Record<
   },
 };
 
-const PAGE_COUNT = 4;
+const PAGE_COUNT = 7;
 const ORIGIN = "http://localhost:3000";
 const SEARCH = "?probe=1";
 
@@ -203,7 +203,7 @@ describe.each(rows)("$pattern ($guard)", ({ url, chain, guard }) => {
   });
 });
 
-// /admin has no page until spec 05, so its layout is covered directly.
+// The admin layout directly: each outcome, whatever page sits below it.
 describe("(app)/admin/layout.tsx", () => {
   test("no viewer: redirect to /login", async () => {
     vi.mocked(getViewer).mockResolvedValue(null);
@@ -221,8 +221,10 @@ describe("(app)/admin/layout.tsx", () => {
     );
   });
 
+  // The layout wraps its children with AdminMenu, so they are found in the tree.
   test("organizer: renders its children", async () => {
     vi.mocked(getViewer).mockResolvedValue(organizer);
-    await expect(AdminLayout({ children })).resolves.toBe(children);
+    const tree = await AdminLayout({ children });
+    expect(ancestorsOf(tree, children)).toHaveLength(1);
   });
 });

@@ -91,6 +91,33 @@ describe("proxy guard", () => {
   });
 });
 
+describe("proxy Referrer-Policy", () => {
+  // A POST is how a Server Action on the page reaches the server.
+  test.each(["GET", "POST"])(
+    "%s /invite/{token} sends no-referrer alongside X-Robots-Tag",
+    (method) => {
+      const response = proxy(
+        new NextRequest(`${ORIGIN}/invite/${"A".repeat(43)}`, { method }),
+      );
+      expect(response.headers.get("Referrer-Policy")).toBe("no-referrer");
+      expect(response.headers.get("X-Robots-Tag")).toBe("noindex, nofollow");
+    },
+  );
+
+  test.each(["/login", "/", "/invite"])(
+    "%s gets no Referrer-Policy",
+    (path) => {
+      expect(proxy(request(path)).headers.get("Referrer-Policy")).toBeNull();
+    },
+  );
+
+  test("the matcher covers /invite/{token}", () => {
+    expect(unstable_doesMiddlewareMatch({ config, url: "/invite/abc" })).toBe(
+      true,
+    );
+  });
+});
+
 describe("proxy matcher", () => {
   test.each(["/", "/nope", "/wordmark.svg", "/house-rules", "/icon.svg"])(
     "covers %s",
