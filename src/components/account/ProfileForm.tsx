@@ -92,7 +92,7 @@ export default function ProfileForm({ name, area, email }: ProfileFormProps) {
       </Field>
       <div className="flex flex-col gap-1">
         <p className="font-bold">{account.emailLabel}</p>
-        <p className="break-words">{email}</p>
+        <p className="wrap-break-word">{email}</p>
         <p className="text-sm text-muted">{account.emailNote}</p>
       </div>
       <Button type="submit" className="w-full sm:w-auto sm:self-start">

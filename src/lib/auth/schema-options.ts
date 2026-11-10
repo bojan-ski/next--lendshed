@@ -1,4 +1,5 @@
 import type { BetterAuthOptions } from "better-auth";
+import { PASSWORD_MAX, PASSWORD_MIN } from "../schemas/limits";
 
 // The options that shape the auth tables. No server-only, env or db import:
 // the `auth` CLI loads this file through auth.cli.ts.
@@ -6,8 +7,8 @@ export const authSchemaOptions = {
   emailAndPassword: {
     enabled: true,
     disableSignUp: true,
-    minPasswordLength: 10,
-    maxPasswordLength: 128,
+    minPasswordLength: PASSWORD_MIN,
+    maxPasswordLength: PASSWORD_MAX,
   },
   session: {
     expiresIn: 60 * 60 * 24 * 30,

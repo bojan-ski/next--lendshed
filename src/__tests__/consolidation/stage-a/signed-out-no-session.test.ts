@@ -17,6 +17,7 @@ import ResetPage, {
 } from "@/app/(public)/reset/[token]/page";
 import RootLayout from "@/app/layout";
 import NotFound, { metadata as notFoundMetadata } from "@/app/not-found";
+import { publicEnv } from "@/lib/env/public";
 import { env } from "@/lib/env/server";
 import { t } from "@/lib/text/interpolate";
 import { errors } from "@/strings/errors";
@@ -135,7 +136,12 @@ describe("signed-out surfaces read no session, cookie, header or database", () =
       ),
     );
     expect(renderErrors).toEqual([]);
-    expect(h1Of(html)).toBe(t(join.heading, { community: env.COMMUNITY_NAME }));
+    expect(h1Of(html)).toBe(
+      t(join.heading, {
+        appName: publicEnv.NEXT_PUBLIC_APP_NAME,
+        community: env.COMMUNITY_NAME,
+      }),
+    );
     expect(html).toContain(`name="token" value="${token}"`);
     expect(html).toContain('name="password"');
     expect(inviteMetadata.referrer).toBe("no-referrer");

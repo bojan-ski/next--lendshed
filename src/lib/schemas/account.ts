@@ -1,4 +1,10 @@
 import { z } from "zod";
+import {
+  NAME_MAX,
+  NAME_MIN,
+  PASSWORD_MAX,
+  PASSWORD_MIN,
+} from "@/lib/schemas/limits";
 import { account } from "@/strings/account";
 import { errors } from "@/strings/errors";
 
@@ -6,8 +12,8 @@ export const profileSchema = z.object({
   name: z
     .string({ error: account.nameTooShort })
     .trim()
-    .min(2, { error: account.nameTooShort })
-    .max(40, { error: account.nameTooLong }),
+    .min(NAME_MIN, { error: account.nameTooShort })
+    .max(NAME_MAX, { error: account.nameTooLong }),
   area: z
     .string()
     .trim()
@@ -32,11 +38,11 @@ export const changePasswordSchema = z.object({
   currentPassword: z
     .string({ error: account.currentPasswordRequired })
     .min(1, { error: account.currentPasswordRequired })
-    .max(128, { error: account.passwordTooLong }),
+    .max(PASSWORD_MAX, { error: account.passwordTooLong }),
   newPassword: z
     .string({ error: account.passwordTooShort })
-    .min(10, { error: account.passwordTooShort })
-    .max(128, { error: account.passwordTooLong }),
+    .min(PASSWORD_MIN, { error: account.passwordTooShort })
+    .max(PASSWORD_MAX, { error: account.passwordTooLong }),
 });
 
 export type ProfileInput = z.infer<typeof profileSchema>;

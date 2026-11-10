@@ -66,6 +66,21 @@ function holdUserRow(userId: string) {
   return { held, done };
 }
 
+// The same for a grant row (the reset claim's row lock).
+function holdGrantRow(id: string) {
+  let rowHeld!: () => void;
+  const held = new Promise<void>((resolve) => (rowHeld = resolve));
+  const done = db.$transaction(
+    async (tx) => {
+      await tx.$queryRaw`SELECT id FROM password_reset_grant WHERE id = ${id} FOR UPDATE`;
+      rowHeld();
+      await tx.$executeRaw`SELECT pg_sleep(2)`;
+    },
+    { maxWait: 15_000, timeout: 30_000 },
+  );
+  return { held, done };
+}
+
 describe("insertResetGrant", () => {
   test("writes the hash, both people and a 1-hour expiry from one instant", async () => {
     const organizer = await scope.createTestUser({ role: "organizer" });
@@ -140,6 +155,29 @@ describe("insertResetGrant", () => {
     ).toEqual({ kind: "memberGone" });
     expect(await db.passwordResetGrant.count({ where: { tokenHash } })).toBe(0);
   });
+
+  // The actor is re-checked under the organizer locks, as in changeMemberRole.
+  test.each(["member", "suspended organizer"])(
+    "an actor who is now a %s is actorGone and nothing is written",
+    async (now) => {
+      const actor = await scope.createTestUser(
+        now === "member"
+          ? { role: "member" }
+          : { role: "organizer", status: "suspended" },
+      );
+      const member = await scope.createTestUser();
+      const { tokenHash } = createLinkToken();
+
+      expect(
+        await insertResetGrant({
+          userId: member.id,
+          createdById: actor.id,
+          tokenHash,
+        }),
+      ).toEqual({ kind: "actorGone" });
+      expect(await grantsOf(member.id)).toEqual([]);
+    },
+  );
 
   // The member row lock: both creates queue behind the held row, then the
   // second voids the first's grant after it commits.
@@ -257,8 +295,11 @@ describe("resetPasswordThroughGrant", () => {
   // row's lock; the second matches nothing.
   test("two resets on one link at once: exactly one password is set", async () => {
     const member = await scope.createTestUser();
-    const { token } = await scope.createResetGrant({ userId: member.id });
+    const { id, token } = await scope.createResetGrant({ userId: member.id });
     const passwords = ["first-new-password", "second-new-password"];
+    // Held by a third transaction, so both resets are in flight together.
+    const { held, done } = holdGrantRow(id);
+    await held;
 
     const outcomes = await Promise.all(
       passwords.map((password) =>
@@ -268,6 +309,7 @@ describe("resetPasswordThroughGrant", () => {
         }),
       ),
     );
+    await done;
 
     expect(outcomes.map((outcome) => outcome.kind).sort()).toEqual([
       "invalidToken",

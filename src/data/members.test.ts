@@ -115,6 +115,17 @@ describe("getAdminMemberDetail", () => {
     });
   });
 
+  // Only a missing row is not-found: spec 18 reinstates from this page.
+  test("a suspended member is shown, with status suspended", async () => {
+    const viewer = await scope.createTestUser({ role: "organizer" });
+    const suspended = await scope.createTestUser({ status: "suspended" });
+    expect(await getAdminMemberDetail(viewer.id, suspended.id)).toMatchObject({
+      id: suspended.id,
+      status: "suspended",
+      isSelf: false,
+    });
+  });
+
   test("an organizer with another active organizer is not the last one", async () => {
     const viewer = await scope.createTestUser({ role: "organizer" });
     const other = await scope.createTestUser({ role: "organizer" });

@@ -46,6 +46,21 @@ function joinInput(token: string, email = scope.email()) {
 const invitationRow = (id: string) =>
   db.invitation.findUniqueOrThrow({ where: { id } });
 
+// Holds an invitation row so the calls started meanwhile all queue behind it.
+function holdInvitationRow(id: string) {
+  let rowHeld!: () => void;
+  const held = new Promise<void>((resolve) => (rowHeld = resolve));
+  const done = db.$transaction(
+    async (tx) => {
+      await tx.$queryRaw`SELECT id FROM invitation WHERE id = ${id} FOR UPDATE`;
+      rowHeld();
+      await tx.$executeRaw`SELECT pg_sleep(2)`;
+    },
+    { maxWait: 15_000, timeout: 30_000 },
+  );
+  return { held, done };
+}
+
 describe("joinThroughInvitation", () => {
   test("joins: one member user with a credential account, invitation used by them", async () => {
     const { id, token } = await scope.createInvitation();
@@ -71,13 +86,19 @@ describe("joinThroughInvitation", () => {
   });
 
   // The atomic-join test (OQ-32): the claim serialises two joins on the row lock.
+  // A third transaction holds the row first, so both joins are in flight
+  // together; unheld, they often run one after the other and a read-then-update
+  // claim would pass too.
   test("two joins on one link at once: exactly one account", async () => {
     const { id, token } = await scope.createInvitation();
     const emails = [scope.email(), scope.email()];
+    const { held, done } = holdInvitationRow(id);
+    await held;
 
     const outcomes = await Promise.all(
       emails.map((email) => joinThroughInvitation(joinInput(token, email))),
     );
+    await done;
 
     expect(outcomes.map((o) => o.kind).sort()).toEqual([
       "invalidToken",
@@ -199,6 +220,35 @@ describe("revokeOpenInvitation", () => {
 
   test("an unknown id is not open", async () => {
     expect(await revokeOpenInvitation(crypto.randomUUID())).toBe("notOpen");
+  });
+
+  // Both are conditional updates on the same row: held by a third transaction,
+  // they queue, and the later one finds the link no longer open.
+  test("a revoke and a join on one link at once: exactly one wins", async () => {
+    const { id, token } = await scope.createInvitation();
+    const email = scope.email();
+    const { held, done } = holdInvitationRow(id);
+    await held;
+
+    const [revoked, joined] = await Promise.all([
+      revokeOpenInvitation(id),
+      joinThroughInvitation(joinInput(token, email)),
+    ]);
+    await done;
+
+    const row = await invitationRow(id);
+    const user = await db.user.findUnique({ where: { email } });
+    if (revoked === "revoked") {
+      expect(joined).toEqual({ kind: "invalidToken" });
+      expect(user).toBeNull();
+      expect(row).toMatchObject({ usedAt: null, usedById: null });
+      expect(row.revokedAt).not.toBeNull();
+    } else {
+      expect(revoked).toBe("notOpen");
+      expect(joined).toMatchObject({ kind: "joined" });
+      expect(row.revokedAt).toBeNull();
+      expect(row.usedById).toBe(user?.id);
+    }
   });
 });
 

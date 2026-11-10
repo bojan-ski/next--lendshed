@@ -1,11 +1,13 @@
 import { isRedirectError } from "next/dist/client/components/redirect-error";
 import { NextRequest } from "next/server";
-import { createElement, isValidElement, type ReactNode } from "react";
+import { createElement, isValidElement, Suspense, type ReactNode } from "react";
 import { readSource, sourceFiles } from "@/__tests__/support/import-graph";
 import { mockNextRequest } from "@/__tests__/support/next-request";
 import { routePattern, routeUrl } from "@/__tests__/support/routeParams";
 import AdminLayout from "@/app/(app)/admin/layout";
 import AppLayout from "@/app/(app)/layout";
+import AdminMenu from "@/components/admin/AdminMenu";
+import OrganizerGate from "@/components/admin/OrganizerGate";
 import ViewerGate from "@/components/auth/ViewerGate";
 import { getViewer } from "@/data/viewer";
 import { PATH_HEADER, safeNextPath } from "@/lib/auth/safe-next";
@@ -31,7 +33,7 @@ const GUARDING_LAYOUTS: Record<
   "src/app/(app)/layout.tsx": { guard: "viewerGate", marker: "<ViewerGate>" },
   "src/app/(app)/admin/layout.tsx": {
     guard: "requireOrganizer",
-    marker: "await requireOrganizer()",
+    marker: "<OrganizerGate>",
   },
 };
 
@@ -196,35 +198,65 @@ describe.each(rows)("$pattern ($guard)", ({ url, chain, guard }) => {
 
   test("member under (app)/admin: not-found", async () => {
     vi.mocked(getViewer).mockResolvedValue(member);
-    const error = await thrownBy(AdminLayout({ children }));
+    const error = await thrownBy(OrganizerGate({ children }));
     expect((error as { digest?: string }).digest).toBe(
       "NEXT_HTTP_ERROR_FALLBACK;404",
     );
   });
 });
 
-// The admin layout directly: each outcome, whatever page sits below it.
+// The admin layout and its gate: each outcome, whatever page sits below it.
+// The guard sits behind the layout's Suspense boundary (a top-level session
+// read in a layout blocks instant navigation), with the menu inside it.
 describe("(app)/admin/layout.tsx", () => {
-  test("no viewer: redirect to /login", async () => {
+  // Every element type on the way down to one of the given type.
+  function typePaths(node: unknown, type: unknown, above: unknown[] = []) {
+    if (Array.isArray(node)) {
+      return node.flatMap((child): unknown[][] =>
+        typePaths(child, type, above),
+      );
+    }
+    if (!isValidElement(node)) return [];
+    if (node.type === type) return [above];
+    const props = node.props as Record<string, unknown>;
+    return Object.values(props).flatMap((value): unknown[][] =>
+      typePaths(value, type, [...above, node.type]),
+    );
+  }
+
+  test("renders the page and the admin menu only inside OrganizerGate, inside Suspense", () => {
+    const tree = AdminLayout({ children });
+    const pagePaths = ancestorsOf(tree, children);
+    const menuPaths = typePaths(tree, AdminMenu);
+    expect(pagePaths).toHaveLength(1);
+    expect(menuPaths).toHaveLength(1);
+    for (const ancestors of [...pagePaths, ...menuPaths]) {
+      expect(ancestors).toContain(OrganizerGate);
+      expect(ancestors.indexOf(Suspense)).toBeLessThan(
+        ancestors.indexOf(OrganizerGate),
+      );
+      expect(ancestors.indexOf(Suspense)).toBeGreaterThanOrEqual(0);
+    }
+  });
+
+  test("no viewer: OrganizerGate redirects to /login", async () => {
     vi.mocked(getViewer).mockResolvedValue(null);
-    expect(redirectTargetOf(await thrownBy(AdminLayout({ children })))).toBe(
+    expect(redirectTargetOf(await thrownBy(OrganizerGate({ children })))).toBe(
       "/login",
     );
   });
 
-  test("member: not-found", async () => {
+  test("member: OrganizerGate is not-found", async () => {
     vi.mocked(getViewer).mockResolvedValue(member);
-    const error = await thrownBy(AdminLayout({ children }));
+    const error = await thrownBy(OrganizerGate({ children }));
     expect(isRedirectError(error)).toBe(false);
     expect((error as { digest?: string }).digest).toBe(
       "NEXT_HTTP_ERROR_FALLBACK;404",
     );
   });
 
-  // The layout wraps its children with AdminMenu, so they are found in the tree.
-  test("organizer: renders its children", async () => {
+  test("organizer: OrganizerGate renders its children", async () => {
     vi.mocked(getViewer).mockResolvedValue(organizer);
-    const tree = await AdminLayout({ children });
-    expect(ancestorsOf(tree, children)).toHaveLength(1);
+    await expect(OrganizerGate({ children })).resolves.toBe(children);
   });
 });

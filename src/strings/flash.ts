@@ -1,5 +1,5 @@
 export const flash = {
-  joined: "Welcome to Lendshed. You're signed in.",
+  joined: "Welcome to {appName}. You're signed in.",
   joinedSignIn: "Your account is ready. Sign in to continue.",
   invitationRevoked: "Invitation revoked.",
   profileSaved: "Profile saved.",

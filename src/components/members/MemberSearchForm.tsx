@@ -2,6 +2,7 @@ import Form from "next/form";
 import Link from "next/link";
 import Button from "@/components/ui/Button";
 import TextInput from "@/components/ui/TextInput";
+import { NAME_MAX } from "@/lib/schemas/limits";
 import { members } from "@/strings/members";
 
 const FIELD_ID = "member-search";
@@ -26,7 +27,7 @@ export default function MemberSearchForm({ q }: { q: string }) {
             type="search"
             name="q"
             defaultValue={q}
-            maxLength={40}
+            maxLength={NAME_MAX}
             autoComplete="off"
           />
         </div>

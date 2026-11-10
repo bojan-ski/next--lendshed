@@ -1,4 +1,10 @@
 import { z } from "zod";
+import {
+  NAME_MAX,
+  NAME_MIN,
+  PASSWORD_MAX,
+  PASSWORD_MIN,
+} from "@/lib/schemas/limits";
 import { invitations } from "@/strings/invitations";
 import { join } from "@/strings/join";
 
@@ -24,8 +30,8 @@ export const joinSchema = joinTokenSchema.extend({
   name: z
     .string({ error: join.nameTooShort })
     .trim()
-    .min(2, { error: join.nameTooShort })
-    .max(40, { error: join.nameTooLong }),
+    .min(NAME_MIN, { error: join.nameTooShort })
+    .max(NAME_MAX, { error: join.nameTooLong }),
   email: z
     .string({ error: join.emailRequired })
     .trim()
@@ -34,8 +40,8 @@ export const joinSchema = joinTokenSchema.extend({
     .pipe(z.email({ error: join.emailInvalid })),
   password: z
     .string({ error: join.passwordTooShort })
-    .min(10, { error: join.passwordTooShort })
-    .max(128, { error: join.passwordTooLong }),
+    .min(PASSWORD_MIN, { error: join.passwordTooShort })
+    .max(PASSWORD_MAX, { error: join.passwordTooLong }),
   acceptHouseRules: z
     .literal("on", { error: join.houseRulesRequired })
     .transform(() => true as const),

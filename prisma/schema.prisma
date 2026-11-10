@@ -12,7 +12,8 @@ datasource db {
   provider = "postgresql"
 }
 
-// The auth models below come from `npx auth generate --config auth.cli.ts`.
+// The auth models below come from `npx auth generate --config auth.cli.ts
+// --adapter prisma --dialect postgresql --output prisma/schema.prisma`.
 // Hand edits that a re-run keeps: the two enums, @@index([role, status]) and
 // every @db.Timestamptz(3).
 
@@ -108,8 +109,8 @@ model RateLimit {
   @@map("rateLimit")
 }
 
-// App models below; `npx auth generate` leaves them and the two User
-// relations above untouched (re-run checked at spec 05 clarify).
+// App models below; `npx auth generate` leaves them and the four User
+// relations above untouched (re-run on a scratch copy checked at spec 07a).
 
 model Invitation {
   id          String    @id @default(uuid())

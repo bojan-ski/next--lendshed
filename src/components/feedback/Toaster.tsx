@@ -3,6 +3,7 @@
 import { usePathname } from "next/navigation";
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { Icon } from "@/components/ui/icons";
+import { publicEnv } from "@/lib/env/public";
 import {
   type ActiveToast,
   FLASH_COOKIE,
@@ -11,6 +12,7 @@ import {
   showToast,
   subscribeToToasts,
 } from "@/lib/feedback/toast";
+import { t } from "@/lib/text/interpolate";
 import type { FlashKey } from "@/strings";
 import { flash } from "@/strings/flash";
 import { toast as toastStrings } from "@/strings/toast";
@@ -101,7 +103,9 @@ function ToastCard({ toast }: { toast: ActiveToast }) {
       className="pointer-events-auto flex w-full max-w-sm items-center gap-3 rounded-card border border-line bg-card py-1 pr-1 pl-4 text-ink motion-safe:transition-opacity motion-safe:duration-200 motion-safe:starting:opacity-0"
     >
       <Icon name="check" aria-hidden className="shrink-0 text-accent" />
-      <p className="flex-1">{flash[toast.key]}</p>
+      <p className="flex-1">
+        {t(flash[toast.key], { appName: publicEnv.NEXT_PUBLIC_APP_NAME })}
+      </p>
       <button
         type="button"
         onClick={close}

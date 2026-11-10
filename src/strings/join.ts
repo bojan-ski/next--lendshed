@@ -1,6 +1,6 @@
 export const join = {
   title: "Join",
-  heading: "Join Lendshed on {community}",
+  heading: "Join {appName} on {community}",
   nameLabel: "Display name",
   nameHint: "Your first name and initial, like Mira K.",
   nameTooShort: "Enter at least 2 characters.",

@@ -339,6 +339,34 @@ describe("joinWithInvitation", () => {
     },
   );
 
+  test("role, status, id and usedById sent with the form are ignored", async () => {
+    const { id, token } = await scope.createInvitation();
+    const email = scope.email();
+    mockNextRequest({ ip: scope.ip() });
+
+    expect(
+      await redirectTarget(
+        joinWithInvitation(
+          idleJoin,
+          joinForm(token, {
+            email,
+            role: "organizer",
+            status: "suspended",
+            id: "chosen-id",
+            usedById: "someone-else",
+          }),
+        ),
+      ),
+    ).toBe("/");
+
+    const user = await db.user.findUniqueOrThrow({ where: { email } });
+    expect(user).toMatchObject({ role: "member", status: "active" });
+    expect(user.id).not.toBe("chosen-id");
+    expect(
+      (await db.invitation.findUniqueOrThrow({ where: { id } })).usedById,
+    ).toBe(user.id);
+  });
+
   test("a duplicate email is a field error; the link stays usable for another email", async () => {
     const existing = await scope.createTestUser();
     const { id, token } = await scope.createInvitation();

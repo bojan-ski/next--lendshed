@@ -40,6 +40,17 @@ describe("auth options", () => {
     expect(fields?.contactDetails?.input).toBe(false);
   });
 
+  // The library's own user-changing routes stay shut: profile and deletion go
+  // through this app's actions. /change-password's refusal is a hook, pinned
+  // over HTTP in the route's test.
+  test("update-user disabled; email change, deletion and reset mail never enabled", () => {
+    expect(options.disabledPaths).toEqual(["/update-user"]);
+    expect(options.user?.changeEmail?.enabled ?? false).toBe(false);
+    expect(options.user?.deleteUser?.enabled ?? false).toBe(false);
+    expect(options.emailAndPassword?.sendResetPassword).toBeUndefined();
+    expect(options.socialProviders).toBeUndefined();
+  });
+
   test("no extra trusted origins, and nextCookies is the last plugin", () => {
     expect(options.trustedOrigins).toBeUndefined();
     expect(options.plugins?.at(-1)?.id).toBe("next-cookies");

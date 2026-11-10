@@ -77,7 +77,7 @@ export async function createResetLink(
   } catch {
     return { formError: "unexpected" };
   }
-  if (outcome.kind === "memberGone") return { formError: "stale" };
+  if (outcome.kind !== "created") return { formError: "stale" };
 
   return {
     created: {

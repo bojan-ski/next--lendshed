@@ -1,11 +1,17 @@
 import { z } from "zod";
+import {
+  NAME_MAX,
+  NAME_MIN,
+  PASSWORD_MAX,
+  PASSWORD_MIN,
+} from "@/lib/schemas/limits";
 
 // Parsed from process.env by the CLI scripts, never by the app.
 export const organizerBootstrapEnvSchema = z.object({
   DATABASE_URL_UNPOOLED: z.url(),
-  ORGANIZER_NAME: z.string().trim().min(2).max(40),
+  ORGANIZER_NAME: z.string().trim().min(NAME_MIN).max(NAME_MAX),
   ORGANIZER_EMAIL: z.string().trim().toLowerCase().pipe(z.email()),
-  ORGANIZER_PASSWORD: z.string().min(10).max(128),
+  ORGANIZER_PASSWORD: z.string().min(PASSWORD_MIN).max(PASSWORD_MAX),
 });
 
 // The seed runs only against the one database host named here (set in .env.test only).

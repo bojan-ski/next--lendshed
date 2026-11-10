@@ -9,6 +9,7 @@ import Field from "@/components/ui/Field";
 import Notice from "@/components/ui/Notice";
 import PasswordInput from "@/components/ui/PasswordInput";
 import TextInput from "@/components/ui/TextInput";
+import { publicEnv } from "@/lib/env/public";
 import { t } from "@/lib/text/interpolate";
 import { errors } from "@/strings/errors";
 import { join } from "@/strings/join";
@@ -50,7 +51,12 @@ export default function JoinForm({
 
   return (
     <div className="flex flex-col gap-6">
-      <h1 className="text-2xl font-bold">{t(join.heading, { community })}</h1>
+      <h1 className="text-2xl font-bold">
+        {t(join.heading, {
+          appName: publicEnv.NEXT_PUBLIC_APP_NAME,
+          community,
+        })}
+      </h1>
       <form
         ref={form}
         action={formAction}

@@ -28,23 +28,31 @@ const clientFiles = sourceFiles("src/**/*.{ts,tsx}").filter(
   (file) => !/\.test\.tsx?$/.test(file) && isUseClientModule(parseFile(file)),
 );
 
+// Exactly CLAUDE.md's island list: a new 'use client' file fails here until it
+// is named, both here and in the Project Decisions.
+const ISLANDS = [
+  "src/app/(app)/error.tsx",
+  "src/app/(public)/error.tsx",
+  "src/app/global-error.tsx",
+  "src/components/account/ChangePasswordForm.tsx",
+  "src/components/account/ContactDetailsForm.tsx",
+  "src/components/account/ProfileForm.tsx",
+  "src/components/auth/JoinForm.tsx",
+  "src/components/auth/LoginForm.tsx",
+  "src/components/auth/ResetPasswordForm.tsx",
+  "src/components/feedback/Toaster.tsx",
+  "src/components/invitations/NewInvitationForm.tsx",
+  "src/components/invitations/RevokeInvitationButton.tsx",
+  "src/components/members/ResetLinkForm.tsx",
+  "src/components/members/RoleChangeButton.tsx",
+  "src/components/shell/NavLink.tsx",
+  "src/components/ui/Button.tsx",
+  "src/components/ui/PasswordInput.tsx",
+];
+
 describe("client boundary", () => {
-  test("finds the 'use client' files", () => {
-    expect(clientFiles).toEqual(
-      expect.arrayContaining([
-        "src/components/feedback/Toaster.tsx",
-        "src/components/auth/LoginForm.tsx",
-        "src/components/auth/JoinForm.tsx",
-        "src/components/invitations/NewInvitationForm.tsx",
-        "src/components/invitations/RevokeInvitationButton.tsx",
-        "src/components/account/ProfileForm.tsx",
-        "src/components/account/ContactDetailsForm.tsx",
-        "src/components/account/ChangePasswordForm.tsx",
-        "src/components/members/RoleChangeButton.tsx",
-        "src/components/members/ResetLinkForm.tsx",
-        "src/components/auth/ResetPasswordForm.tsx",
-      ]),
-    );
+  test(`finds exactly the ${ISLANDS.length} 'use client' files`, () => {
+    expect([...clientFiles].sort()).toEqual(ISLANDS);
   });
 
   test.each(clientFiles)("%s reaches no server-only code", (file) => {

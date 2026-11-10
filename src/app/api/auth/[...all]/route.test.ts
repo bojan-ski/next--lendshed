@@ -45,43 +45,103 @@ describe("/api/auth/[...all]", () => {
     expect(await db.user.findUnique({ where: { email } })).toBeNull();
   });
 
-  test("update-user can't set role, status, area or contact details", async () => {
+  test("update-user is disabled: 404 for a signed-in member, nothing changes", async () => {
     const user = await scope.createTestUser();
     const ip = scope.ip();
     const token = await signInForCookie({ ...user, ip });
-    const updateUser = (body: object) =>
-      route.POST(
-        new Request(new URL("/api/auth/update-user", env.APP_URL), {
-          method: "POST",
-          headers: {
-            "content-type": "application/json",
-            origin: new URL(env.APP_URL).origin,
-            "x-forwarded-for": ip,
-            cookie: `${SESSION_COOKIE}=${encodeURIComponent(token)}`,
-          },
-          body: JSON.stringify(body),
-        }),
-      );
     const fields = () =>
       db.user.findUnique({
         where: { id: user.id },
-        select: { role: true, status: true, area: true, contactDetails: true },
+        select: {
+          name: true,
+          image: true,
+          role: true,
+          status: true,
+          area: true,
+          contactDetails: true,
+        },
       });
     const before = await fields();
 
-    // Control: the same session is accepted, so a refusal below isn't a 401.
-    expect((await updateUser({ name: "Mira Q." })).status).toBe(200);
+    // Control: the same session reaches a live route, so the 404 isn't a 401.
+    const session = await post("/get-session", token, ip, undefined, "GET");
+    expect(session.status).toBe(200);
 
-    const response = await updateUser({
-      role: "organizer",
-      status: "suspended",
-      area: "Elsewhere",
-      contactDetails: "",
+    // Fields the library would accept: a name that skips profileSchema, an image.
+    const response = await post("/update-user", token, ip, {
+      name: " x",
+      image: "https://example.test/x.png",
     });
 
-    // The library refuses `input: false` fields; whatever it answers, nothing changes.
-    expect(response.status).not.toBe(200);
+    expect(response.status).toBe(404);
     expect(await fields()).toEqual(before);
-    expect(before).toMatchObject({ role: "member", status: "active" });
+  });
+
+  describe("change-password demands revokeOtherSessions: true", () => {
+    test.each([
+      ["omitted", {}],
+      ["false", { revokeOtherSessions: false }],
+      ["the string 'true'", { revokeOtherSessions: "true" }],
+    ])("refuses it %s and changes nothing", async (_, option) => {
+      const user = await scope.createTestUser();
+      const token = await signInForCookie({ ...user, ip: scope.ip() });
+      const credential = () =>
+        db.account.findFirstOrThrow({
+          where: { userId: user.id, providerId: "credential" },
+          select: { password: true },
+        });
+      const hashBefore = (await credential()).password;
+      const sessionsBefore = await scope.sessionsOf(user.id);
+
+      const response = await post("/change-password", token, scope.ip(), {
+        currentPassword: user.password,
+        newPassword: "a-brand-new-password",
+        ...option,
+      });
+
+      expect(response.status).toBe(400);
+      expect(await response.json()).toMatchObject({
+        code: "REVOKE_OTHER_SESSIONS_REQUIRED",
+      });
+      expect((await credential()).password).toBe(hashBefore);
+      expect(await scope.sessionsOf(user.id)).toEqual(sessionsBefore);
+    });
+
+    test("accepts it with the flag: every old session goes", async () => {
+      const user = await scope.createTestUser();
+      const token = await signInForCookie({ ...user, ip: scope.ip() });
+      const [old] = await scope.sessionsOf(user.id);
+
+      const response = await post("/change-password", token, scope.ip(), {
+        currentPassword: user.password,
+        newPassword: "a-brand-new-password",
+        revokeOtherSessions: true,
+      });
+
+      expect(response.status).toBe(200);
+      const after = await scope.sessionsOf(user.id);
+      expect(after.map(({ id }) => id)).not.toContain(old.id);
+    });
   });
 });
+
+function post(
+  path: string,
+  token: string,
+  ip: string,
+  body?: object,
+  method: "GET" | "POST" = "POST",
+): Promise<Response> {
+  return route[method](
+    new Request(new URL(`/api/auth${path}`, env.APP_URL), {
+      method,
+      headers: {
+        "content-type": "application/json",
+        origin: new URL(env.APP_URL).origin,
+        "x-forwarded-for": ip,
+        cookie: `${SESSION_COOKIE}=${encodeURIComponent(token)}`,
+      },
+      body: body ? JSON.stringify(body) : undefined,
+    }),
+  );
+}

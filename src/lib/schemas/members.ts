@@ -1,10 +1,11 @@
 import { z } from "zod";
 import { joinTokenSchema } from "@/lib/schemas/invitations";
+import { NAME_MAX, PASSWORD_MAX, PASSWORD_MIN } from "@/lib/schemas/limits";
 import { resetPassword } from "@/strings/resetPassword";
 
-// Anything but a single string of at most 40 characters searches for nothing.
+// Anything but a single string no longer than a name searches for nothing.
 export const memberSearchSchema = z.object({
-  q: z.string().trim().max(40).catch(""),
+  q: z.string().trim().max(NAME_MAX).catch(""),
 });
 
 export const memberIdSchema = z.object({
@@ -15,8 +16,8 @@ export const memberIdSchema = z.object({
 export const resetPasswordSchema = joinTokenSchema.extend({
   password: z
     .string({ error: resetPassword.passwordTooShort })
-    .min(10, { error: resetPassword.passwordTooShort })
-    .max(128, { error: resetPassword.passwordTooLong }),
+    .min(PASSWORD_MIN, { error: resetPassword.passwordTooShort })
+    .max(PASSWORD_MAX, { error: resetPassword.passwordTooLong }),
 });
 
 export type MemberSearch = z.infer<typeof memberSearchSchema>;

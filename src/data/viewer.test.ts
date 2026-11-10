@@ -10,6 +10,7 @@ import {
   signInForCookie,
 } from "@/__tests__/support/test-db";
 import { db } from "@/db";
+import { requireOrganizer } from "@/lib/auth/guards";
 import { getViewer } from "./viewer";
 
 vi.mock(
@@ -95,6 +96,24 @@ describe("getViewer", () => {
     (await cookies()).delete(SESSION_COOKIE);
 
     expect(await getViewer()).toBeNull();
+  });
+
+  // No cookie cache (OQ-10): the role is read from the database on every
+  // request, so a demotion bites on the organizer's very next request.
+  test("an organizer demoted mid-session is a member on the next read", async () => {
+    const user = await signedIn({ role: "organizer" });
+    expect(await getViewer()).toMatchObject({ role: "organizer" });
+
+    await db.user.update({ where: { id: user.id }, data: { role: "member" } });
+
+    expect(await getViewer()).toMatchObject({ id: user.id, role: "member" });
+    const error = await requireOrganizer().then(
+      () => null,
+      (thrown: unknown) => thrown,
+    );
+    expect((error as { digest?: string } | null)?.digest).toBe(
+      "NEXT_HTTP_ERROR_FALLBACK;404",
+    );
   });
 
   test("returns null for a suspended member with a live session", async () => {

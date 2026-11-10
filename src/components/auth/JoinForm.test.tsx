@@ -1,6 +1,7 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { joinWithInvitation } from "@/actions/invitations";
+import { publicEnv } from "@/lib/env/public";
 import { t } from "@/lib/text/interpolate";
 import { errors } from "@/strings/errors";
 import { join } from "@/strings/join";
@@ -40,7 +41,13 @@ describe("JoinForm", () => {
   test("renders the heading, the fields and the token as a hidden input", () => {
     const { container } = renderForm();
     expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent(
-      t(join.heading, { community: "Elm Street" }),
+      t(join.heading, {
+        appName: publicEnv.NEXT_PUBLIC_APP_NAME,
+        community: "Elm Street",
+      }),
+    );
+    expect(screen.getByRole("heading", { level: 1 })).not.toHaveTextContent(
+      "{",
     );
     expect(
       container.querySelector('input[type="hidden"][name="token"]'),
@@ -106,6 +113,22 @@ describe("JoinForm", () => {
     await screen.findByText(errors.actionFailed);
     expect(document.activeElement).toHaveTextContent(errors.actionFailed);
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  });
+
+  // React resets the form after a submit; the echoed values and the ticked box
+  // come back from the action state, so nothing typed is lost.
+  test("an unexpected failure keeps the name, the email and the ticked box", async () => {
+    await submitWith({
+      formError: "unexpected",
+      name: "Mira K.",
+      email: "mira@example.com",
+    });
+    await screen.findByText(errors.actionFailed);
+    expect(screen.getByLabelText(join.nameLabel)).toHaveValue("Mira K.");
+    expect(screen.getByLabelText(join.emailLabel)).toHaveValue(
+      "mira@example.com",
+    );
+    expect(screen.getByRole("checkbox")).toBeChecked();
   });
 
   test("a broken link replaces the form and takes focus", async () => {

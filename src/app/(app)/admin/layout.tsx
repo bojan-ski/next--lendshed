@@ -1,18 +1,24 @@
+import { Suspense } from "react";
 import AdminMenu from "@/components/admin/AdminMenu";
-import { requireOrganizer } from "@/lib/auth/guards";
+import OrganizerGate from "@/components/admin/OrganizerGate";
+import ContentSkeleton from "@/components/auth/ContentSkeleton";
 
 // Guards the first render only: layouts don't re-render on navigation, so
-// every admin page and data section calls requireOrganizer() itself too.
-export default async function AdminLayout({
+// every admin page and data section calls requireOrganizer() itself too. The
+// menu sits inside the gate, so a member never receives it.
+export default function AdminLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
-  await requireOrganizer();
   return (
-    <div className="md:grid md:grid-cols-[12rem_minmax(0,1fr)] md:gap-8">
-      <AdminMenu />
-      <div className="min-w-0">{children}</div>
-    </div>
+    <Suspense fallback={<ContentSkeleton />}>
+      <OrganizerGate>
+        <div className="md:grid md:grid-cols-[12rem_minmax(0,1fr)] md:gap-8">
+          <AdminMenu />
+          <div className="min-w-0">{children}</div>
+        </div>
+      </OrganizerGate>
+    </Suspense>
   );
 }

@@ -3,6 +3,7 @@ import { failureLine, hostOf } from "../scripts/lib/cli";
 import { createScriptClient } from "../scripts/lib/script-db";
 import { parseEnv } from "@/lib/env/parse";
 import { demoSeedEnvSchema } from "@/lib/schemas/bootstrap";
+import { seedInvitations, SEED_INVITATION_NOTES } from "./seed/invitations";
 import { seedPeople, SEED_PEOPLE } from "./seed/people";
 
 // Dev/test demo data. Later domain seeders run after seedPeople, in order.
@@ -22,6 +23,8 @@ async function main(): Promise<number> {
   try {
     await seedPeople(client);
     console.log(`People: ${SEED_PEOPLE.length} seeded`);
+    await seedInvitations(client);
+    console.log(`Invitations: ${SEED_INVITATION_NOTES.length} open`);
     return 0;
   } catch (error) {
     console.error(failureLine(error));

@@ -1,12 +1,15 @@
 import { act, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { usePathname } from "next/navigation";
+import { publicEnv } from "@/lib/env/public";
 import { dismissToast, showToast } from "@/lib/feedback/toast";
 import type { FlashKey } from "@/strings";
 import { toast as toastStrings } from "@/strings/toast";
 import Toaster from "./Toaster";
 
-vi.mock("@/strings/flash", () => ({ flash: { itemSaved: "Item saved." } }));
+vi.mock("@/strings/flash", () => ({
+  flash: { itemSaved: "Item saved.", joined: "Welcome to {appName}." },
+}));
 vi.mock("next/navigation", () => ({ usePathname: vi.fn(() => "/") }));
 
 const key = "itemSaved" as FlashKey;
@@ -37,6 +40,14 @@ describe("Toaster", () => {
     render(<Toaster />);
     expect(screen.getByRole("status")).toHaveTextContent("Item saved.");
     expect(hasFlashCookie()).toBe(false);
+  });
+
+  test("fills {appName} in a flash string from the public env", () => {
+    render(<Toaster />);
+    act(() => showToast("joined" as FlashKey));
+    expect(
+      screen.getByText(`Welcome to ${publicEnv.NEXT_PUBLIC_APP_NAME}.`),
+    ).toBeInTheDocument();
   });
 
   test("an unknown key shows nothing and still deletes the cookie", () => {

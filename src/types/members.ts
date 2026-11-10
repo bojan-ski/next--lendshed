@@ -42,4 +42,6 @@ export type ResetLinkState = {
 };
 
 export type ResetGrantOutcome =
-  { kind: "created"; displayName: string } | { kind: "memberGone" };
+  | { kind: "created"; displayName: string }
+  | { kind: "memberGone" }
+  | { kind: "actorGone" };

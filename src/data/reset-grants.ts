@@ -23,7 +23,10 @@ export async function insertResetGrant(input: {
 }): Promise<ResetGrantOutcome> {
   const now = new Date();
   return db.$transaction(async (tx): Promise<ResetGrantOutcome> => {
-    await lockActiveOrganizerIds(tx);
+    // Re-checked under the lock, as changeMemberRole does: the actor may have
+    // been demoted since requireOrganizer().
+    const organizers = await lockActiveOrganizerIds(tx);
+    if (!organizers.includes(input.createdById)) return { kind: "actorGone" };
     const [member] = await tx.$queryRaw<{ name: string }[]>`
       SELECT name FROM "user" WHERE id = ${input.userId} FOR UPDATE`;
     if (!member) return { kind: "memberGone" };
