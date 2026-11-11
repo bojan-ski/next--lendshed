@@ -6,7 +6,10 @@ import { navLinkClasses } from "@/components/shell/nav-styles";
 import Wordmark from "@/components/shell/Wordmark";
 import { nav } from "@/strings/nav";
 
-const entries = [{ href: "/", label: nav.browse, activePrefixes: ["/items"] }];
+const entries = [
+  { href: "/", label: nav.browse, activePrefixes: ["/items"] },
+  { href: "/my/items", label: nav.myItems, activePrefixes: ["/my/items"] },
+];
 
 type MemberHeaderProps = {
   avatar?: ReactNode;

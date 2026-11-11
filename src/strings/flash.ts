@@ -11,4 +11,9 @@ export const flash = {
   categoryAdded: "Category added.",
   categoryRenamed: "Category renamed.",
   categoryDeleted: "Category deleted.",
+  itemSaved: "Item saved.",
+  itemListed: "Item listed. Neighbours can find it now.",
+  itemHidden: "Item hidden.",
+  itemRetired: "Item retired.",
+  itemDeleted: "Item deleted.",
 } as const satisfies Record<string, string>;

@@ -29,15 +29,31 @@ async function renderWithSlotFor(viewer: ViewerDTO | null) {
 }
 
 describe("MemberHeader", () => {
-  test("without the slot it has Browse only", () => {
+  test("without the slot it has Browse, then My items", () => {
     render(<MemberHeader />);
     const navigation = screen.getByRole("navigation", { name: nav.label });
-    expect(
-      within(navigation)
-        .getAllByRole("link")
-        .map((link) => link.textContent),
-    ).toEqual([nav.browse]);
+    const links = within(navigation).getAllByRole("link");
+    expect(links.map((link) => link.textContent)).toEqual([
+      nav.browse,
+      nav.myItems,
+    ]);
+    expect(links[1]).toHaveAttribute("href", "/my/items");
   });
+
+  test.each(["/my/items", "/my/items/new", "/my/items/item-1/edit"])(
+    "My items is current on %s, and Browse isn't",
+    (pathname) => {
+      vi.mocked(usePathname).mockReturnValue(pathname);
+      render(<MemberHeader />);
+      const navigation = screen.getByRole("navigation", { name: nav.label });
+      expect(
+        within(navigation).getByRole("link", { name: nav.myItems }),
+      ).toHaveAttribute("aria-current", "page");
+      expect(
+        within(navigation).getByRole("link", { name: nav.browse }),
+      ).not.toHaveAttribute("aria-current");
+    },
+  );
 
   test("an organizer gets Organizer as the last entry, linking to /admin", async () => {
     const navigation = await renderWithSlotFor({
@@ -47,10 +63,11 @@ describe("MemberHeader", () => {
     const links = within(navigation).getAllByRole("link");
     expect(links.map((link) => link.textContent)).toEqual([
       nav.browse,
+      nav.myItems,
       nav.organizer,
     ]);
-    expect(links[1]).toHaveAttribute("href", "/admin");
-    expect(within(navigation).getAllByRole("listitem")).toHaveLength(2);
+    expect(links[2]).toHaveAttribute("href", "/admin");
+    expect(within(navigation).getAllByRole("listitem")).toHaveLength(3);
   });
 
   test.each(["/admin", "/admin/invitations"])(
@@ -75,6 +92,6 @@ describe("MemberHeader", () => {
     expect(
       within(navigation).queryByRole("link", { name: nav.organizer }),
     ).toBeNull();
-    expect(within(navigation).getAllByRole("listitem")).toHaveLength(1);
+    expect(within(navigation).getAllByRole("listitem")).toHaveLength(2);
   });
 });

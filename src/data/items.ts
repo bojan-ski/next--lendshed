@@ -1,6 +1,7 @@
 import "server-only";
 import { db } from "@/db";
 import { fromDbDate } from "@/data/db-dates";
+import { isCategoryReferenced, isItemReferencedByLoan } from "@/data/db-errors";
 import {
   blockingLoanWhere,
   occupyingLoanWhere,
@@ -8,9 +9,15 @@ import {
 } from "@/data/loan-scopes";
 import { personName, toPhotoDTO } from "@/data/mappers";
 import type { Prisma } from "@/generated/prisma/client";
+import type { ItemStatus, LoanSystemReason } from "@/generated/prisma/enums";
 import { effectiveStatus } from "@/lib/dates/effective-status";
-import { ITEM_CAP } from "@/lib/schemas/items";
-import type { ItemEditDTO, OwnItemRowDTO, OwnItemRowsDTO } from "@/types/item";
+import { ITEM_CAP, type ItemDetailsInput } from "@/lib/schemas/items";
+import type {
+  InsertItemOutcome,
+  ItemEditDTO,
+  OwnItemRowDTO,
+  OwnItemRowsDTO,
+} from "@/types/item";
 
 const photoSelect = {
   photoUrl: true,
@@ -175,4 +182,186 @@ export async function getItemForEdit(
     hasBlockingLoan: row.loans.length > 0,
     ownerHasContactDetails: row.owner?.contactDetails != null,
   });
+}
+
+const activeOwnItemsWhere = (ownerId: string) =>
+  ({ ownerId, status: { not: "retired" } }) satisfies Prisma.ItemWhereInput;
+
+export async function countActiveOwnItems(ownerId: string): Promise<number> {
+  return db.item.count({ where: activeOwnItemsWhere(ownerId) });
+}
+
+function detailsData(details: ItemDetailsInput) {
+  return {
+    title: details.title,
+    description: details.description,
+    categoryId: details.categoryId,
+    condition: details.condition,
+    maxLoanDays: details.maxLoanDays,
+    pickupNotes: details.pickupNotes,
+  } satisfies Prisma.ItemUncheckedUpdateInput;
+}
+
+// Two creates racing at 29 may both pass (31): the margins absorb it, so no lock.
+export async function insertItem(
+  ownerId: string,
+  details: ItemDetailsInput,
+): Promise<InsertItemOutcome> {
+  try {
+    return await db.$transaction(async (tx) => {
+      const active = await tx.item.count({
+        where: activeOwnItemsWhere(ownerId),
+      });
+      if (active >= ITEM_CAP) return { kind: "capReached" } as const;
+      const { id } = await tx.item.create({
+        data: { ...detailsData(details), ownerId, status: "hidden" },
+        select: { id: true },
+      });
+      return { kind: "created", id } as const;
+    });
+  } catch (error) {
+    if (isCategoryReferenced(error)) return { kind: "categoryMissing" };
+    throw error;
+  }
+}
+
+type LockedItem = { status: ItemStatus; photoUrl: string | null };
+
+// The item row, locked before anything is read: loan writers (13–15) lock the
+// same row, so they serialise with hide, retire and delete. Null when the
+// viewer doesn't own it, so an unknown id and someone else's look the same.
+async function lockOwnItem(
+  tx: Prisma.TransactionClient,
+  ownerId: string,
+  itemId: string,
+): Promise<LockedItem | null> {
+  const [row] = await tx.$queryRaw<
+    { ownerId: string | null; status: ItemStatus; photoUrl: string | null }[]
+  >`SELECT "ownerId", status, "photoUrl" FROM item WHERE id = ${itemId} FOR UPDATE`;
+  if (!row || row.ownerId !== ownerId) return null;
+  return { status: row.status, photoUrl: row.photoUrl };
+}
+
+const isEditable = (item: LockedItem | null): item is LockedItem =>
+  item?.status === "hidden" || item?.status === "listed";
+
+// Only effective requests: expired ones are left as they are, and approved or
+// out loans carry on. The borrower's seen-at stays, so only they see the dot.
+async function declineOpenRequests(
+  tx: Prisma.TransactionClient,
+  itemId: string,
+  today: string,
+  systemReason: Extract<LoanSystemReason, "item_hidden" | "item_retired">,
+): Promise<void> {
+  const now = new Date();
+  await tx.loan.updateMany({
+    where: { AND: [{ itemId }, openLoanWhere(today)] },
+    data: {
+      status: "declined",
+      endedBy: "system",
+      systemReason,
+      changedAt: now,
+      ownerSeenAt: now,
+    },
+  });
+}
+
+export async function updateOwnItem(
+  ownerId: string,
+  itemId: string,
+  details: ItemDetailsInput,
+): Promise<"saved" | "stale" | "categoryMissing"> {
+  try {
+    return await db.$transaction(async (tx) => {
+      if (!isEditable(await lockOwnItem(tx, ownerId, itemId))) return "stale";
+      await tx.item.update({
+        where: { id: itemId },
+        data: detailsData(details),
+      });
+      return "saved";
+    });
+  } catch (error) {
+    if (isCategoryReferenced(error)) return "categoryMissing";
+    throw error;
+  }
+}
+
+// Own user row first (FOR SHARE), then the item: a contact-details clear locks
+// the same row FOR UPDATE, so it runs strictly before or after this.
+export async function listOwnItem(
+  ownerId: string,
+  itemId: string,
+): Promise<"listed" | "stale" | "needsPhoto" | "needsContactDetails"> {
+  return db.$transaction(async (tx) => {
+    const [owner] = await tx.$queryRaw<{ contactDetails: string | null }[]>`
+      SELECT "contactDetails" FROM "user" WHERE id = ${ownerId} FOR SHARE`;
+    const item = await lockOwnItem(tx, ownerId, itemId);
+    if (!owner || item?.status !== "hidden") return "stale";
+    if (item.photoUrl === null) return "needsPhoto";
+    if (owner.contactDetails === null) return "needsContactDetails";
+    await tx.item.update({
+      where: { id: itemId },
+      data: { status: "listed", listedAt: new Date() },
+    });
+    return "listed";
+  });
+}
+
+export async function hideOwnItem(
+  ownerId: string,
+  itemId: string,
+  today: string,
+): Promise<"hidden" | "stale"> {
+  return db.$transaction(async (tx) => {
+    const item = await lockOwnItem(tx, ownerId, itemId);
+    if (item?.status !== "listed") return "stale";
+    await tx.item.update({
+      where: { id: itemId },
+      data: { status: "hidden" },
+    });
+    await declineOpenRequests(tx, itemId, today, "item_hidden");
+    return "hidden";
+  });
+}
+
+// A lapsed approval doesn't block (OQ-35 leaves the owner's rule as it is).
+export async function retireItemByOwner(
+  ownerId: string,
+  itemId: string,
+  today: string,
+): Promise<"retired" | "stale" | "blocked"> {
+  return db.$transaction(async (tx) => {
+    if (!isEditable(await lockOwnItem(tx, ownerId, itemId))) return "stale";
+    const blocking = await tx.loan.count({
+      where: { AND: [{ itemId }, blockingLoanWhere(today)] },
+      take: 1,
+    });
+    if (blocking > 0) return "blocked";
+    await tx.item.update({
+      where: { id: itemId },
+      data: { status: "retired", retiredAt: new Date() },
+    });
+    await declineOpenRequests(tx, itemId, today, "item_retired");
+    return "retired";
+  });
+}
+
+// Any loan row at all, whatever its status; the Restrict FK backs the count.
+export async function deleteOwnItem(
+  ownerId: string,
+  itemId: string,
+): Promise<"deleted" | "stale" | "hasLoans"> {
+  try {
+    return await db.$transaction(async (tx) => {
+      if (!isEditable(await lockOwnItem(tx, ownerId, itemId))) return "stale";
+      if ((await tx.loan.count({ where: { itemId }, take: 1 })) > 0) {
+        return "hasLoans";
+      }
+      await tx.item.delete({ where: { id: itemId } });
+      return "deleted";
+    });
+  } catch (error) {
+    if (isItemReferencedByLoan(error)) return "hasLoans";
+    throw error;
+  }
 }

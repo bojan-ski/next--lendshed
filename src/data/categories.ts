@@ -1,6 +1,7 @@
 import "server-only";
 import { cacheLife, cacheTag } from "next/cache";
 import { db } from "@/db";
+import { isCategoryReferenced } from "@/data/db-errors";
 import { Prisma } from "@/generated/prisma/client";
 import { categoryNameKey, normaliseCategoryName } from "@/lib/categories/name";
 import type { AdminCategoryDTO, CategoryDTO } from "@/types/categories";
@@ -101,19 +102,4 @@ function isNameKeyTaken(error: unknown): boolean {
   const constraint = (cause as { constraint?: { index?: unknown } })
     ?.constraint;
   return constraint?.index === "category_nameKey_key";
-}
-
-// A P2003 names the constraint, or the column when the driver reports one.
-function isCategoryReferenced(error: unknown): boolean {
-  if (!(error instanceof Prisma.PrismaClientKnownRequestError)) return false;
-  if (error.code !== "P2003") return false;
-  const cause = (error.meta?.driverAdapterError as { cause?: unknown })?.cause;
-  const constraint = (
-    cause as { constraint?: { index?: unknown; fields?: unknown } }
-  )?.constraint;
-  return (
-    constraint?.index === "item_categoryId_fkey" ||
-    (Array.isArray(constraint?.fields) &&
-      constraint.fields.includes("categoryId"))
-  );
 }

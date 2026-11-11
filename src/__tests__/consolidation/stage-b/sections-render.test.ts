@@ -3,17 +3,25 @@ import { createElement, type ReactNode } from "react";
 import { prerender } from "react-dom/static";
 import AccountSections from "@/components/account/AccountSections";
 import InvitationsSection from "@/components/invitations/InvitationsSection";
+import ItemEditSection from "@/components/items/ItemEditSection";
+import NewItemSection from "@/components/items/NewItemSection";
+import OwnItemsSection from "@/components/items/OwnItemsSection";
 import MembersSection from "@/components/members/MembersSection";
 import { getAccount } from "@/data/account";
+import { getCategories } from "@/data/categories";
 import { getOpenInvitations } from "@/data/invitations";
+import { countActiveOwnItems, getItemForEdit, getOwnItems } from "@/data/items";
 import { getAdminMembers } from "@/data/members";
 import { getViewer } from "@/data/viewer";
 import { communityToday } from "@/lib/dates/dates";
+import { ITEM_CAP } from "@/lib/schemas/items";
 import { t } from "@/lib/text/interpolate";
 import { invitations } from "@/strings/invitations";
+import { items } from "@/strings/items";
 import { members } from "@/strings/members";
 import type { AccountDTO } from "@/types/account";
 import type { InvitationRowDTO } from "@/types/invitation";
+import type { ItemEditDTO, OwnItemRowDTO } from "@/types/item";
 import type { AdminMemberRowDTO } from "@/types/members";
 import type { ViewerDTO } from "@/types/viewer";
 
@@ -21,6 +29,12 @@ vi.mock("@/data/viewer", () => ({ getViewer: vi.fn() }));
 vi.mock("@/data/account", () => ({ getAccount: vi.fn() }));
 vi.mock("@/data/invitations", () => ({ getOpenInvitations: vi.fn() }));
 vi.mock("@/data/members", () => ({ getAdminMembers: vi.fn() }));
+vi.mock("@/data/categories", () => ({ getCategories: vi.fn() }));
+vi.mock("@/data/items", () => ({
+  getOwnItems: vi.fn(),
+  countActiveOwnItems: vi.fn(),
+  getItemForEdit: vi.fn(),
+}));
 // next/form needs the app router; a plain GET form stands in.
 vi.mock("next/form", () => ({
   default: ({ children, ...props }: { children: ReactNode }) =>
@@ -176,5 +190,241 @@ describe("AccountSections", () => {
 
     expect(getAccount).toHaveBeenCalledTimes(1);
     expect(getAccount).toHaveBeenCalledWith(member.id, communityToday());
+  });
+});
+
+// Spec 10: the three /my/items sections guard themselves the same way.
+async function thrown(promise: Promise<unknown>): Promise<unknown> {
+  return promise.then(
+    () => {
+      throw new Error("expected a throw");
+    },
+    (error: unknown) => error,
+  );
+}
+
+function expectLoginRedirect(error: unknown) {
+  if (!isRedirectError(error)) throw error;
+  expect(error.digest.split(";")[2]).toBe("/login");
+}
+
+const CATEGORIES = [{ id: "cat-1", name: "Garden" }];
+
+const ownRow = (
+  n: number,
+  overrides: Partial<OwnItemRowDTO> = {},
+): OwnItemRowDTO => ({
+  id: `item-${n}`,
+  title: `Ladder ${n}`,
+  status: "hidden",
+  photo: null,
+  now: { kind: "hidden", personName: null },
+  ...overrides,
+});
+
+const editItem = (overrides: Partial<ItemEditDTO> = {}): ItemEditDTO => ({
+  id: "item-1",
+  title: "Cordless drill",
+  description: "",
+  categoryId: "cat-1",
+  condition: "good",
+  maxLoanDays: 7,
+  pickupNotes: null,
+  status: "hidden",
+  photo: null,
+  retiredNote: null,
+  hasAnyLoan: false,
+  hasBlockingLoan: false,
+  ownerHasContactDetails: true,
+  ...overrides,
+});
+
+const editParams = { params: Promise.resolve({ id: "item-1" }) };
+
+describe("OwnItemsSection", () => {
+  test("a guest is redirected to /login before the items are read", async () => {
+    vi.mocked(getViewer).mockResolvedValue(null);
+    expectLoginRedirect(await thrown(OwnItemsSection()));
+    expect(getOwnItems).not.toHaveBeenCalled();
+  });
+
+  test("no items: the empty state with Add item, no table", async () => {
+    vi.mocked(getViewer).mockResolvedValue(member);
+    vi.mocked(getOwnItems).mockResolvedValue({
+      rows: [],
+      activeCount: 0,
+      cap: ITEM_CAP,
+    });
+
+    const page = await html(await OwnItemsSection());
+
+    expect(getOwnItems).toHaveBeenCalledWith(member.id, communityToday());
+    expect(page).toContain(items.emptyHeading);
+    expect(page).toContain(`href="/my/items/new"`);
+    expect(page).not.toContain("<table");
+  });
+
+  test("rows: the count line, Add item and a labelled Edit or View per row", async () => {
+    vi.mocked(getViewer).mockResolvedValue(member);
+    vi.mocked(getOwnItems).mockResolvedValue({
+      rows: [
+        ownRow(1, {
+          status: "listed",
+          now: { kind: "overdue", personName: "Ana P." },
+        }),
+        ownRow(2, {
+          status: "retired",
+          now: { kind: "retired", personName: null },
+        }),
+      ],
+      activeCount: 1,
+      cap: ITEM_CAP,
+    });
+
+    const page = await html(await OwnItemsSection());
+
+    expect(page).toContain("<table");
+    expect(page).toContain(t(items.countLine, { count: 1, cap: ITEM_CAP }));
+    expect(page).toContain(`href="/my/items/new"`);
+    expect(page).not.toContain(t(items.capLine, { cap: ITEM_CAP }));
+    expect(page).toContain(t(items.now.overdue, { name: "Ana P." }));
+    expect(page).toContain(t(items.editFor, { title: "Ladder 1" }));
+    expect(page).toContain(t(items.viewFor, { title: "Ladder 2" }));
+    expect(page).toContain(`href="/my/items/item-2/edit"`);
+  });
+
+  test("at the cap the cap line replaces Add item", async () => {
+    vi.mocked(getViewer).mockResolvedValue(member);
+    vi.mocked(getOwnItems).mockResolvedValue({
+      rows: [ownRow(1)],
+      activeCount: ITEM_CAP,
+      cap: ITEM_CAP,
+    });
+
+    const page = await html(await OwnItemsSection());
+
+    expect(page).toContain(t(items.capLine, { cap: ITEM_CAP }));
+    expect(page).not.toContain(`href="/my/items/new"`);
+  });
+});
+
+describe("NewItemSection", () => {
+  test("a guest is redirected to /login before anything is read", async () => {
+    vi.mocked(getViewer).mockResolvedValue(null);
+    expectLoginRedirect(await thrown(NewItemSection()));
+    expect(countActiveOwnItems).not.toHaveBeenCalled();
+  });
+
+  test("under the cap: the step line and the form", async () => {
+    vi.mocked(getViewer).mockResolvedValue(member);
+    vi.mocked(countActiveOwnItems).mockResolvedValue(ITEM_CAP - 1);
+    vi.mocked(getCategories).mockResolvedValue(CATEGORIES);
+
+    const page = await html(await NewItemSection());
+
+    expect(countActiveOwnItems).toHaveBeenCalledWith(member.id);
+    expect(page).toContain(items.stepDetails);
+    expect(page).toContain(items.saveAndContinue);
+    expect(page).toContain("Garden");
+  });
+
+  test("at the cap: the notice and a way back, no form", async () => {
+    vi.mocked(getViewer).mockResolvedValue(member);
+    vi.mocked(countActiveOwnItems).mockResolvedValue(ITEM_CAP);
+    vi.mocked(getCategories).mockResolvedValue(CATEGORIES);
+
+    const page = await html(await NewItemSection());
+
+    expect(page).toContain(t(items.capNotice, { cap: ITEM_CAP }));
+    expect(page).toContain(`href="/my/items"`);
+    expect(page).not.toContain("<form");
+  });
+
+  test("no categories: the ask-an-organizer notice, no form", async () => {
+    vi.mocked(getViewer).mockResolvedValue(member);
+    vi.mocked(countActiveOwnItems).mockResolvedValue(0);
+    vi.mocked(getCategories).mockResolvedValue([]);
+
+    const page = await html(await NewItemSection());
+
+    expect(page).toContain(items.noCategories);
+    expect(page).not.toContain("<form");
+  });
+});
+
+describe("ItemEditSection", () => {
+  test("a guest is redirected to /login before the item is read", async () => {
+    vi.mocked(getViewer).mockResolvedValue(null);
+    expectLoginRedirect(await thrown(ItemEditSection(editParams)));
+    expect(getItemForEdit).not.toHaveBeenCalled();
+  });
+
+  test("an item that isn't the viewer's (null) is not-found", async () => {
+    vi.mocked(getViewer).mockResolvedValue(member);
+    vi.mocked(getItemForEdit).mockResolvedValue(null);
+    vi.mocked(getCategories).mockResolvedValue(CATEGORIES);
+
+    const error = await thrown(ItemEditSection(editParams));
+
+    expect(getItemForEdit).toHaveBeenCalledWith(
+      member.id,
+      "item-1",
+      communityToday(),
+    );
+    expect((error as { digest?: string }).digest).toBe(
+      "NEXT_HTTP_ERROR_FALLBACK;404",
+    );
+  });
+
+  test.each([
+    ["no loan rows", {}, items.delete, [items.retire, items.blockedLine]],
+    [
+      "loans, none blocking",
+      { hasAnyLoan: true },
+      items.retire,
+      [items.delete, items.blockedLine],
+    ],
+    [
+      "a blocking loan",
+      { hasAnyLoan: true, hasBlockingLoan: true },
+      items.blockedLine,
+      [items.retire, items.delete],
+    ],
+  ] as const)(
+    "%s: the last card shows exactly that control",
+    async (_label, flags, shown, absent) => {
+      vi.mocked(getViewer).mockResolvedValue(member);
+      vi.mocked(getItemForEdit).mockResolvedValue(editItem(flags));
+      vi.mocked(getCategories).mockResolvedValue(CATEGORIES);
+
+      const page = await html(await ItemEditSection(editParams));
+
+      expect(page).toContain(items.visibilityHidden);
+      expect(page).toContain(items.list);
+      expect(page).toContain(items.saveChanges);
+      expect(page).toContain(shown);
+      for (const text of absent) expect(page).not.toContain(text);
+    },
+  );
+
+  test("a retired item is read-only: its details and note, no form or button", async () => {
+    vi.mocked(getViewer).mockResolvedValue(member);
+    vi.mocked(getItemForEdit).mockResolvedValue(
+      editItem({
+        status: "retired",
+        hasAnyLoan: true,
+        retiredNote: "Handle broke",
+      }),
+    );
+    vi.mocked(getCategories).mockResolvedValue(CATEGORIES);
+
+    const page = await html(await ItemEditSection(editParams));
+
+    expect(page).toContain(items.retiredLine);
+    expect(page).toContain("Garden");
+    expect(page).toContain(items.retiredNoteLabel);
+    expect(page).toContain("Handle broke");
+    expect(page).not.toContain("<form");
+    expect(page).not.toContain("<button");
   });
 });
