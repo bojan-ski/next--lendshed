@@ -53,11 +53,22 @@ describe("getCategories", () => {
 });
 
 describe("getAdminCategories", () => {
-  test("the same rows with inUse false (no item can use one before spec 09)", async () => {
+  test("an unused category is not in use", async () => {
     const { id, name } = await scope.createCategory("Admin row");
     const row = (await getAdminCategories()).find((r) => r.id === id);
     expect(row).toEqual({ id, name, inUse: false });
   });
+
+  test.each(["hidden", "listed", "retired"] as const)(
+    "a category with a %s item is in use",
+    async (status) => {
+      const { id } = await scope.createCategory(`Used ${status}`);
+      const ownerId = (await scope.createTestUser()).id;
+      await scope.createItem({ ownerId, categoryId: id, status });
+      const row = (await getAdminCategories()).find((r) => r.id === id);
+      expect(row?.inUse).toBe(true);
+    },
+  );
 });
 
 describe("insertCategory", () => {
@@ -170,5 +181,24 @@ describe("removeCategory", () => {
     await removeCategory(id);
     expect(await removeCategory(id)).toBe("missing");
     expect(await removeCategory(crypto.randomUUID())).toBe("missing");
+  });
+
+  test("a category any item uses, retired included, is in use and stays", async () => {
+    const { id } = await scope.createCategory("Kept");
+    const ownerId = (await scope.createTestUser()).id;
+    await scope.createItem({ ownerId, categoryId: id, status: "retired" });
+    expect(await removeCategory(id)).toBe("inUse");
+    expect(await db.category.findUnique({ where: { id } })).not.toBeNull();
+  });
+
+  // An item inserted after the pre-check: only the Restrict FK can refuse it.
+  test("the foreign key refuses a delete the pre-check missed", async () => {
+    const { id } = await scope.createCategory("Raced");
+    const ownerId = (await scope.createTestUser()).id;
+    await scope.createItem({ ownerId, categoryId: id });
+    vi.spyOn(db.item, "count").mockResolvedValueOnce(0);
+
+    expect(await removeCategory(id)).toBe("inUse");
+    expect(await db.category.findUnique({ where: { id } })).not.toBeNull();
   });
 });

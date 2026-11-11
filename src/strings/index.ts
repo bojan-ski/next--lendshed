@@ -12,6 +12,7 @@ import { home } from "./home";
 import { houseRules } from "./houseRules";
 import { invitations } from "./invitations";
 import { itemCard } from "./itemCard";
+import { items } from "./items";
 import { join } from "./join";
 import { linkBroken } from "./linkBroken";
 import { loanCard } from "./loanCard";
@@ -53,6 +54,7 @@ export const strings = {
   members,
   resetPassword,
   categories,
+  items,
 } as const;
 
 export type FlashKey = keyof typeof strings.flash;

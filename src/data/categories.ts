@@ -26,11 +26,15 @@ export async function getCategories(): Promise<CategoryDTO[]> {
   return rows.map(toCategoryDTO);
 }
 
-// `inUse` stays uncached: item writes never invalidate `categories`. No item can
-// reference a category until spec 09 adds Item.categoryId.
+// `inUse` stays uncached: item writes never invalidate `categories`. Retired
+// items count, since Item → Category is Restrict.
 export async function getAdminCategories(): Promise<AdminCategoryDTO[]> {
-  const rows = await getCategories();
-  return rows.map((row) => ({ ...row, inUse: false }));
+  const [rows, used] = await Promise.all([
+    getCategories(),
+    db.item.groupBy({ by: ["categoryId"] }),
+  ]);
+  const inUse = new Set(used.map((item) => item.categoryId));
+  return rows.map((row) => ({ ...row, inUse: inUse.has(row.id) }));
 }
 
 // Writers normalise again, so the stored name always matches its key.
@@ -71,10 +75,21 @@ export async function updateCategoryName(input: {
   return count === 1 ? "renamed" : "missing";
 }
 
+// The pre-check answers the common case; the Restrict FK catches an item
+// inserted between it and the delete.
 export async function removeCategory(
   id: string,
-): Promise<"deleted" | "missing"> {
-  const { count } = await db.category.deleteMany({ where: { id } });
+): Promise<"deleted" | "missing" | "inUse"> {
+  if ((await db.item.count({ where: { categoryId: id }, take: 1 })) > 0) {
+    return "inUse";
+  }
+  let count: number;
+  try {
+    ({ count } = await db.category.deleteMany({ where: { id } }));
+  } catch (error) {
+    if (isCategoryReferenced(error)) return "inUse";
+    throw error;
+  }
   return count === 1 ? "deleted" : "missing";
 }
 
@@ -86,4 +101,19 @@ function isNameKeyTaken(error: unknown): boolean {
   const constraint = (cause as { constraint?: { index?: unknown } })
     ?.constraint;
   return constraint?.index === "category_nameKey_key";
+}
+
+// A P2003 names the constraint, or the column when the driver reports one.
+function isCategoryReferenced(error: unknown): boolean {
+  if (!(error instanceof Prisma.PrismaClientKnownRequestError)) return false;
+  if (error.code !== "P2003") return false;
+  const cause = (error.meta?.driverAdapterError as { cause?: unknown })?.cause;
+  const constraint = (
+    cause as { constraint?: { index?: unknown; fields?: unknown } }
+  )?.constraint;
+  return (
+    constraint?.index === "item_categoryId_fkey" ||
+    (Array.isArray(constraint?.fields) &&
+      constraint.fields.includes("categoryId"))
+  );
 }

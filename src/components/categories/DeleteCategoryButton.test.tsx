@@ -116,6 +116,20 @@ describe("DeleteCategoryButton", () => {
     expect(getActiveToast()).toBeNull();
   });
 
+  test("an in-use refusal shows only the focused in-use notice", async () => {
+    vi.mocked(deleteCategory).mockResolvedValue({ formError: "inUse" });
+    await startConfirm();
+    await userEvent.click(confirmButton());
+
+    await screen.findByText(categories.inUseRefusal);
+    await vi.waitFor(() =>
+      expect(document.activeElement).toHaveTextContent(categories.inUseRefusal),
+    );
+    expect(screen.queryByRole("button")).toBeNull();
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    expect(getActiveToast()).toBeNull();
+  });
+
   test("an unexpected failure keeps the confirm step to retry", async () => {
     vi.mocked(deleteCategory).mockResolvedValue({ formError: "unexpected" });
     await startConfirm();

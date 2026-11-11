@@ -6,6 +6,7 @@ import { parseEnv } from "@/lib/env/parse";
 import { demoSeedEnvSchema } from "@/lib/schemas/bootstrap";
 import { seedCategories } from "./seed/categories";
 import { seedInvitations, SEED_INVITATION_NOTES } from "./seed/invitations";
+import { seedItems, SEED_ITEMS } from "./seed/items";
 import { seedPeople, SEED_PEOPLE } from "./seed/people";
 
 // Dev/test demo data. Later domain seeders run after seedPeople, in order.
@@ -29,6 +30,8 @@ async function main(): Promise<number> {
     console.log(`Invitations: ${SEED_INVITATION_NOTES.length} open`);
     await seedCategories(client);
     console.log(`Categories: ${PRODUCTION_CATEGORIES.length} present`);
+    await seedItems(client);
+    console.log(`Items: ${SEED_ITEMS.length} present (Hidden)`);
     return 0;
   } catch (error) {
     console.error(failureLine(error));

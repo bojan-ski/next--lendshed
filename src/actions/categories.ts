@@ -110,6 +110,7 @@ export async function deleteCategory(
     return { formError: "unexpected" };
   }
   if (result === "missing") return { formError: "stale" };
+  if (result === "inUse") return { formError: "inUse" };
 
   updateTag("categories");
   return { flash: "categoryDeleted" };

@@ -1,6 +1,7 @@
 import { act, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { updateContactDetails } from "@/actions/account";
+import { CONTACT_LOCKED_ID } from "@/components/account/ids";
 import { dismissToast, getActiveToast } from "@/lib/feedback/toast";
 import { account } from "@/strings/account";
 import { errors } from "@/strings/errors";
@@ -51,6 +52,43 @@ describe("ContactDetailsForm", () => {
     render(<ContactDetailsForm contactDetails={SAVED} locked />);
     expect(screen.getByText(account.contactLocked)).toBeInTheDocument();
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  });
+
+  test("the locked line describes the field after the hint", () => {
+    render(<ContactDetailsForm contactDetails={SAVED} locked />);
+    const ids = field().getAttribute("aria-describedby")?.split(" ");
+    expect(ids).toEqual(["contactDetails-hint", CONTACT_LOCKED_ID]);
+    expect(field()).toHaveAccessibleDescription(
+      `${account.contactHint} ${account.contactLocked}`,
+    );
+  });
+
+  test("a refused clear replaces the info line: the sentence shows and describes once", async () => {
+    vi.mocked(updateContactDetails).mockResolvedValue({
+      formError: "contactDetailsLocked",
+    });
+    render(<ContactDetailsForm contactDetails={SAVED} locked />);
+    await userEvent.clear(field());
+    await userEvent.click(
+      screen.getByRole("button", { name: account.saveContact }),
+    );
+
+    await vi.waitFor(() =>
+      expect(document.activeElement).toHaveTextContent(account.contactLocked),
+    );
+    expect(screen.getAllByText(account.contactLocked)).toHaveLength(1);
+    expect(document.activeElement).toHaveAttribute("id", CONTACT_LOCKED_ID);
+    expect(field()).toHaveAccessibleDescription(
+      `${account.contactHint} ${account.contactLocked}`,
+    );
+  });
+
+  test("an unlocked field names no locked line", () => {
+    render(<ContactDetailsForm contactDetails={SAVED} locked={false} />);
+    expect(field().getAttribute("aria-describedby")).toBe(
+      "contactDetails-hint",
+    );
+    expect(document.getElementById(CONTACT_LOCKED_ID)).toBeNull();
   });
 
   test("a field error echoes the text and focuses the field", async () => {

@@ -274,6 +274,29 @@ describe("deleteCategory", () => {
     expect(updateTag).not.toHaveBeenCalled();
   });
 
+  test("a category an item uses is refused in its row and revalidates nothing", async () => {
+    const organizer = await actAs("organizer");
+    const { id } = await scope.createCategory("Busy");
+    await scope.createItem({ ownerId: organizer.id, categoryId: id });
+
+    expect(await deleteCategory(idleDelete, form({ id }))).toEqual({
+      formError: "inUse",
+    });
+    expect(await rowById(id)).not.toBeNull();
+    expect(updateTag).not.toHaveBeenCalled();
+  });
+
+  test("an inUse outcome from the data layer maps to the inUse notice", async () => {
+    await actAs("organizer");
+    const { id } = await scope.createCategory("Raced");
+    vi.mocked(removeCategory).mockResolvedValueOnce("inUse");
+
+    expect(await deleteCategory(idleDelete, form({ id }))).toEqual({
+      formError: "inUse",
+    });
+    expect(updateTag).not.toHaveBeenCalled();
+  });
+
   test("a data failure is unexpected and keeps the row", async () => {
     await actAs("organizer");
     const { id } = await scope.createCategory("Sturdy");

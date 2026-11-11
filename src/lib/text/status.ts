@@ -1,5 +1,5 @@
 import type { IconName } from "@/components/ui/icons";
-import type { MemberStatus } from "@/generated/prisma/enums";
+import type { ItemStatus, MemberStatus } from "@/generated/prisma/enums";
 import { status as labels } from "@/strings/status";
 import type { EffectiveLoanStatus } from "@/types/loan";
 
@@ -30,8 +30,7 @@ export const loanStatus: Record<EffectiveLoanStatus, StatusStyle> = {
   lapsed: { label: labels.loan.lapsed, icon: "dot", tone: "done" },
 };
 
-// The Prisma enum arrives with items (spec 09); until then this union is the contract.
-export type ItemStatus = "listed" | "hidden" | "retired";
+export type { ItemStatus };
 
 export const itemStatus: Record<ItemStatus, StatusStyle> = {
   listed: { label: labels.item.listed, icon: "eye", tone: "positive" },

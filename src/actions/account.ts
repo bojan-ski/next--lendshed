@@ -5,6 +5,7 @@ import { z } from "zod";
 import { updateOwnContactDetails, updateOwnProfile } from "@/data/account";
 import { requireViewer } from "@/lib/auth/guards";
 import { forwardChangePassword } from "@/lib/auth/sign-in";
+import { communityToday } from "@/lib/dates/dates";
 import {
   changePasswordSchema,
   contactDetailsSchema,
@@ -71,6 +72,7 @@ export async function updateContactDetails(
     result = await updateOwnContactDetails(
       viewer.id,
       parsed.data.contactDetails,
+      communityToday(),
     );
   } catch {
     return { formError: "unexpected", ...echo };

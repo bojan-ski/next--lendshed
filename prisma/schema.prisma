@@ -45,6 +45,10 @@ model User {
   invitationsUsed    Invitation[]         @relation("InvitationUsedBy")
   resetGrants        PasswordResetGrant[] @relation("PasswordResetGrantUser")
   resetGrantsCreated PasswordResetGrant[] @relation("PasswordResetGrantCreatedBy")
+  itemsOwned         Item[]               @relation("ItemOwner")
+  itemsRetired       Item[]               @relation("ItemRetiredBy")
+  loansBorrowed      Loan[]               @relation("LoanBorrower")
+  loansClosed        Loan[]               @relation("LoanClosedBy")
 
   @@unique([email])
   @@index([role, status])
@@ -109,8 +113,8 @@ model RateLimit {
   @@map("rateLimit")
 }
 
-// App models below; `npx auth generate` leaves them and the four User
-// relations above untouched (re-run on a scratch copy checked at spec 07a).
+// App models below; `npx auth generate` leaves them and the eight User
+// relations above untouched (re-run on a scratch copy checked at spec 09).
 
 model Invitation {
   id          String    @id @default(uuid())
@@ -150,6 +154,119 @@ model Category {
   name      String
   nameKey   String   @unique
   createdAt DateTime @default(now()) @db.Timestamptz(3)
+  items     Item[]
 
   @@map("category")
+}
+
+enum ItemCondition {
+  new
+  good
+  worn
+  needs_care
+}
+
+enum ItemStatus {
+  hidden
+  listed
+  retired
+}
+
+enum LoanStatus {
+  requested
+  approved
+  out
+  returned
+  declined
+  cancelled
+  expired
+  lapsed
+}
+
+enum ReturnedAsLent {
+  yes
+  no
+  unknown
+}
+
+enum LoanActor {
+  owner
+  borrower
+  organizer
+  system
+}
+
+enum LoanSystemReason {
+  dates_taken
+  item_hidden
+  item_retired
+  owner_suspended
+  borrower_suspended
+  account_deleted
+}
+
+// CHECK item_maxLoanDays_check (1–30) is hand-written in items_and_loans.
+
+model Item {
+  id          String        @id @default(uuid())
+  ownerId     String?
+  owner       User?         @relation("ItemOwner", fields: [ownerId], references: [id], onDelete: SetNull)
+  categoryId  String
+  category    Category      @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+  title       String
+  description String
+  condition   ItemCondition
+  maxLoanDays Int           @default(7)
+  pickupNotes String?
+  status      ItemStatus    @default(hidden)
+  listedAt    DateTime?     @db.Timestamptz(3)
+  retiredAt   DateTime?     @db.Timestamptz(3)
+  retiredNote String?
+  retiredById String?
+  retiredBy   User?         @relation("ItemRetiredBy", fields: [retiredById], references: [id], onDelete: SetNull)
+  photoKey    String?
+  photoUrl    String?
+  photoWidth  Int?
+  photoHeight Int?
+  photoBytes  Int?
+  createdAt   DateTime      @default(now()) @db.Timestamptz(3)
+  updatedAt   DateTime      @updatedAt @db.Timestamptz(3)
+  loans       Loan[]
+
+  @@index([status, listedAt(sort: Desc)])
+  @@index([ownerId])
+  @@index([categoryId])
+  @@map("item")
+}
+
+// CHECK loan_dates_check is hand-written in items_and_loans; the exclusion
+// constraint loan_no_overlap in its own migration.
+
+model Loan {
+  id             String            @id @default(uuid())
+  itemId         String
+  item           Item              @relation(fields: [itemId], references: [id], onDelete: Restrict)
+  borrowerId     String?
+  borrower       User?             @relation("LoanBorrower", fields: [borrowerId], references: [id], onDelete: SetNull)
+  startDate      DateTime          @db.Date
+  endDate        DateTime          @db.Date
+  status         LoanStatus        @default(requested)
+  requestMessage String?
+  statusReason   String?
+  endedBy        LoanActor?
+  systemReason   LoanSystemReason?
+  returnedOn     DateTime?         @db.Date
+  returnedAsLent ReturnedAsLent?
+  closedById     String?
+  closedBy       User?             @relation("LoanClosedBy", fields: [closedById], references: [id], onDelete: SetNull)
+  ownerSeenAt    DateTime?         @db.Timestamptz(3)
+  borrowerSeenAt DateTime?         @db.Timestamptz(3)
+  changedAt      DateTime          @default(now()) @db.Timestamptz(3)
+  createdAt      DateTime          @default(now()) @db.Timestamptz(3)
+  updatedAt      DateTime          @updatedAt @db.Timestamptz(3)
+
+  @@index([itemId, status])
+  @@index([borrowerId, status])
+  @@index([itemId, startDate])
+  @@map("loan")
 }

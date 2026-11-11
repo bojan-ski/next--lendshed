@@ -21,6 +21,8 @@ export const categories = {
   deleteConfirmButton: "Delete category",
   keep: "Keep",
   inUse: "In use",
+  inUseRefusal:
+    "An item uses this category, so it can't be deleted. Reload to see where it stands.",
   emptyHeading: "No categories yet",
   emptyBody: "Add the first one above. Members choose one for each item.",
 } as const;

@@ -8,6 +8,7 @@ import { getAccount } from "@/data/account";
 import { getOpenInvitations } from "@/data/invitations";
 import { getAdminMembers } from "@/data/members";
 import { getViewer } from "@/data/viewer";
+import { communityToday } from "@/lib/dates/dates";
 import { t } from "@/lib/text/interpolate";
 import { invitations } from "@/strings/invitations";
 import { members } from "@/strings/members";
@@ -174,6 +175,6 @@ describe("AccountSections", () => {
     await AccountSections();
 
     expect(getAccount).toHaveBeenCalledTimes(1);
-    expect(getAccount).toHaveBeenCalledWith(member.id);
+    expect(getAccount).toHaveBeenCalledWith(member.id, communityToday());
   });
 });

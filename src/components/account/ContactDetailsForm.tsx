@@ -2,6 +2,7 @@
 
 import { useActionState, useEffect, useRef } from "react";
 import { updateContactDetails } from "@/actions/account";
+import { CONTACT_LOCKED_ID } from "@/components/account/ids";
 import Button from "@/components/ui/Button";
 import Field from "@/components/ui/Field";
 import Notice from "@/components/ui/Notice";
@@ -36,6 +37,8 @@ export default function ContactDetailsForm({
   const [state, formAction] = useActionState(saveAndAnnounce, initialState);
   const form = useRef<HTMLFormElement>(null);
   const notice = useRef<HTMLDivElement>(null);
+  // The locked sentence shows once: the refusal replaces the info notice.
+  const refused = state.formError === "contactDetailsLocked";
 
   useEffect(() => {
     if (state === initialState || state.flash) return;
@@ -55,11 +58,13 @@ export default function ContactDetailsForm({
       className="flex flex-col gap-4"
     >
       {state.formError && (
-        <div ref={notice} tabIndex={-1}>
+        <div
+          ref={notice}
+          tabIndex={-1}
+          id={refused ? CONTACT_LOCKED_ID : undefined}
+        >
           <Notice tone="error" alert={false}>
-            {state.formError === "contactDetailsLocked"
-              ? account.contactLocked
-              : errors.actionFailed}
+            {refused ? account.contactLocked : errors.actionFailed}
           </Notice>
         </div>
       )}
@@ -72,13 +77,25 @@ export default function ContactDetailsForm({
         {(control) => (
           <TextArea
             {...control}
+            aria-describedby={
+              [
+                control["aria-describedby"],
+                refused || locked ? CONTACT_LOCKED_ID : undefined,
+              ]
+                .filter(Boolean)
+                .join(" ") || undefined
+            }
             name="contactDetails"
             rows={5}
             defaultValue={state.contactDetails ?? contactDetails ?? ""}
           />
         )}
       </Field>
-      {locked && <Notice tone="info">{account.contactLocked}</Notice>}
+      {locked && !refused && (
+        <div id={CONTACT_LOCKED_ID}>
+          <Notice tone="info">{account.contactLocked}</Notice>
+        </div>
+      )}
       <Button type="submit" className="w-full sm:w-auto sm:self-start">
         {account.saveContact}
       </Button>

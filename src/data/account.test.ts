@@ -1,5 +1,7 @@
 import { assertMigrated, createTestScope } from "@/__tests__/support/test-db";
 import { db } from "@/db";
+import type { ItemStatus, LoanStatus } from "@/generated/prisma/enums";
+import { communityToday } from "@/lib/dates/dates";
 import {
   getAccount,
   updateOwnContactDetails,
@@ -9,6 +11,7 @@ import {
 vi.setConfig({ testTimeout: 30_000, hookTimeout: 60_000 });
 
 const scope = createTestScope();
+const today = communityToday();
 
 beforeAll(assertMigrated);
 afterAll(() => scope.cleanup());
@@ -27,7 +30,7 @@ describe("getAccount", () => {
       data: { area: "north end", contactDetails: "Phone 555 0101\nAfter 6" },
     });
 
-    expect(await getAccount(user.id)).toEqual({
+    expect(await getAccount(user.id, today)).toEqual({
       displayName: "Mira K.",
       area: "north end",
       contactDetails: "Phone 555 0101\nAfter 6",
@@ -38,7 +41,7 @@ describe("getAccount", () => {
 
   test("an empty account carries nulls, never ids, roles, timestamps or auth fields", async () => {
     const user = await scope.createTestUser({ role: "organizer" });
-    const dto = await getAccount(user.id);
+    const dto = await getAccount(user.id, today);
 
     expect(Object.keys(dto).sort()).toEqual([
       "area",
@@ -53,7 +56,7 @@ describe("getAccount", () => {
   });
 
   test("a missing user throws (the page's error surface)", async () => {
-    await expect(getAccount("no-such-user")).rejects.toThrow();
+    await expect(getAccount("no-such-user", today)).rejects.toThrow();
   });
 });
 
@@ -88,22 +91,190 @@ describe("updateOwnContactDetails", () => {
     const user = await scope.createTestUser();
     const other = await scope.createTestUser();
 
-    expect(await updateOwnContactDetails(user.id, "Phone 555\nAfter 6")).toBe(
-      "saved",
-    );
+    expect(
+      await updateOwnContactDetails(user.id, "Phone 555\nAfter 6", today),
+    ).toBe("saved");
 
     expect((await columns(user.id)).contactDetails).toBe("Phone 555\nAfter 6");
     expect((await columns(other.id)).contactDetails).toBeNull();
   });
 
-  // Until spec 09 nothing locks the details, so a clear always goes through.
   test("null clears the details while nothing locks them", async () => {
     const user = await scope.createTestUser();
-    await updateOwnContactDetails(user.id, "Phone 555");
+    await updateOwnContactDetails(user.id, "Phone 555", today);
 
-    expect(await updateOwnContactDetails(user.id, null)).toBe("saved");
+    expect(await updateOwnContactDetails(user.id, null, today)).toBe("saved");
 
     expect((await columns(user.id)).contactDetails).toBeNull();
-    expect((await getAccount(user.id)).contactDetailsLocked).toBe(false);
+    expect((await getAccount(user.id, today)).contactDetailsLocked).toBe(false);
+  });
+});
+
+// Fixed dates so "today" never moves under the fixtures.
+describe("the contact-details lock", () => {
+  const TODAY = "2030-06-15";
+  const DETAILS = "Phone 555";
+
+  type Scenario = {
+    item: ItemStatus;
+    loan?: [LoanStatus, string, string];
+    owner: boolean;
+    borrower: boolean;
+  };
+
+  // Which side, if either, can't clear the details.
+  const scenarios: [string, Scenario][] = [
+    ["a listed item", { item: "listed", owner: true, borrower: false }],
+    ["a hidden item", { item: "hidden", owner: false, borrower: false }],
+    ["a retired item", { item: "retired", owner: false, borrower: false }],
+    [
+      "an open request",
+      {
+        item: "hidden",
+        loan: ["requested", "2030-06-16", "2030-06-17"],
+        owner: true,
+        borrower: true,
+      },
+    ],
+    [
+      "an approved loan",
+      {
+        item: "hidden",
+        loan: ["approved", "2030-06-16", "2030-06-17"],
+        owner: true,
+        borrower: true,
+      },
+    ],
+    [
+      "an out loan",
+      {
+        item: "hidden",
+        loan: ["out", "2030-06-14", "2030-06-16"],
+        owner: true,
+        borrower: true,
+      },
+    ],
+    [
+      "an overdue out loan",
+      {
+        item: "hidden",
+        loan: ["out", "2030-06-01", "2030-06-10"],
+        owner: true,
+        borrower: true,
+      },
+    ],
+    [
+      "an expired request",
+      {
+        item: "hidden",
+        loan: ["requested", "2030-06-14", "2030-06-16"],
+        owner: false,
+        borrower: false,
+      },
+    ],
+    [
+      "a lapsed approval",
+      {
+        item: "hidden",
+        loan: ["approved", "2030-06-10", "2030-06-14"],
+        owner: false,
+        borrower: false,
+      },
+    ],
+    [
+      "a returned loan",
+      {
+        item: "hidden",
+        loan: ["returned", "2030-06-10", "2030-06-12"],
+        owner: false,
+        borrower: false,
+      },
+    ],
+    [
+      "a declined request",
+      {
+        item: "hidden",
+        loan: ["declined", "2030-06-16", "2030-06-17"],
+        owner: false,
+        borrower: false,
+      },
+    ],
+  ];
+
+  test.each(scenarios)(
+    "%s: the right sides are locked",
+    async (_label, { item, loan, owner, borrower }) => {
+      const ownerUser = await scope.createTestUser({ contactDetails: DETAILS });
+      const borrowerUser = await scope.createTestUser({
+        contactDetails: DETAILS,
+      });
+      const { id: itemId } = await scope.createItem({
+        ownerId: ownerUser.id,
+        status: item,
+      });
+      if (loan) {
+        await scope.createLoan({
+          itemId,
+          borrowerId: borrowerUser.id,
+          status: loan[0],
+          startDate: loan[1],
+          endDate: loan[2],
+        });
+      }
+
+      expect((await getAccount(ownerUser.id, TODAY)).contactDetailsLocked).toBe(
+        owner,
+      );
+      expect(
+        (await getAccount(borrowerUser.id, TODAY)).contactDetailsLocked,
+      ).toBe(borrower);
+    },
+  );
+
+  test("a live loan whose borrower was deleted still locks its owner", async () => {
+    const ownerUser = await scope.createTestUser({ contactDetails: DETAILS });
+    const { id: itemId } = await scope.createItem({ ownerId: ownerUser.id });
+    await scope.createLoan({
+      itemId,
+      borrowerId: null,
+      status: "approved",
+      startDate: "2030-06-16",
+      endDate: "2030-06-17",
+    });
+    expect((await getAccount(ownerUser.id, TODAY)).contactDetailsLocked).toBe(
+      true,
+    );
+  });
+
+  test("a locked clear returns locked and writes nothing; a new value still saves", async () => {
+    const user = await scope.createTestUser({ contactDetails: DETAILS });
+    await scope.createItem({ ownerId: user.id, status: "listed" });
+
+    expect(await updateOwnContactDetails(user.id, null, TODAY)).toBe("locked");
+    expect((await columns(user.id)).contactDetails).toBe(DETAILS);
+
+    expect(await updateOwnContactDetails(user.id, "Phone 777", TODAY)).toBe(
+      "saved",
+    );
+    expect((await columns(user.id)).contactDetails).toBe("Phone 777");
+  });
+
+  test("the lock reads the given today: the same approval stops locking once it lapses", async () => {
+    const user = await scope.createTestUser({ contactDetails: DETAILS });
+    const { id: itemId } = await scope.createItem({ ownerId: user.id });
+    await scope.createLoan({
+      itemId,
+      borrowerId: (await scope.createTestUser()).id,
+      status: "approved",
+      startDate: "2030-06-10",
+      endDate: "2030-06-15",
+    });
+
+    expect((await getAccount(user.id, "2030-06-15")).contactDetailsLocked).toBe(
+      true,
+    );
+    expect((await getAccount(user.id, "2030-06-16")).contactDetailsLocked).toBe(
+      false,
+    );
   });
 });

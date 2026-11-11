@@ -24,5 +24,5 @@ export type RenameCategoryState = {
 
 export type DeleteCategoryState = {
   flash?: FlashKey;
-  formError?: "stale" | "unexpected";
+  formError?: "stale" | "inUse" | "unexpected";
 };

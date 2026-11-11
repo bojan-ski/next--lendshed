@@ -1,12 +1,7 @@
-export type LoanStatus =
-  | "requested"
-  | "approved"
-  | "out"
-  | "returned"
-  | "declined"
-  | "cancelled"
-  | "expired"
-  | "lapsed";
+import type { LoanStatus } from "@/generated/prisma/enums";
+import type { PhotoDTO } from "@/types/item";
+
+export type { LoanStatus };
 
 export type EffectiveLoanStatus = LoanStatus | "overdue";
 
@@ -16,7 +11,7 @@ export type LoanCardDTO = {
   item: {
     id: string;
     title: string;
-    photo: { url: string; width: number; height: number } | null;
+    photo: PhotoDTO | null;
   };
   otherPartyName: string;
   startDate: string;

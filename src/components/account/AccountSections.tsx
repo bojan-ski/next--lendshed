@@ -6,12 +6,13 @@ import ProfileForm from "@/components/account/ProfileForm";
 import Button from "@/components/ui/Button";
 import { getAccount } from "@/data/account";
 import { requireViewer } from "@/lib/auth/guards";
+import { communityToday } from "@/lib/dates/dates";
 import { account } from "@/strings/account";
 
 // Guards itself: the (app) layout doesn't re-run on a soft navigation.
 export default async function AccountSections() {
   const viewer = await requireViewer();
-  const details = await getAccount(viewer.id);
+  const details = await getAccount(viewer.id, communityToday());
 
   return (
     <>

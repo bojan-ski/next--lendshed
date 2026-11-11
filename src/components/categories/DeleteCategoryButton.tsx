@@ -57,13 +57,19 @@ export default function DeleteCategoryButton({
   const failure = state.formError && (
     <div ref={notice} tabIndex={-1} className="w-full">
       <Notice tone="error" alert={false}>
-        {state.formError === "stale" ? errors.stale : errors.actionFailed}
+        {state.formError === "stale"
+          ? errors.stale
+          : state.formError === "inUse"
+            ? categories.inUseRefusal
+            : errors.actionFailed}
       </Notice>
     </div>
   );
 
-  // Stale: the category is gone, so there is nothing to retry.
-  if (state.formError === "stale") return failure;
+  // Stale (gone) or in use (an item took it): there is nothing to retry.
+  if (state.formError === "stale" || state.formError === "inUse") {
+    return failure;
+  }
 
   if (!confirming) {
     return (

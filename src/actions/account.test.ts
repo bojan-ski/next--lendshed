@@ -230,6 +230,48 @@ describe("updateContactDetails", () => {
     expect((await columns(viewer.id)).contactDetails).toBeNull();
   });
 
+  // 23:30Z on 11 Nov is already the 12th in Belgrade: the community date, not UTC's.
+  test("passes one community today to the data call", async () => {
+    const viewer = await actAs();
+    vi.useFakeTimers({
+      toFake: ["Date"],
+      now: new Date("2026-11-11T23:30:00Z"),
+    });
+    try {
+      await updateContactDetails(
+        idleContact,
+        form({ contactDetails: "Phone 555" }),
+      );
+    } finally {
+      vi.useRealTimers();
+    }
+
+    expect(updateOwnContactDetails).toHaveBeenCalledTimes(1);
+    expect(updateOwnContactDetails).toHaveBeenCalledWith(
+      viewer.id,
+      "Phone 555",
+      "2026-11-12",
+    );
+  });
+
+  test("a clear refused by a real listed item writes nothing", async () => {
+    const viewer = await actAs();
+    await db.user.update({
+      where: { id: viewer.id },
+      data: { contactDetails: "Phone 555" },
+    });
+    await scope.createItem({ ownerId: viewer.id, status: "listed" });
+
+    const state = await updateContactDetails(
+      idleContact,
+      form({ contactDetails: "" }),
+    );
+
+    expect(state).toEqual({ formError: "contactDetailsLocked" });
+    expect(refresh).not.toHaveBeenCalled();
+    expect((await columns(viewer.id)).contactDetails).toBe("Phone 555");
+  });
+
   test("a locked clear echoes nothing and skips refresh()", async () => {
     await actAs();
     vi.mocked(updateOwnContactDetails).mockResolvedValueOnce("locked");

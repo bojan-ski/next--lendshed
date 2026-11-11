@@ -3,7 +3,14 @@ import { parseSetCookieHeader } from "better-auth/cookies";
 import { db } from "@/db";
 import { lockActiveOrganizerIds } from "@/data/members";
 import { createCredentialUser } from "@/db/credentials";
-import type { MemberStatus, Role } from "@/generated/prisma/client";
+import { toDbDate } from "@/data/db-dates";
+import type {
+  ItemStatus,
+  LoanStatus,
+  MemberStatus,
+  Prisma,
+  Role,
+} from "@/generated/prisma/client";
 import { auth } from "@/lib/auth/auth";
 import { categoryNameKey } from "@/lib/categories/name";
 import { createLinkToken } from "@/lib/auth/link-tokens";
@@ -22,6 +29,8 @@ const REQUIRED_MIGRATIONS = [
   "invitations",
   "password_reset_grants",
   "categories",
+  "items_and_loans",
+  "loan_no_overlap",
 ];
 
 export async function assertMigrated(): Promise<void> {
@@ -49,7 +58,34 @@ type TestUserOptions = {
   status?: MemberStatus;
   password?: string;
   name?: string;
+  contactDetails?: string | null;
 };
+
+type TestItemOptions = {
+  ownerId: string | null;
+  categoryId?: string;
+  status?: ItemStatus;
+  title?: string;
+  maxLoanDays?: number;
+  photo?: boolean;
+  createdAt?: Date;
+  retiredAt?: Date;
+};
+
+// Loan dates are YYYY-MM-DD strings, as everywhere else.
+type TestLoanOptions = {
+  itemId: string;
+  borrowerId: string | null;
+  status: LoanStatus;
+  startDate: string;
+  endDate: string;
+  returnedOn?: string | null;
+} & Partial<
+  Omit<
+    Prisma.LoanUncheckedCreateInput,
+    "itemId" | "borrowerId" | "status" | "startDate" | "endDate" | "returnedOn"
+  >
+>;
 
 export type TestUser = { id: string; email: string; password: string };
 
@@ -79,8 +115,11 @@ export function createTestScope() {
   const tag = `t${Date.now().toString(36)}${randomBytes(3).toString("hex")}`;
   const userIds: string[] = [];
   const invitationIds: string[] = [];
+  const itemIds: string[] = [];
+  const loanIds: string[] = [];
   const ips: string[] = [];
   let count = 0;
+  let defaultCategoryId: Promise<string> | undefined;
 
   return {
     tag,
@@ -98,6 +137,7 @@ export function createTestScope() {
       status = "active",
       password = TEST_PASSWORD,
       name = "Mira K.",
+      contactDetails = null,
     }: TestUserOptions = {}): Promise<TestUser> {
       const email = this.email();
       const { id } = await createCredentialUser(db, {
@@ -108,7 +148,88 @@ export function createTestScope() {
         status,
       });
       userIds.push(id);
+      if (contactDetails !== null) {
+        await db.user.update({ where: { id }, data: { contactDetails } });
+      }
       return { id, email, password };
+    },
+
+    // Inserted directly (no item action yet): Hidden, no photo, in a scope category.
+    async createItem({
+      ownerId,
+      categoryId,
+      status = "hidden",
+      title = "Ladder",
+      maxLoanDays = 7,
+      photo = false,
+      createdAt,
+      retiredAt,
+    }: TestItemOptions): Promise<{ id: string }> {
+      defaultCategoryId ??= this.createCategory("Things").then(({ id }) => id);
+      const now = new Date();
+      const { id } = await db.item.create({
+        data: {
+          ownerId,
+          categoryId: categoryId ?? (await defaultCategoryId),
+          title,
+          description: "",
+          condition: "good",
+          maxLoanDays,
+          status,
+          listedAt: status === "listed" ? now : null,
+          retiredAt: status === "retired" ? (retiredAt ?? now) : null,
+          ...(createdAt && { createdAt }),
+          ...(photo && {
+            photoKey: `${tag}/${randomBytes(4).toString("hex")}.webp`,
+            photoUrl: `https://example.test/${tag}.webp`,
+            photoWidth: 1200,
+            photoHeight: 900,
+            photoBytes: 120_000,
+          }),
+        },
+        select: { id: true },
+      });
+      itemIds.push(id);
+      return { id };
+    },
+
+    // The only loan writer before spec 13: any stored status, columns per status.
+    async createLoan({
+      itemId,
+      borrowerId,
+      status,
+      startDate,
+      endDate,
+      returnedOn,
+      ...overrides
+    }: TestLoanOptions): Promise<{ id: string }> {
+      const returned = status === "returned";
+      const { id } = await db.loan.create({
+        data: {
+          itemId,
+          borrowerId,
+          status,
+          startDate: toDbDate(startDate),
+          endDate: toDbDate(endDate),
+          returnedOn:
+            returnedOn === undefined
+              ? returned
+                ? toDbDate(endDate)
+                : null
+              : returnedOn && toDbDate(returnedOn),
+          returnedAsLent: returned ? "yes" : null,
+          endedBy:
+            status === "declined"
+              ? "owner"
+              : status === "cancelled"
+                ? "borrower"
+                : null,
+          ...overrides,
+        },
+        select: { id: true },
+      });
+      loanIds.push(id);
+      return { id };
     },
 
     // A user created outside createTestUser (a script, a seeder) joins the cleanup.
@@ -189,9 +310,6 @@ export function createTestScope() {
       }),
 
     async cleanup() {
-      await db.category.deleteMany({
-        where: { nameKey: { startsWith: `${tag} ` } },
-      });
       // Users made through a join carry the scope's email, not a tracked id.
       const users = {
         OR: [{ id: { in: userIds } }, { email: { startsWith: `${tag}-` } }],
@@ -204,6 +322,18 @@ export function createTestScope() {
             { usedBy: users },
           ],
         },
+      });
+      // Loan → Item and Item → Category are Restrict: loans, then items, then
+      // categories. Tracked ids catch an item whose owner was deleted in a test.
+      const items = { OR: [{ id: { in: itemIds } }, { owner: users }] };
+      await db.loan.deleteMany({
+        where: {
+          OR: [{ id: { in: loanIds } }, { item: items }, { borrower: users }],
+        },
+      });
+      await db.item.deleteMany({ where: items });
+      await db.category.deleteMany({
+        where: { nameKey: { startsWith: `${tag} ` } },
       });
       // A role change in another file locks every active organizer in id order,
       // then its target: deleting several users in scan order could deadlock
