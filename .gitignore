@@ -20,6 +20,9 @@
 # production
 /build
 
+# photos stored by the disk driver (dev/test)
+/public/uploads/
+
 # misc
 .DS_Store
 *.pem

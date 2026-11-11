@@ -21,6 +21,7 @@ import { members } from "./members";
 import { nav } from "./nav";
 import { oneTimeLink } from "./oneTimeLink";
 import { people } from "./people";
+import { photos } from "./photos";
 import { privacy } from "./privacy";
 import { resetPassword } from "./resetPassword";
 import { status } from "./status";
@@ -55,6 +56,7 @@ export const strings = {
   resetPassword,
   categories,
   items,
+  photos,
 } as const;
 
 export type FlashKey = keyof typeof strings.flash;

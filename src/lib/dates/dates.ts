@@ -97,6 +97,53 @@ export function communityToday(now: Date = new Date()): string {
   });
 }
 
+const DAY_MS = 86_400_000;
+
+// How far the community's wall clock is ahead of UTC at an instant.
+function zoneOffsetMs(instant: number): number {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: TIME_ZONE,
+    hourCycle: "h23",
+    year: "numeric",
+    month: "numeric",
+    day: "numeric",
+    hour: "numeric",
+    minute: "numeric",
+    second: "numeric",
+  }).formatToParts(new Date(instant));
+  const part = (type: Intl.DateTimeFormatPartTypes) =>
+    Number(parts.find((p) => p.type === type)?.value);
+  const wall =
+    toDayNumber({
+      year: part("year"),
+      month: part("month"),
+      day: part("day"),
+    }) *
+      DAY_MS +
+    ((part("hour") * 60 + part("minute")) * 60 + part("second")) * 1000;
+  return wall - instant;
+}
+
+// The instant `date` begins in the community time zone. The clocks change at
+// 02:00/03:00 there, so midnight always exists; the second pass settles an
+// offset read on the wrong side of a change.
+export function communityMidnight(date: string): Date {
+  const wallMidnight = toDayNumber(parse(date)) * DAY_MS;
+  const guess = wallMidnight - zoneOffsetMs(wallMidnight);
+  return new Date(wallMidnight - zoneOffsetMs(guess));
+}
+
+export function firstOfMonth(date: string): string {
+  return serialize({ ...parse(date), day: 1 });
+}
+
+export function firstOfNextMonth(date: string): string {
+  const { year, month } = parse(date);
+  return month === 12
+    ? serialize({ year: year + 1, month: 1, day: 1 })
+    : serialize({ year, month: month + 1, day: 1 });
+}
+
 export function addDays(date: string, days: number): string {
   if (!Number.isInteger(days)) {
     throw new RangeError(`Invalid day count: ${days}`);

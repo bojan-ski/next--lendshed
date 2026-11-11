@@ -1,3 +1,4 @@
+import { storedFileSize } from "@/__tests__/support/photo-storage";
 import { assertMigrated, createTestScope } from "@/__tests__/support/test-db";
 import { updateOwnContactDetails } from "@/data/account";
 import { isCategoryReferenced, isItemReferencedByLoan } from "@/data/db-errors";
@@ -781,6 +782,68 @@ describe("deleteOwnItem", () => {
     }
     expect(await itemRow(retired.id)).not.toBeNull();
     expect(await itemRow(others.id)).not.toBeNull();
+  });
+});
+
+// Real files through the disk driver: queued in the transaction, deleted after commit.
+describe("the photo outbox on retire and delete", () => {
+  const queueRow = (storageKey: string) =>
+    db.pendingBlobDeletion.findUnique({ where: { storageKey } });
+
+  test("retire nulls all five photo columns and deletes the file", async () => {
+    const ownerId = await owner();
+    const photo = await scope.createStoredPhoto();
+    const { id } = await scope.createItem({ ownerId, status: "listed", photo });
+
+    expect(await retireItemByOwner(ownerId, id, TODAY)).toBe("retired");
+
+    expect(await itemRow(id)).toMatchObject({
+      status: "retired",
+      photoKey: null,
+      photoUrl: null,
+      photoWidth: null,
+      photoHeight: null,
+      photoBytes: null,
+    });
+    expect(await storedFileSize(photo.photoKey)).toBeNull();
+    expect(await queueRow(photo.photoKey)).toBeNull();
+  });
+
+  test("a blocked retire keeps the photo and queues nothing", async () => {
+    const ownerId = await owner();
+    const photo = await scope.createStoredPhoto();
+    const { id } = await scope.createItem({ ownerId, photo });
+    await loanOn(id, "approved", "2030-07-01", "2030-07-02");
+
+    expect(await retireItemByOwner(ownerId, id, TODAY)).toBe("blocked");
+
+    expect((await itemRow(id))?.photoKey).toBe(photo.photoKey);
+    expect(await storedFileSize(photo.photoKey)).toBe(photo.photoBytes);
+    expect(await queueRow(photo.photoKey)).toBeNull();
+  });
+
+  test("delete removes the file with the row", async () => {
+    const ownerId = await owner();
+    const photo = await scope.createStoredPhoto();
+    const { id } = await scope.createItem({ ownerId, photo });
+
+    expect(await deleteOwnItem(ownerId, id)).toBe("deleted");
+
+    expect(await itemRow(id)).toBeNull();
+    expect(await storedFileSize(photo.photoKey)).toBeNull();
+    expect(await queueRow(photo.photoKey)).toBeNull();
+  });
+
+  test("a hasLoans delete keeps the photo and queues nothing", async () => {
+    const ownerId = await owner();
+    const photo = await scope.createStoredPhoto();
+    const { id } = await scope.createItem({ ownerId, photo });
+    await loanOn(id, "returned", "2030-05-01", "2030-05-02");
+
+    expect(await deleteOwnItem(ownerId, id)).toBe("hasLoans");
+
+    expect(await storedFileSize(photo.photoKey)).toBe(photo.photoBytes);
+    expect(await queueRow(photo.photoKey)).toBeNull();
   });
 });
 

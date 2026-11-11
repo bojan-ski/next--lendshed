@@ -5,6 +5,16 @@ const VALID_SERVER = {
   COMMUNITY_NAME: "Elm Street",
   AUTH_SECRET: "secret-auth-0123456789abcdefghijklmnop",
   APP_URL: "http://localhost:3000",
+  STORAGE_DRIVER: "disk",
+  BLOB_READ_WRITE_TOKEN: "",
+  BLOB_PUBLIC_HOST: "",
+  VERCEL: undefined as string | undefined,
+};
+
+const BLOB = {
+  STORAGE_DRIVER: "blob",
+  BLOB_READ_WRITE_TOKEN: "vercel_blob_rw_secret-token",
+  BLOB_PUBLIC_HOST: "abc123.public.blob.vercel-storage.com",
 };
 
 function stubServerEnv(
@@ -72,6 +82,60 @@ describe("server env", () => {
       expect(message).not.toContain("secret-direct");
       expect(message).not.toContain("not a url");
       expect(message).not.toContain("secret-auth");
+    },
+  );
+});
+
+describe("server env — photo storage", () => {
+  test("disk alone parses, with the empty Blob keys of .env.example as absent", async () => {
+    stubServerEnv();
+    const { env } = await import("./server");
+    expect(env.STORAGE_DRIVER).toBe("disk");
+    expect(env.BLOB_READ_WRITE_TOKEN).toBeUndefined();
+    expect(env.BLOB_PUBLIC_HOST).toBeUndefined();
+  });
+
+  test("blob with a token and a public host parses", async () => {
+    stubServerEnv({ ...BLOB, VERCEL: "1" });
+    const { env } = await import("./server");
+    expect(env.STORAGE_DRIVER).toBe("blob");
+    expect(env.BLOB_PUBLIC_HOST).toBe(BLOB.BLOB_PUBLIC_HOST);
+  });
+
+  test.each([
+    [
+      "a missing STORAGE_DRIVER",
+      { STORAGE_DRIVER: undefined },
+      "STORAGE_DRIVER",
+    ],
+    ["an unknown STORAGE_DRIVER", { STORAGE_DRIVER: "s3" }, "STORAGE_DRIVER"],
+    ["disk on Vercel", { VERCEL: "1" }, "STORAGE_DRIVER"],
+    [
+      "blob without a token",
+      { ...BLOB, BLOB_READ_WRITE_TOKEN: "" },
+      "BLOB_READ_WRITE_TOKEN",
+    ],
+    [
+      "blob without a host",
+      { ...BLOB, BLOB_PUBLIC_HOST: undefined },
+      "BLOB_PUBLIC_HOST",
+    ],
+    [
+      "a host that isn't a public Blob host",
+      {
+        ...BLOB,
+        BLOB_PUBLIC_HOST: "https://abc123.public.blob.vercel-storage.com",
+      },
+      "BLOB_PUBLIC_HOST",
+    ],
+  ])(
+    "rejects %s, naming the variable but no value",
+    async (_case, overrides, name) => {
+      stubServerEnv(overrides);
+      const failure = import("./server");
+      await expect(failure).rejects.toThrow(name);
+      const message = await failure.catch((error: Error) => error.message);
+      expect(message).not.toContain("secret-token");
     },
   );
 });

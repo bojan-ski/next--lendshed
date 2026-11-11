@@ -2,6 +2,7 @@ import { MY_ITEMS_HEADING_ID } from "@/components/items/ids";
 import ButtonLink from "@/components/ui/ButtonLink";
 import Card from "@/components/ui/Card";
 import { Icon } from "@/components/ui/icons";
+import PhotoImage from "@/components/ui/PhotoImage";
 import PhotoPlaceholder from "@/components/ui/PhotoPlaceholder";
 import StatusLabel from "@/components/ui/StatusLabel";
 import { cn } from "@/lib/text/cn";
@@ -58,7 +59,16 @@ export default function OwnItemsTable({ rows }: { rows: OwnItemRowDTO[] }) {
                   className={cn(cell, "font-normal max-lg:w-full")}
                 >
                   <span className="flex min-w-0 items-center gap-3">
-                    <PhotoPlaceholder className="size-12 shrink-0 rounded-control" />
+                    {/* Decorative: the title and the labelled link sit beside it. */}
+                    {row.photo ? (
+                      <PhotoImage
+                        photo={row.photo}
+                        alt=""
+                        className="size-12 shrink-0 rounded-control object-cover"
+                      />
+                    ) : (
+                      <PhotoPlaceholder className="size-12 shrink-0 rounded-control" />
+                    )}
                     <span className="font-bold wrap-break-word">
                       {row.title}
                     </span>

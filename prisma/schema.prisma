@@ -49,6 +49,7 @@ model User {
   itemsRetired       Item[]               @relation("ItemRetiredBy")
   loansBorrowed      Loan[]               @relation("LoanBorrower")
   loansClosed        Loan[]               @relation("LoanClosedBy")
+  uploads            UploadLog[]          @relation("UploadLogUser")
 
   @@unique([email])
   @@index([role, status])
@@ -113,7 +114,7 @@ model RateLimit {
   @@map("rateLimit")
 }
 
-// App models below; `npx auth generate` leaves them and the eight User
+// App models below; `npx auth generate` leaves them and the nine User
 // relations above untouched (re-run on a scratch copy checked at spec 09).
 
 model Invitation {
@@ -269,4 +270,31 @@ model Loan {
   @@index([borrowerId, status])
   @@index([itemId, startDate])
   @@map("loan")
+}
+
+// One row per member upload, written before the file is stored; counts the
+// monthly and daily caps and survives account deletion.
+model UploadLog {
+  id        String   @id @default(uuid())
+  userId    String?
+  user      User?    @relation("UploadLogUser", fields: [userId], references: [id], onDelete: SetNull)
+  bytes     Int
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+
+  @@index([createdAt])
+  @@index([userId, createdAt])
+  @@map("upload_log")
+}
+
+// The outbox: every stored file nothing references (or not yet), queued inside
+// the committing transaction and removed once the file is deleted.
+model PendingBlobDeletion {
+  id         String   @id @default(uuid())
+  storageKey String   @unique
+  bytes      Int
+  attempts   Int      @default(0)
+  lastError  String?
+  createdAt  DateTime @default(now()) @db.Timestamptz(3)
+
+  @@map("pending_blob_deletion")
 }

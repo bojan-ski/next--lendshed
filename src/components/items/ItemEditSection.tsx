@@ -3,11 +3,11 @@ import type { ReactNode } from "react";
 import DeleteItemButton from "@/components/items/DeleteItemButton";
 import ItemDetailsForm from "@/components/items/ItemDetailsForm";
 import { ITEM_HEADING_ID } from "@/components/items/ids";
+import ItemPhotoForm from "@/components/items/ItemPhotoForm";
 import ItemReadOnly from "@/components/items/ItemReadOnly";
 import ItemVisibilityControl from "@/components/items/ItemVisibilityControl";
 import RetireItemButton from "@/components/items/RetireItemButton";
 import Card from "@/components/ui/Card";
-import PhotoPlaceholder from "@/components/ui/PhotoPlaceholder";
 import StatusLabel from "@/components/ui/StatusLabel";
 import { getCategories } from "@/data/categories";
 import { getItemForEdit } from "@/data/items";
@@ -15,6 +15,7 @@ import { requireViewer } from "@/lib/auth/guards";
 import { communityToday } from "@/lib/dates/dates";
 import { itemStatus } from "@/lib/text/status";
 import { items } from "@/strings/items";
+import { photos } from "@/strings/photos";
 import type { ItemEditDTO } from "@/types/item";
 
 function EditCard({
@@ -78,6 +79,9 @@ export default async function ItemEditSection({
         </h1>
         <StatusLabel status={itemStatus[item.status]} />
       </header>
+      {item.status !== "retired" && item.photo === null && (
+        <p className="text-sm text-muted">{photos.stepLine}</p>
+      )}
       {item.status === "retired" ? (
         <ItemReadOnly
           item={item}
@@ -102,11 +106,11 @@ export default async function ItemEditSection({
             />
           </EditCard>
           <EditCard id="photo" heading={items.photoHeading}>
-            <PhotoPlaceholder
-              iconSize={32}
-              className="aspect-4/3 w-full max-w-80 rounded-control"
+            <ItemPhotoForm
+              itemId={item.id}
+              title={item.title}
+              photo={item.photo}
             />
-            <p className="text-sm text-muted">{items.photoLine}</p>
           </EditCard>
           <EditCard id="details" heading={items.detailsHeading}>
             <ItemDetailsForm categories={categories} item={item} />

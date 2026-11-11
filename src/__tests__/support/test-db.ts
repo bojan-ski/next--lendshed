@@ -1,5 +1,6 @@
 import { randomBytes } from "node:crypto";
 import { parseSetCookieHeader } from "better-auth/cookies";
+import sharp from "sharp";
 import { db } from "@/db";
 import { lockActiveOrganizerIds } from "@/data/members";
 import { createCredentialUser } from "@/db/credentials";
@@ -15,6 +16,18 @@ import { auth } from "@/lib/auth/auth";
 import { categoryNameKey } from "@/lib/categories/name";
 import { createLinkToken } from "@/lib/auth/link-tokens";
 import { env } from "@/lib/env/server";
+import {
+  createDiskStorage,
+  DISK_URL_PREFIX,
+  diskStorageRoot,
+} from "@/lib/storage/disk";
+import { newPhotoKey } from "@/lib/storage/keys";
+
+// The app's disk driver (`.env.test` sets STORAGE_DRIVER=disk) at its root.
+const testPhotoStorage = createDiskStorage({
+  root: diskStorageRoot(),
+  urlPrefix: DISK_URL_PREFIX,
+});
 
 // Database tests share the dev/test Neon project with seed data and with
 // other test files running in parallel. A file only ever touches rows it
@@ -31,6 +44,7 @@ const REQUIRED_MIGRATIONS = [
   "categories",
   "items_and_loans",
   "loan_no_overlap",
+  "uploads",
 ];
 
 export async function assertMigrated(): Promise<void> {
@@ -61,13 +75,22 @@ type TestUserOptions = {
   contactDetails?: string | null;
 };
 
+export type StoredPhotoColumns = {
+  photoKey: string;
+  photoUrl: string;
+  photoWidth: number;
+  photoHeight: number;
+  photoBytes: number;
+};
+
 type TestItemOptions = {
   ownerId: string | null;
   categoryId?: string;
   status?: ItemStatus;
   title?: string;
   maxLoanDays?: number;
-  photo?: boolean;
+  // `true`: placeholder columns with no file behind them; or a stored photo's.
+  photo?: boolean | StoredPhotoColumns;
   createdAt?: Date;
   retiredAt?: Date;
 };
@@ -117,6 +140,7 @@ export function createTestScope() {
   const invitationIds: string[] = [];
   const itemIds: string[] = [];
   const loanIds: string[] = [];
+  const photoKeys: string[] = [];
   const ips: string[] = [];
   let count = 0;
   let defaultCategoryId: Promise<string> | undefined;
@@ -179,7 +203,8 @@ export function createTestScope() {
           listedAt: status === "listed" ? now : null,
           retiredAt: status === "retired" ? (retiredAt ?? now) : null,
           ...(createdAt && { createdAt }),
-          ...(photo && {
+          ...(typeof photo === "object" && photo),
+          ...(photo === true && {
             photoKey: `${tag}/${randomBytes(4).toString("hex")}.webp`,
             photoUrl: `https://example.test/${tag}.webp`,
             photoWidth: 1200,
@@ -235,6 +260,35 @@ export function createTestScope() {
     // A user created outside createTestUser (a script, a seeder) joins the cleanup.
     track: (userId: string) => {
       userIds.push(userId);
+    },
+
+    // A stored file whose queue row and disk file go with the cleanup.
+    trackPhotoKey: (key: string) => {
+      photoKeys.push(key);
+    },
+
+    // A real WebP through the disk driver: the five photo column values.
+    async createStoredPhoto(): Promise<StoredPhotoColumns> {
+      const bytes = await sharp({
+        create: {
+          width: 40,
+          height: 30,
+          channels: 3,
+          background: { r: 120, g: 140, b: 130 },
+        },
+      })
+        .webp()
+        .toBuffer();
+      const key = newPhotoKey();
+      photoKeys.push(key);
+      const { url } = await testPhotoStorage.put(key, bytes, "image/webp");
+      return {
+        photoKey: key,
+        photoUrl: url,
+        photoWidth: 40,
+        photoHeight: 30,
+        photoBytes: bytes.byteLength,
+      };
     },
 
     // An invitation in a chosen state; the raw token is returned, the row holds its hash.
@@ -335,6 +389,13 @@ export function createTestScope() {
       await db.category.deleteMany({
         where: { nameKey: { startsWith: `${tag} ` } },
       });
+      // Upload rows would outlive their users (SetNull); queue rows and files
+      // are found by tracked key, never by listing storage.
+      await db.uploadLog.deleteMany({ where: { user: users } });
+      await db.pendingBlobDeletion.deleteMany({
+        where: { storageKey: { in: photoKeys } },
+      });
+      for (const key of photoKeys) await testPhotoStorage.delete(key);
       // A role change in another file locks every active organizer in id order,
       // then its target: deleting several users in scan order could deadlock
       // with it. Take the organizer locks first, then this scope's rows in id

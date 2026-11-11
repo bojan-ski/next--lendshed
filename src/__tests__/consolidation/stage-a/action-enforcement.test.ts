@@ -95,6 +95,7 @@ describe("action enforcement — derivation", () => {
       "updateContactDetails",
       "updateItem",
       "updateProfile",
+      "uploadItemPhoto",
     ]);
   });
 

@@ -11,17 +11,23 @@ const SERVER_ONLY_FILES = [
   "src/lib/auth/auth.ts",
   "src/lib/env/server.ts",
   "src/lib/feedback/flash.ts",
+  "src/lib/photos/encode.ts",
 ];
 
+// Photo storage and decoding stay on the server (spec 11): the island only
+// prepares the file and calls the action.
 const serverCode: ForbiddenRule = {
   files: (file) =>
     file.startsWith("src/db/") ||
     file.startsWith("src/data/") ||
+    file.startsWith("src/lib/storage/") ||
     SERVER_ONLY_FILES.includes(file),
   packages: (specifier) =>
     specifier === "server-only" ||
     specifier.startsWith("@prisma/") ||
-    specifier === "better-auth/crypto",
+    specifier === "better-auth/crypto" ||
+    specifier === "sharp" ||
+    specifier.startsWith("@vercel/blob"),
 };
 
 const clientFiles = sourceFiles("src/**/*.{ts,tsx}").filter(
@@ -48,6 +54,7 @@ const ISLANDS = [
   "src/components/invitations/RevokeInvitationButton.tsx",
   "src/components/items/DeleteItemButton.tsx",
   "src/components/items/ItemDetailsForm.tsx",
+  "src/components/items/ItemPhotoForm.tsx",
   "src/components/items/ItemVisibilityControl.tsx",
   "src/components/items/RetireItemButton.tsx",
   "src/components/members/ResetLinkForm.tsx",
@@ -55,6 +62,7 @@ const ISLANDS = [
   "src/components/shell/NavLink.tsx",
   "src/components/ui/Button.tsx",
   "src/components/ui/PasswordInput.tsx",
+  "src/components/ui/PhotoImage.tsx",
 ];
 
 describe("client boundary", () => {

@@ -1,5 +1,6 @@
 import "server-only";
 import { db } from "@/db";
+import { deletePendingBlobs, queueBlobDeletion } from "@/data/blob-deletions";
 import { fromDbDate } from "@/data/db-dates";
 import { isCategoryReferenced, isItemReferencedByLoan } from "@/data/db-errors";
 import {
@@ -225,25 +226,58 @@ export async function insertItem(
   }
 }
 
-type LockedItem = { status: ItemStatus; photoUrl: string | null };
+type LockedItem = {
+  status: ItemStatus;
+  photoUrl: string | null;
+  photoKey: string | null;
+  photoBytes: number | null;
+};
 
-// The item row, locked before anything is read: loan writers (13–15) lock the
-// same row, so they serialise with hide, retire and delete. Null when the
-// viewer doesn't own it, so an unknown id and someone else's look the same.
-async function lockOwnItem(
+// The item row, locked before anything is read: loan writers (13–15) and the
+// photo attach lock the same row, so they serialise with hide, retire and
+// delete. Null when the viewer doesn't own it, so an unknown id and someone
+// else's look the same.
+export async function lockOwnItem(
   tx: Prisma.TransactionClient,
   ownerId: string,
   itemId: string,
 ): Promise<LockedItem | null> {
-  const [row] = await tx.$queryRaw<
-    { ownerId: string | null; status: ItemStatus; photoUrl: string | null }[]
-  >`SELECT "ownerId", status, "photoUrl" FROM item WHERE id = ${itemId} FOR UPDATE`;
+  const [row] = await tx.$queryRaw<(LockedItem & { ownerId: string | null })[]>`
+    SELECT "ownerId", status, "photoUrl", "photoKey", "photoBytes"
+    FROM item WHERE id = ${itemId} FOR UPDATE`;
   if (!row || row.ownerId !== ownerId) return null;
-  return { status: row.status, photoUrl: row.photoUrl };
+  return {
+    status: row.status,
+    photoUrl: row.photoUrl,
+    photoKey: row.photoKey,
+    photoBytes: row.photoBytes,
+  };
 }
 
-const isEditable = (item: LockedItem | null): item is LockedItem =>
+export const isEditable = (item: LockedItem | null): item is LockedItem =>
   item?.status === "hidden" || item?.status === "listed";
+
+// The stored file a retire or delete stops referencing, queued in its
+// transaction (the outbox) and deleted after commit.
+async function queueItemPhoto(
+  tx: Prisma.TransactionClient,
+  item: LockedItem,
+): Promise<string | null> {
+  if (item.photoKey === null) return null;
+  await queueBlobDeletion(tx, {
+    storageKey: item.photoKey,
+    bytes: item.photoBytes ?? 0,
+  });
+  return item.photoKey;
+}
+
+const NO_PHOTO = {
+  photoKey: null,
+  photoUrl: null,
+  photoWidth: null,
+  photoHeight: null,
+  photoBytes: null,
+} satisfies Prisma.ItemUpdateInput;
 
 // Only effective requests: expired ones are left as they are, and approved or
 // out loans carry on. The borrower's seen-at stays, so only they see the dot.
@@ -330,20 +364,26 @@ export async function retireItemByOwner(
   itemId: string,
   today: string,
 ): Promise<"retired" | "stale" | "blocked"> {
-  return db.$transaction(async (tx) => {
-    if (!isEditable(await lockOwnItem(tx, ownerId, itemId))) return "stale";
+  const outcome = await db.$transaction(async (tx) => {
+    const item = await lockOwnItem(tx, ownerId, itemId);
+    if (!isEditable(item)) return { result: "stale" as const };
     const blocking = await tx.loan.count({
       where: { AND: [{ itemId }, blockingLoanWhere(today)] },
       take: 1,
     });
-    if (blocking > 0) return "blocked";
+    if (blocking > 0) return { result: "blocked" as const };
+    const photoKey = await queueItemPhoto(tx, item);
     await tx.item.update({
       where: { id: itemId },
-      data: { status: "retired", retiredAt: new Date() },
+      data: { status: "retired", retiredAt: new Date(), ...NO_PHOTO },
     });
     await declineOpenRequests(tx, itemId, today, "item_retired");
-    return "retired";
+    return { result: "retired" as const, photoKey };
   });
+  if (outcome.result === "retired" && outcome.photoKey) {
+    await deletePendingBlobs([outcome.photoKey]);
+  }
+  return outcome.result;
 }
 
 // Any loan row at all, whatever its status; the Restrict FK backs the count.
@@ -351,17 +391,25 @@ export async function deleteOwnItem(
   ownerId: string,
   itemId: string,
 ): Promise<"deleted" | "stale" | "hasLoans"> {
+  let outcome;
   try {
-    return await db.$transaction(async (tx) => {
-      if (!isEditable(await lockOwnItem(tx, ownerId, itemId))) return "stale";
+    outcome = await db.$transaction(async (tx) => {
+      const item = await lockOwnItem(tx, ownerId, itemId);
+      if (!isEditable(item)) return { result: "stale" as const };
       if ((await tx.loan.count({ where: { itemId }, take: 1 })) > 0) {
-        return "hasLoans";
+        return { result: "hasLoans" as const };
       }
+      // Queued first: the FK backstop's rollback takes the queue row with it.
+      const photoKey = await queueItemPhoto(tx, item);
       await tx.item.delete({ where: { id: itemId } });
-      return "deleted";
+      return { result: "deleted" as const, photoKey };
     });
   } catch (error) {
     if (isItemReferencedByLoan(error)) return "hasLoans";
     throw error;
   }
+  if (outcome.result === "deleted" && outcome.photoKey) {
+    await deletePendingBlobs([outcome.photoKey]);
+  }
+  return outcome.result;
 }

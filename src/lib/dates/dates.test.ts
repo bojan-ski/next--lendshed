@@ -2,8 +2,11 @@ import { TEST_ZONES, useProcessTimeZone } from "@/__tests__/support/time-zone";
 import { strings } from "@/strings";
 import {
   addDays,
+  communityMidnight,
   communityToday,
   daysBetween,
+  firstOfMonth,
+  firstOfNextMonth,
   formatDate,
   formatDateRange,
   isIsoDate,
@@ -213,8 +216,53 @@ describe.each(TEST_ZONES)("dates with process TZ=%s", (zone) => {
     });
   });
 
+  describe("communityMidnight", () => {
+    test.each(LOCAL_MIDNIGHTS)("%s begins at %s", (date, instant) => {
+      expect(communityMidnight(date).toISOString()).toBe(
+        new Date(instant).toISOString(),
+      );
+    });
+
+    test("is the inverse of communityToday at the boundary", () => {
+      const midnight = communityMidnight("2026-11-11");
+      expect(midnight.toISOString()).toBe("2026-11-10T23:00:00.000Z");
+      expect(communityToday(midnight)).toBe("2026-11-11");
+      expect(communityToday(new Date(midnight.getTime() - 1))).toBe(
+        "2026-11-10",
+      );
+    });
+  });
+
+  describe("firstOfMonth and firstOfNextMonth", () => {
+    test.each([
+      ["2026-11-11", "2026-11-01", "2026-12-01"],
+      ["2026-11-01", "2026-11-01", "2026-12-01"],
+      ["2026-12-31", "2026-12-01", "2027-01-01"],
+      ["2027-01-31", "2027-01-01", "2027-02-01"],
+      ["2028-02-29", "2028-02-01", "2028-03-01"],
+    ])("%s → %s and %s", (date, first, next) => {
+      expect(firstOfMonth(date)).toBe(first);
+      expect(firstOfNextMonth(date)).toBe(next);
+    });
+  });
+
   describe("invalid input", () => {
     test.each([
+      [
+        "communityMidnight with a bad date",
+        () => communityMidnight("2026-02-30"),
+        "2026-02-30",
+      ],
+      [
+        "firstOfMonth with a bad date",
+        () => firstOfMonth("2026-13-01"),
+        "2026-13-01",
+      ],
+      [
+        "firstOfNextMonth with a bad date",
+        () => firstOfNextMonth("11/11/2026"),
+        "11/11/2026",
+      ],
       ["addDays with a bad date", () => addDays("2026-02-30", 1), "2026-02-30"],
       [
         "addDays with a fractional count",

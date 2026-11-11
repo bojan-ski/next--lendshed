@@ -79,7 +79,6 @@ export const items = {
   needsContactAfter: " before you list this item.",
 
   photoHeading: "Photo",
-  photoLine: "A listed item needs a photo.",
 
   detailsHeading: "Details",
 
