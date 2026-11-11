@@ -1,0 +1,33 @@
+import type { Metadata } from "next";
+import { Suspense } from "react";
+import CategoriesSection from "@/components/categories/CategoriesSection";
+import CategoriesTableSkeleton from "@/components/categories/CategoriesTableSkeleton";
+import { CATEGORIES_HEADING_ID } from "@/components/categories/ids";
+import NewCategoryForm from "@/components/categories/NewCategoryForm";
+import { categories } from "@/strings/categories";
+
+export const metadata: Metadata = { title: categories.title };
+
+export default function CategoriesPage() {
+  return (
+    <div className="flex flex-col gap-6">
+      <h1 className="text-2xl font-bold">{categories.title}</h1>
+      <NewCategoryForm />
+      <section
+        aria-labelledby={CATEGORIES_HEADING_ID}
+        className="flex flex-col gap-4"
+      >
+        <h2
+          id={CATEGORIES_HEADING_ID}
+          tabIndex={-1}
+          className="text-xl font-bold"
+        >
+          {categories.listHeading}
+        </h2>
+        <Suspense fallback={<CategoriesTableSkeleton />}>
+          <CategoriesSection />
+        </Suspense>
+      </section>
+    </div>
+  );
+}

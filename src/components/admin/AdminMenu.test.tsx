@@ -1,5 +1,6 @@
 import { render, screen } from "@testing-library/react";
 import { usePathname } from "next/navigation";
+import { categories } from "@/strings/categories";
 import { invitations } from "@/strings/invitations";
 import { members } from "@/strings/members";
 import AdminMenu from "./AdminMenu";
@@ -12,17 +13,26 @@ function linksAt(pathname: string) {
   return {
     invitations: screen.getByRole("link", { name: invitations.title }),
     members: screen.getByRole("link", { name: members.title }),
+    categories: screen.getByRole("link", { name: categories.title }),
   };
 }
 
 describe("AdminMenu", () => {
-  test("lists Invitations then Members", () => {
+  test("lists Invitations, Members, then Categories", () => {
     const links = linksAt("/admin");
     expect(links.invitations).toHaveAttribute("href", "/admin/invitations");
     expect(links.members).toHaveAttribute("href", "/admin/members");
+    expect(links.categories).toHaveAttribute("href", "/admin/categories");
     expect(screen.getAllByRole("link").map((link) => link.textContent)).toEqual(
-      [invitations.title, members.title],
+      [invitations.title, members.title, categories.title],
     );
+  });
+
+  test("Categories is current only on its own page", () => {
+    const links = linksAt("/admin/categories");
+    expect(links.categories).toHaveAttribute("aria-current", "page");
+    expect(links.members).not.toHaveAttribute("aria-current");
+    expect(links.invitations).not.toHaveAttribute("aria-current");
   });
 
   test.each(["/admin/members", "/admin/members/member-1"])(

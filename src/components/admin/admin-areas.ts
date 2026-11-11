@@ -1,4 +1,5 @@
 import type { IconName } from "@/components/ui/icons";
+import { categories } from "@/strings/categories";
 import { invitations } from "@/strings/invitations";
 import { members } from "@/strings/members";
 
@@ -22,5 +23,12 @@ export const ADMIN_AREAS: readonly {
     description: members.description,
     icon: "users",
     activePrefixes: ["/admin/members"],
+  },
+  {
+    href: "/admin/categories",
+    label: categories.title,
+    description: categories.description,
+    icon: "tag",
+    activePrefixes: ["/admin/categories"],
   },
 ];

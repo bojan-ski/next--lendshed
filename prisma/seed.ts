@@ -1,8 +1,10 @@
 import "dotenv/config";
 import { failureLine, hostOf } from "../scripts/lib/cli";
 import { createScriptClient } from "../scripts/lib/script-db";
+import { PRODUCTION_CATEGORIES } from "@/lib/categories/production";
 import { parseEnv } from "@/lib/env/parse";
 import { demoSeedEnvSchema } from "@/lib/schemas/bootstrap";
+import { seedCategories } from "./seed/categories";
 import { seedInvitations, SEED_INVITATION_NOTES } from "./seed/invitations";
 import { seedPeople, SEED_PEOPLE } from "./seed/people";
 
@@ -25,6 +27,8 @@ async function main(): Promise<number> {
     console.log(`People: ${SEED_PEOPLE.length} seeded`);
     await seedInvitations(client);
     console.log(`Invitations: ${SEED_INVITATION_NOTES.length} open`);
+    await seedCategories(client);
+    console.log(`Categories: ${PRODUCTION_CATEGORIES.length} present`);
     return 0;
   } catch (error) {
     console.error(failureLine(error));

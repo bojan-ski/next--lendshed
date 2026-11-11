@@ -75,11 +75,14 @@ describe("action enforcement — derivation", () => {
   test("the built actions are exactly the expected set", () => {
     expect(exportedNames).toEqual([
       "changePassword",
+      "createCategory",
       "createInvitation",
       "createResetLink",
+      "deleteCategory",
       "demoteMember",
       "joinWithInvitation",
       "promoteMember",
+      "renameCategory",
       "resetPasswordWithGrant",
       "revokeInvitation",
       "signIn",
@@ -232,18 +235,21 @@ describe("wrong role", () => {
     ),
   );
 
-  test("the organizer-only actions in code are the invitation and member actions", () => {
+  test("the organizer-only actions in code are the invitation, member and category actions", () => {
     expect(organizerOnly.map(({ name }) => name).sort()).toEqual([
+      "createCategory",
       "createInvitation",
       "createResetLink",
+      "deleteCategory",
       "demoteMember",
       "promoteMember",
+      "renameCategory",
       "revokeInvitation",
     ]);
   });
 
   describe.each(organizerOnly)("$name called by a member", ({ file, name }) => {
-    test("gets not-found and writes or changes no invitation, role or grant", async () => {
+    test("gets not-found and writes or changes no invitation, role, grant or category", async () => {
       const action = await loadAction(file, name);
       const member = await scope.createTestUser({ role: "member" });
       const ip = scope.ip();
@@ -251,16 +257,28 @@ describe("wrong role", () => {
       const { id: invitationId } = await scope.createInvitation();
       // An organizer target makes a demote meaningful, an active one the rest.
       const target = await scope.createTestUser({ role: "organizer" });
+      const category = await scope.createCategory(`Wrong ${name.slice(0, 8)}`);
       const before = {
         invitation: await db.invitation.findUniqueOrThrow({
           where: { id: invitationId },
         }),
         target: await db.user.findUniqueOrThrow({ where: { id: target.id } }),
+        category: await db.category.findUniqueOrThrow({
+          where: { id: category.id },
+        }),
       };
       mockNextRequest({ ip, cookies: { [SESSION_COOKIE]: cookie } });
       const form = new FormData();
-      form.set("id", file.endsWith("members.ts") ? target.id : invitationId);
+      form.set(
+        "id",
+        file.endsWith("members.ts")
+          ? target.id
+          : file.endsWith("categories.ts")
+            ? category.id
+            : invitationId,
+      );
       form.set("note", "from a member");
+      form.set("name", scope.categoryName("From member"));
 
       const error = await thrownBy(action({}, form));
 
@@ -280,6 +298,14 @@ describe("wrong role", () => {
       expect(
         await db.passwordResetGrant.count({
           where: { OR: [{ userId: target.id }, { createdById: member.id }] },
+        }),
+      ).toBe(0);
+      expect(
+        await db.category.findUniqueOrThrow({ where: { id: category.id } }),
+      ).toEqual(before.category);
+      expect(
+        await db.category.count({
+          where: { name: scope.categoryName("From member") },
         }),
       ).toBe(0);
     });

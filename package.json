@@ -13,6 +13,7 @@
     "e2e": "playwright test",
     "db:generate": "prisma generate",
     "db:bootstrap": "tsx scripts/bootstrap-organizer.ts",
+    "db:categories": "tsx scripts/seed-categories.ts",
     "db:seed": "prisma db seed"
   },
   "dependencies": {

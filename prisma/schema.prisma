@@ -144,3 +144,12 @@ model PasswordResetGrant {
   @@index([expiresAt])
   @@map("password_reset_grant")
 }
+
+model Category {
+  id        String   @id @default(uuid())
+  name      String
+  nameKey   String   @unique
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+
+  @@map("category")
+}

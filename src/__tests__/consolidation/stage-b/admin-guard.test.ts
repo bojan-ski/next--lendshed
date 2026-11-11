@@ -8,13 +8,23 @@ import {
 } from "@/__tests__/support/ast";
 import { parseFile, sourceFiles } from "@/__tests__/support/import-graph";
 import { routeParams } from "@/__tests__/support/routeParams";
+import { getAdminCategories } from "@/data/categories";
 import { getOpenInvitations } from "@/data/invitations";
 import { getAdminMemberDetail, getAdminMembers } from "@/data/members";
 import { getViewer } from "@/data/viewer";
 import type { ViewerDTO } from "@/types/viewer";
 
 vi.mock("@/data/viewer", () => ({ getViewer: vi.fn() }));
+// getCategories' cacheTag/cacheLife throw outside Next's runtime.
+vi.mock(
+  "next/cache",
+  async () => (await import("@/__tests__/support/next-cache")).nextCacheModule,
+);
 // Spied, not replaced: an organizer's call runs the real read.
+vi.mock("@/data/categories", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/data/categories")>();
+  return { ...actual, getAdminCategories: vi.fn(actual.getAdminCategories) };
+});
 vi.mock("@/data/invitations", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/data/invitations")>();
   return { ...actual, getOpenInvitations: vi.fn(actual.getOpenInvitations) };
@@ -35,13 +45,16 @@ vi.setConfig({ testTimeout: 30_000 });
 const ADMIN_FILES = [
   "src/app/(app)/admin/**/*.{ts,tsx}",
   "src/components/admin/**/*.{ts,tsx}",
+  "src/components/categories/**/*.{ts,tsx}",
   "src/components/invitations/**/*.{ts,tsx}",
   "src/components/members/**/*.{ts,tsx}",
 ]
   .flatMap((pattern) => sourceFiles(pattern))
   .filter((file) => !/\.test\.tsx?$/.test(file));
 
+// getCategories is not here: the item form (10) and browse (12) read it outside admin.
 const ADMIN_READS = {
+  getAdminCategories,
   getOpenInvitations,
   getAdminMembers,
   getAdminMemberDetail,
@@ -90,6 +103,7 @@ function unguardedCalls(
 describe("admin data sections — static", () => {
   test("the walk finds the admin modules that read data", () => {
     expect(sections.map(({ file }) => file).sort()).toEqual([
+      "src/components/categories/CategoriesSection.tsx",
       "src/components/invitations/InvitationsSection.tsx",
       "src/components/members/MemberDetailSection.tsx",
       "src/components/members/MembersSection.tsx",
@@ -103,7 +117,7 @@ describe("admin data sections — static", () => {
     },
   );
 
-  test("the three admin reads are imported and called only by those modules", () => {
+  test("the four admin reads are imported and called only by those modules", () => {
     const sectionFiles = new Set(sections.map(({ file }) => file));
     const readNames = new Set(Object.keys(ADMIN_READS));
     const outside = sourceFiles("src/**/*.{ts,tsx}")
@@ -159,6 +173,7 @@ describe("admin data sections — static", () => {
 
 // The props each section's page passes; a new data section fails until listed.
 const SECTION_PROPS: Record<string, () => object> = {
+  "src/components/categories/CategoriesSection.tsx": () => ({}),
   "src/components/invitations/InvitationsSection.tsx": () => ({}),
   "src/components/members/MembersSection.tsx": () => ({
     searchParams: Promise.resolve({}),

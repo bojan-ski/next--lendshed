@@ -2,6 +2,7 @@ import { account } from "./account";
 import { admin } from "./admin";
 import { app } from "./app";
 import { avatarMenu } from "./avatarMenu";
+import { categories } from "./categories";
 import { dates } from "./dates";
 import { errors } from "./errors";
 import { fields } from "./fields";
@@ -51,6 +52,7 @@ export const strings = {
   account,
   members,
   resetPassword,
+  categories,
 } as const;
 
 export type FlashKey = keyof typeof strings.flash;

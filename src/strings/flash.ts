@@ -8,4 +8,7 @@ export const flash = {
   memberPromoted: "Organizer role given.",
   memberDemoted: "Organizer role removed.",
   passwordReset: "Password saved. Sign in with your new password.",
+  categoryAdded: "Category added.",
+  categoryRenamed: "Category renamed.",
+  categoryDeleted: "Category deleted.",
 } as const satisfies Record<string, string>;

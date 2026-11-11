@@ -5,6 +5,7 @@ import { lockActiveOrganizerIds } from "@/data/members";
 import { createCredentialUser } from "@/db/credentials";
 import type { MemberStatus, Role } from "@/generated/prisma/client";
 import { auth } from "@/lib/auth/auth";
+import { categoryNameKey } from "@/lib/categories/name";
 import { createLinkToken } from "@/lib/auth/link-tokens";
 import { env } from "@/lib/env/server";
 
@@ -16,7 +17,12 @@ import { env } from "@/lib/env/server";
 export const SESSION_COOKIE = "better-auth.session_token";
 export const TEST_PASSWORD = "correct-horse-battery";
 
-const REQUIRED_MIGRATIONS = ["auth", "invitations", "password_reset_grants"];
+const REQUIRED_MIGRATIONS = [
+  "auth",
+  "invitations",
+  "password_reset_grants",
+  "categories",
+];
 
 export async function assertMigrated(): Promise<void> {
   const failure = (name: string) =>
@@ -162,6 +168,19 @@ export function createTestScope() {
       return { id, token };
     },
 
+    // A category whose name starts with the scope's tag (2–30 characters with it),
+    // so cleanup finds it however it was created.
+    async createCategory(
+      label = "Ladders",
+    ): Promise<{ id: string; name: string }> {
+      const name = `${tag} ${label}`;
+      return db.category.create({
+        data: { name, nameKey: categoryNameKey(name) },
+        select: { id: true, name: true },
+      });
+    },
+    categoryName: (label: string) => `${tag} ${label}`,
+
     // Rows belonging to this scope only: never global counts.
     sessionsOf: (userId: string) => db.session.findMany({ where: { userId } }),
     rateLimitRows: () =>
@@ -170,6 +189,9 @@ export function createTestScope() {
       }),
 
     async cleanup() {
+      await db.category.deleteMany({
+        where: { nameKey: { startsWith: `${tag} ` } },
+      });
       // Users made through a join carry the scope's email, not a tracked id.
       const users = {
         OR: [{ id: { in: userIds } }, { email: { startsWith: `${tag}-` } }],

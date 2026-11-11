@@ -14,6 +14,11 @@ export const organizerBootstrapEnvSchema = z.object({
   ORGANIZER_PASSWORD: z.string().min(PASSWORD_MIN).max(PASSWORD_MAX),
 });
 
+// The production categories script needs nothing but the direct URL.
+export const categoriesScriptEnvSchema = z.object({
+  DATABASE_URL_UNPOOLED: z.url(),
+});
+
 // The seed runs only against the one database host named here (set in .env.test only).
 export const demoSeedEnvSchema = z
   .object({
