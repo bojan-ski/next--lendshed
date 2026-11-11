@@ -37,7 +37,7 @@ const GUARDING_LAYOUTS: Record<
   },
 };
 
-const PAGE_COUNT = 15;
+const PAGE_COUNT = 17;
 const ORIGIN = "http://localhost:3000";
 const SEARCH = "?probe=1";
 
@@ -132,10 +132,10 @@ describe("route-guard matrix — derivation", () => {
   });
 
   test("an unmapped dynamic segment fails the derivation, naming it", () => {
-    const synthetic = "src/app/(app)/items/[id]/page.tsx";
+    const synthetic = "src/app/(app)/examples/[slug]/page.tsx";
     expect(guardChain(synthetic, layoutFiles)).toEqual(["viewerGate"]);
     expect(() => routeUrl(routePattern(synthetic))).toThrow(
-      "No routeParams entry for /items/[id] (segment [id])",
+      "No routeParams entry for /examples/[slug] (segment [slug])",
     );
     expect(() => routeUrl("/docs/[[...slug]]")).toThrow("[[...slug]]");
   });

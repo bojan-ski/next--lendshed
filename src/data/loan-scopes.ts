@@ -80,3 +80,9 @@ export function coversTodayLoanWhere(today: string): Prisma.LoanWhereInput {
     ],
   };
 }
+
+// A listed item is free today when it has no such loan (OQ-34: an overdue out
+// loan still holds it).
+export function notFreeTodayLoanWhere(today: string): Prisma.LoanWhereInput {
+  return { OR: [coversTodayLoanWhere(today), occupyingLoanWhere()] };
+}

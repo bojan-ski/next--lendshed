@@ -1,5 +1,6 @@
 import "server-only";
 import { db } from "@/db";
+import { containsText } from "@/data/text-search";
 import type { MemberStatus, Prisma, Role } from "@/generated/prisma/client";
 import { communityToday } from "@/lib/dates/dates";
 import { initialsOf } from "@/lib/text/initials";
@@ -71,7 +72,7 @@ export function toAdminMemberDetailDTO(
 // Names only: organizers never search or see emails.
 export async function getAdminMembers(q: string): Promise<AdminMemberRowDTO[]> {
   const rows = await db.user.findMany({
-    where: q ? { name: { contains: q, mode: "insensitive" } } : {},
+    where: q ? { name: containsText(q) } : {},
     orderBy: [{ name: "asc" }, { id: "asc" }],
     select: rowSelect,
   });

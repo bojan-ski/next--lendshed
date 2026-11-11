@@ -13,6 +13,33 @@ export type ItemCardDTO = {
   freeToday: boolean;
 };
 
+export type BrowsePageDTO = {
+  items: ItemCardDTO[];
+  page: number;
+  hasPrevious: boolean;
+  hasNext: boolean;
+};
+
+// Never names who holds the item.
+export type BookedRangeDTO = {
+  startDate: string;
+  endDate: string;
+  stillOut: boolean;
+};
+
+export type ItemDetailDTO = ItemCardDTO & {
+  description: string;
+  condition: ItemCondition;
+  maxLoanDays: number;
+  pickupNotes: string | null;
+  status: ItemStatus;
+  owner: { id: string; displayName: string; area: string | null };
+  bookedRanges: BookedRangeDTO[];
+  isOwn: boolean;
+  viewerCanRequest: boolean;
+  viewerCanRetireAsOrganizer: boolean;
+};
+
 export type OwnItemNowKind =
   | "requested_by"
   | "with"

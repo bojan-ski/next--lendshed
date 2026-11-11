@@ -53,6 +53,20 @@ describe("getAdminMembers", () => {
     expect(rows.map((row) => row.id)).toContain(cy.id);
   });
 
+  test("% and _ match only themselves, never as wildcards", async () => {
+    const prefix = `${scope.tag} `;
+    const percent = await scope.createTestUser({ name: `${prefix}50% Off` });
+    await scope.createTestUser({ name: `${prefix}5000 Off` });
+    const underscore = await scope.createTestUser({ name: `${prefix}a_b` });
+    await scope.createTestUser({ name: `${prefix}axb` });
+
+    const byPercent = await getAdminMembers(`${prefix}50%`);
+    const byUnderscore = await getAdminMembers(`${prefix}a_b`);
+
+    expect(byPercent.map((row) => row.id)).toEqual([percent.id]);
+    expect(byUnderscore.map((row) => row.id)).toEqual([underscore.id]);
+  });
+
   test("a search with no match is empty", async () => {
     expect(await getAdminMembers(`${scope.tag}-nobody`)).toEqual([]);
   });

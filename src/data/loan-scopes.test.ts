@@ -9,6 +9,7 @@ import {
   blockingLoanWhere,
   coversTodayLoanWhere,
   effectiveLoanWhere,
+  notFreeTodayLoanWhere,
   occupyingLoanWhere,
   openLoanWhere,
 } from "./loan-scopes";
@@ -144,6 +145,20 @@ describe("the composites", () => {
     );
     expect(expected.length).toBeGreaterThan(0);
     expect(await idsMatching(coversTodayLoanWhere(TODAY))).toEqual(expected);
+  });
+
+  test("notFreeTodayLoanWhere = covers today ∪ every out row (OQ-34)", async () => {
+    const expected = idsWhere(
+      (row) =>
+        row.status === "out" ||
+        (["approved", "out"].includes(effective(row)) &&
+          row.startDate <= TODAY &&
+          TODAY <= row.endDate),
+    );
+    expect(expected).toEqual(
+      expect.arrayContaining(idsWhere((row) => effective(row) === "overdue")),
+    );
+    expect(await idsMatching(notFreeTodayLoanWhere(TODAY))).toEqual(expected);
   });
 });
 

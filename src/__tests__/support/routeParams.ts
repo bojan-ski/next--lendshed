@@ -6,6 +6,8 @@ export const routeParams: Record<string, Record<string, string | string[]>> = {
   "/reset/[token]": { token: "A".repeat(43) },
   "/admin/members/[id]": { id: "member-1" },
   "/my/items/[id]/edit": { id: "item-1" },
+  "/items/[id]": { id: "item-1" },
+  "/members/[id]": { id: "member-1" },
 };
 
 const DYNAMIC_SEGMENT = /^\[{1,2}(?:\.\.\.)?([^\]]+)\]{1,2}$/;

@@ -9,20 +9,25 @@ type PhotoImageProps = {
   photo: PhotoDTO;
   alt: string;
   className?: string;
+  fallbackClassName?: string;
   unoptimized?: boolean;
 };
 
 // The photo's own size, so next/image only ever asks for the one 640 variant.
-// A failed load shows the placeholder in the same box; a new photo retries.
+// A failed load shows the placeholder in the same box (or `fallbackClassName`,
+// for an image that sizes itself); a new photo retries.
 export default function PhotoImage({
   photo,
   alt,
   className,
+  fallbackClassName,
   unoptimized,
 }: PhotoImageProps) {
   const [failedUrl, setFailedUrl] = useState<string | null>(null);
 
-  if (failedUrl === photo.url) return <PhotoPlaceholder className={className} />;
+  if (failedUrl === photo.url) {
+    return <PhotoPlaceholder className={fallbackClassName ?? className} />;
+  }
   return (
     <Image
       src={photo.url}

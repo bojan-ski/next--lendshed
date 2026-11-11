@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { strings } from "@/strings";
 import type { ItemCardDTO } from "@/types/item";
 import ItemCard from "./ItemCard";
@@ -39,21 +39,56 @@ describe("ItemCard", () => {
     expect(screen.getByText(strings.status.freeToday)).toBeInTheDocument();
   });
 
-  test("never shows the category", () => {
+  test("shows the category on its own line", () => {
     render(<ItemCard item={item} />);
-    expect(screen.queryByText("Tools")).not.toBeInTheDocument();
+    expect(screen.getByText("Tools")).toHaveClass("truncate");
   });
 
-  test("shows the placeholder, even when a photo is given (until spec 11)", () => {
-    render(
+  test("a photo renders as a decorative square image", () => {
+    const { container } = render(
       <ItemCard
         item={{
           ...item,
-          photo: { url: "https://blob.test/a.webp", width: 640, height: 640 },
+          photo: { url: "/uploads/items/a.webp", width: 1200, height: 900 },
         }}
       />,
     );
+    const image = container.querySelector("img");
+    expect(image).toHaveAttribute("alt", "");
+    expect(image).toHaveClass("aspect-square", "object-cover");
+    expect(screen.queryByTestId("photo-placeholder")).not.toBeInTheDocument();
+  });
+
+  test("no photo, or a failed load, shows the placeholder with the title", () => {
+    const { container, rerender } = render(<ItemCard item={item} />);
+    expect(screen.getByTestId("photo-placeholder")).toHaveClass(
+      "aspect-square",
+    );
+
+    rerender(
+      <ItemCard
+        item={{
+          ...item,
+          photo: { url: "/uploads/items/a.webp", width: 1200, height: 900 },
+        }}
+      />,
+    );
+    fireEvent.error(container.querySelector("img")!);
+
     expect(screen.getByTestId("photo-placeholder")).toBeInTheDocument();
-    expect(screen.queryByRole("img")).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { name: item.title }),
+    ).toBeInTheDocument();
+  });
+
+  test("the title is an h2 by default and an h3 when asked", () => {
+    const { rerender } = render(<ItemCard item={item} />);
+    expect(screen.getByRole("heading", { level: 2 })).toHaveTextContent(
+      item.title,
+    );
+    rerender(<ItemCard item={item} headingLevel="h3" />);
+    expect(screen.getByRole("heading", { level: 3 })).toHaveTextContent(
+      item.title,
+    );
   });
 });
