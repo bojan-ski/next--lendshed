@@ -108,7 +108,9 @@ export default async function LoanDetailSection({
       </div>
       <div className="grid gap-6 lg:grid-cols-2">
         <div className="flex min-w-0 flex-col gap-6">
-          {loan.actions.length > 0 && <LoanActionsCard loan={loan} />}
+          {loan.actions.length > 0 && (
+            <LoanActionsCard loan={loan} today={today} />
+          )}
           <LoanNextSteps loan={loan} today={today} />
           {loan.requestMessage !== null && <MessageCard loan={loan} />}
         </div>

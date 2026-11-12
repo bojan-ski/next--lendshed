@@ -88,6 +88,8 @@ describe("action enforcement — derivation", () => {
       "hideItem",
       "joinWithInvitation",
       "listItem",
+      "markLoanOut",
+      "markLoanReturned",
       "promoteMember",
       "renameCategory",
       "requestLoan",

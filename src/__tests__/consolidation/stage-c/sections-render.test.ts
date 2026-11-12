@@ -476,6 +476,7 @@ const loanDetail = (overrides: Partial<LoanDetailDTO> = {}): LoanDetailDTO => ({
   returnedAsLent: null,
   closedByName: null,
   overlappingRequestCount: 0,
+  handOverBlocked: false,
   contact: null,
   actions: [],
   ...overrides,
@@ -682,5 +683,79 @@ describe("LoanDetailSection — the decisions card", () => {
     const page = await loanPageOf({ status: loanStatus, actions: ["cancel"] });
     expect(page).toMatch(button(label));
     expect(page).not.toMatch(button(loanActions.approve));
+  });
+});
+
+// Spec 15: handover and return in the same card, one accent button at most.
+describe("LoanDetailSection — handover and return", () => {
+  beforeEach(() => {
+    vi.mocked(getViewer).mockResolvedValue(member);
+  });
+
+  const button = (label: string) =>
+    new RegExp(`<button[^>]*>${label}</button>`);
+  const accentButtons = (page: string) =>
+    page.match(/<button[^>]*class="[^"]*\bbg-accent\b/g) ?? [];
+
+  test("hand_over: Your loan, Handed over beside Cancel loan, no notice", async () => {
+    const page = await loanPageOf({
+      status: "approved",
+      viewerRole: "owner",
+      actions: ["hand_over", "cancel"],
+    });
+
+    expect(page).toMatch(
+      new RegExp(`<h2[^>]*>${loanActions.headingLoan}</h2>`),
+    );
+    expect(page).toMatch(button(loanActions.handOver));
+    expect(page).toMatch(button(loanActions.cancelLoan));
+    expect(page).not.toContain(loanActions.notBack);
+    expect(accentButtons(page)).toHaveLength(1);
+  });
+
+  test("handOverBlocked: the not-back notice and Cancel loan only", async () => {
+    const page = await loanPageOf({
+      status: "approved",
+      viewerRole: "owner",
+      actions: ["cancel"],
+      handOverBlocked: true,
+    });
+
+    expect(page).toContain(loanActions.notBack);
+    expect(page).not.toMatch(button(loanActions.handOver));
+    expect(page).toMatch(button(loanActions.cancelLoan));
+  });
+
+  test.each(["out", "overdue"] as const)(
+    "mark_returned on an %s loan: Is it back?, the bounded date, two unchecked answers",
+    async (loanStatus) => {
+      const page = await loanPageOf({
+        status: loanStatus,
+        viewerRole: "owner",
+        actions: ["mark_returned"],
+      });
+
+      expect(page).toContain(`>${loanActions.headingReturn}</h2>`);
+      expect(page).toContain(loanActions.backOn);
+      const date = page.match(/<input[^>]*name="returnedOn"[^>]*>/)?.[0] ?? "";
+      expect(date).toContain(`type="date"`);
+      expect(date).toContain(`min="2030-06-20"`);
+      expect(date).toContain(`max="${communityToday()}"`);
+      expect(page).toContain(loanActions.asLentLegend);
+      const radios = page.match(/<input[^>]*name="asLent"[^>]*>/g) ?? [];
+      expect(radios).toHaveLength(2);
+      for (const radio of radios) {
+        expect(radio).not.toMatch(/\bchecked\b|\brequired\b/);
+      }
+      expect(page).toMatch(button(loanActions.markBack));
+      expect(page).not.toMatch(button(loanActions.cancelLoan));
+      expect(accentButtons(page)).toHaveLength(1);
+    },
+  );
+
+  test("the borrower of an out loan: no card", async () => {
+    const page = await loanPageOf({ status: "out", actions: [] });
+    expect(page).not.toContain(loanActions.headingReturn);
+    expect(page).not.toMatch(button(loanActions.markBack));
   });
 });

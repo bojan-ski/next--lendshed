@@ -7,11 +7,14 @@ import {
 } from "react";
 import { LOAN_HEADING_ID } from "@/components/loans/ids";
 import { showToast } from "@/lib/feedback/toast";
+import type { FlashKey } from "@/strings";
 import type { LoanDecisionState } from "@/types/loan";
 
 // A decision re-renders the page without its controls in the same commit as
 // the new state, so an effect would never run: announce before it lands.
-export function announceDecision(next: LoanDecisionState): LoanDecisionState {
+export function announceDecision<State extends { flash?: FlashKey }>(
+  next: State,
+): State {
   if (next.flash) {
     showToast(next.flash);
     document.getElementById(LOAN_HEADING_ID)?.focus();
@@ -21,7 +24,7 @@ export function announceDecision(next: LoanDecisionState): LoanDecisionState {
 
 // A refused submit focuses its notice (rules/feedback.md).
 export function useRefusalFocus(
-  state: LoanDecisionState,
+  state: { formError?: string },
   notice: RefObject<HTMLDivElement | null>,
 ) {
   useEffect(() => {

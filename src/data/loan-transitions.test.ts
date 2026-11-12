@@ -417,7 +417,7 @@ describe("getLoanForViewer — actions", () => {
       "owner, out",
       () => as(ownerId),
       { status: "out", startDate: "2030-06-10" },
-      [],
+      ["mark_returned"],
     ],
     [
       "borrower, overdue",

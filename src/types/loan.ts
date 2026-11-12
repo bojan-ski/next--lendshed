@@ -70,6 +70,8 @@ export type LoanDetailDTO = {
   returnedAsLent: ReturnedAsLent | null;
   closedByName: string | null;
   overlappingRequestCount: number;
+  // The owner could hand over now but for another loan on the item still out.
+  handOverBlocked: boolean;
   // The other party's, only while brief §7.4 allows it.
   contact: { name: string; details: string } | null;
   actions: LoanAction[];
@@ -101,9 +103,25 @@ export type LoanDecisionState = {
 // Which cancel the screen offered: a request, or an approved loan.
 export type CancelStage = "request" | "loan";
 
+export type HandOverState = {
+  flash?: FlashKey;
+  formError?: "stale" | "stillOut" | "unexpected";
+};
+
+export type MarkReturnedField = "returnedOn" | "asLent";
+
+export type MarkReturnedState = {
+  flash?: FlashKey;
+  formError?: "stale" | "unexpected";
+  fieldErrors?: Partial<Record<MarkReturnedField, string[]>>;
+  values?: Partial<Record<MarkReturnedField, string>>;
+};
+
 export type ApproveOutcome = "approved" | "stale" | "datesTaken";
 export type DeclineOutcome = "declined" | "stale";
 export type CancelOutcome = "cancelled" | "stale";
+export type HandOverOutcome = "handedOver" | "stale" | "stillOut";
+export type MarkBackOutcome = "returned" | "stale" | "beforeStart";
 
 export type InsertLoanRequestOutcome =
   | { kind: "created"; id: string }

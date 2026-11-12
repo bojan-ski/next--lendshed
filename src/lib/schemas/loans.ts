@@ -58,3 +58,16 @@ export type ReasonInput = z.infer<typeof reasonSchema>;
 
 // What the cancel form showed; a mismatch with the loan now is a stale screen.
 export const cancelStageSchema = z.enum(["request", "loan"]);
+
+// `unknown` is the organizer close's answer, never the owner's. The date's
+// bounds depend on today and the loan, so the action and the data layer
+// check them.
+export const markReturnedSchema = z.object({
+  id: loanIdSchema.shape.id,
+  returnedOn: z
+    .string({ error: loanActions.returnedOnInvalid })
+    .refine(isIsoDate, { error: loanActions.returnedOnInvalid }),
+  asLent: z.enum(["yes", "no"], { error: loanActions.asLentRequired }),
+});
+
+export type MarkReturnedInput = z.infer<typeof markReturnedSchema>;

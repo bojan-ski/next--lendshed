@@ -7,7 +7,9 @@ import {
   approveLoanRequest,
   cancelLoanByParty,
   declineLoanRequest,
+  handOverLoan,
   insertLoanRequest,
+  markLoanBack,
 } from "@/data/loans";
 import { requireViewer } from "@/lib/auth/guards";
 import { addDays, communityToday } from "@/lib/dates/dates";
@@ -17,13 +19,18 @@ import { REQUEST_AHEAD_DAYS } from "@/lib/loans/limits";
 import {
   cancelStageSchema,
   loanIdSchema,
+  markReturnedSchema,
   reasonSchema,
   requestLoanSchema,
 } from "@/lib/schemas/loans";
 import { t } from "@/lib/text/interpolate";
+import { loanActions } from "@/strings/loanActions";
 import { requestForm } from "@/strings/requestForm";
 import type {
+  HandOverState,
   LoanDecisionState,
+  MarkReturnedField,
+  MarkReturnedState,
   RequestLoanField,
   RequestLoanState,
 } from "@/types/loan";
@@ -208,4 +215,87 @@ export async function cancelLoan(
 
   refresh();
   return { flash: "loanCancelled" };
+}
+
+export async function markLoanOut(
+  _prev: HandOverState,
+  formData: FormData,
+): Promise<HandOverState> {
+  const viewer = await requireViewer();
+  const today = communityToday();
+
+  const parsed = loanIdSchema.safeParse({ id: formData.get("id") });
+  if (!parsed.success) return { formError: "stale" };
+
+  let outcome: Awaited<ReturnType<typeof handOverLoan>>;
+  try {
+    outcome = await handOverLoan(viewer.id, parsed.data.id, today);
+  } catch (error) {
+    reportUnexpected("markLoanOut", error);
+    return { formError: "unexpected" };
+  }
+  if (outcome !== "handedOver") return { formError: outcome };
+
+  refresh();
+  return { flash: "loanHandedOver" };
+}
+
+const RETURN_FIELDS = [
+  "returnedOn",
+  "asLent",
+] as const satisfies readonly MarkReturnedField[];
+
+export async function markLoanReturned(
+  _prev: MarkReturnedState,
+  formData: FormData,
+): Promise<MarkReturnedState> {
+  const viewer = await requireViewer();
+  const today = communityToday();
+
+  const values = {} as Record<MarkReturnedField, string>;
+  for (const field of RETURN_FIELDS) {
+    const value = formData.get(field);
+    values[field] = typeof value === "string" ? value : "";
+  }
+  const parsed = markReturnedSchema.safeParse({
+    id: formData.get("id"),
+    returnedOn: values.returnedOn,
+    asLent: formData.get("asLent") ?? undefined,
+  });
+  if (!parsed.success) {
+    const fieldErrors = z.flattenError(parsed.error).fieldErrors;
+    if (fieldErrors.id) return { formError: "stale" };
+    return {
+      fieldErrors: Object.fromEntries(
+        RETURN_FIELDS.flatMap((field) =>
+          fieldErrors[field] ? [[field, fieldErrors[field]]] : [],
+        ),
+      ),
+      values,
+    };
+  }
+  if (parsed.data.returnedOn > today) {
+    return {
+      fieldErrors: { returnedOn: [loanActions.returnedOnAfterToday] },
+      values,
+    };
+  }
+
+  let outcome: Awaited<ReturnType<typeof markLoanBack>>;
+  try {
+    outcome = await markLoanBack(viewer.id, parsed.data, today);
+  } catch (error) {
+    reportUnexpected("markLoanReturned", error);
+    return { formError: "unexpected", values };
+  }
+  if (outcome === "beforeStart") {
+    return {
+      fieldErrors: { returnedOn: [loanActions.returnedOnBeforeStart] },
+      values,
+    };
+  }
+  if (outcome !== "returned") return { formError: outcome };
+
+  refresh();
+  return { flash: "loanReturned" };
 }

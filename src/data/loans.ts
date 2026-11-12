@@ -2,7 +2,11 @@ import "server-only";
 import { db } from "@/db";
 import { fromDbDate, toDbDate } from "@/data/db-dates";
 import { isDatesTaken } from "@/data/db-errors";
-import { blockingLoanWhere, openLoanWhere } from "@/data/loan-scopes";
+import {
+  blockingLoanWhere,
+  occupyingLoanWhere,
+  openLoanWhere,
+} from "@/data/loan-scopes";
 import { personName, toPhotoDTO } from "@/data/mappers";
 import type { Prisma } from "@/generated/prisma/client";
 import type {
@@ -13,17 +17,19 @@ import type {
 import { addDays, loanLengthDays } from "@/lib/dates/dates";
 import { effectiveStatus } from "@/lib/dates/effective-status";
 import { REQUEST_LIMITS } from "@/lib/loans/limits";
-import type { RequestLoanInput } from "@/lib/schemas/loans";
+import type { MarkReturnedInput, RequestLoanInput } from "@/lib/schemas/loans";
 import type {
   ApproveOutcome,
   CancelOutcome,
   CancelStage,
   DeclineOutcome,
   EffectiveLoanStatus,
+  HandOverOutcome,
   InsertLoanRequestOutcome,
   LoanAction,
   LoanDetailDTO,
   LoanViewerRole,
+  MarkBackOutcome,
 } from "@/types/loan";
 import type { ViewerDTO } from "@/types/viewer";
 
@@ -36,6 +42,14 @@ function overlapsWhere(start: string, end: string): Prisma.LoanWhereInput {
     startDate: { lte: toDbDate(end) },
     endDate: { gte: toDbDate(start) },
   };
+}
+
+// Another loan holding the item (OQ-34): stored `out`, whatever its dates.
+function otherOccupyingWhere(
+  itemId: string,
+  loanId: string,
+): Prisma.LoanWhereInput {
+  return { AND: [{ itemId, id: { not: loanId } }, occupyingLoanWhere()] };
 }
 
 // The actor's own row FOR UPDATE first (updateOwnContactDetails takes it too,
@@ -179,10 +193,13 @@ function contactFor(
     : null;
 }
 
+type HandOverCheck = "ready" | "blocked" | "none";
+
 function toLoanDetailDTO(
   row: DetailRow,
   role: LoanViewerRole,
   overlappingRequestCount: number,
+  handOver: HandOverCheck,
   today: string,
 ): LoanDetailDTO {
   const startDate = fromDbDate(row.startDate);
@@ -219,6 +236,7 @@ function toLoanDetailDTO(
     returnedAsLent: row.returnedAsLent,
     closedByName: row.closedBy?.name ?? null,
     overlappingRequestCount,
+    handOverBlocked: handOver === "blocked",
     contact: contactFor(
       role,
       status,
@@ -226,7 +244,7 @@ function toLoanDetailDTO(
       role === "owner" ? row.borrower : owner,
       today,
     ),
-    actions: actionsFor(row, role, status),
+    actions: actionsFor(row, role, status, handOver),
   };
 }
 
@@ -236,9 +254,15 @@ function actionsFor(
   row: DetailRow,
   role: LoanViewerRole,
   status: EffectiveLoanStatus,
+  handOver: HandOverCheck,
 ): LoanAction[] {
   if (role === "organizer") return [];
-  if (status === "approved") return ["cancel"];
+  if (status === "approved") {
+    return handOver === "ready" ? ["hand_over", "cancel"] : ["cancel"];
+  }
+  if (status === "out" || status === "overdue") {
+    return role === "owner" ? ["mark_returned"] : [];
+  }
   if (status !== "requested") return [];
   if (role === "borrower") return ["cancel"];
   const approvable = row.item.status === "listed" && row.borrowerId !== null;
@@ -263,12 +287,19 @@ export async function getLoanForViewer(
 
   const startDate = fromDbDate(row.startDate);
   const endDate = fromDbDate(row.endDate);
-  const countOverlaps =
+  const status = effectiveStatus(
+    { status: row.status, startDate, endDate },
+    today,
+  );
+  const countOverlaps = role === "owner" && status === "requested";
+  // Only where handOverLoan would get as far as the OQ-34 check.
+  const handOverDue =
     role === "owner" &&
-    effectiveStatus({ status: row.status, startDate, endDate }, today) ===
-      "requested";
+    status === "approved" &&
+    startDate <= today &&
+    row.borrowerId !== null;
   const now = new Date();
-  const [, overlapping] = await Promise.all([
+  const [, overlapping, occupying] = await Promise.all([
     role === "organizer"
       ? null
       : db.loan.update({
@@ -288,8 +319,19 @@ export async function getLoanForViewer(
           },
         })
       : 0,
+    handOverDue
+      ? db.loan.count({
+          where: otherOccupyingWhere(row.item.id, row.id),
+          take: 1,
+        })
+      : 0,
   ]);
-  return toLoanDetailDTO(row, role, overlapping, today);
+  const handOver: HandOverCheck = !handOverDue
+    ? "none"
+    : occupying > 0
+      ? "blocked"
+      : "ready";
+  return toLoanDetailDTO(row, role, overlapping, handOver, today);
 }
 
 type LockedLoan = {
@@ -477,5 +519,74 @@ export async function cancelLoanByParty(
       select: { id: true },
     });
     return "cancelled";
+  });
+}
+
+// From its start date until it lapses. An overdue loan's dates lie in the
+// past, so loan_no_overlap can't see it: the OQ-34 check runs here, under the
+// item lock, and a return of that loan waits on the same lock. Approved to
+// out keeps the row in the constraint's set with the same range, so no 23P01.
+export async function handOverLoan(
+  ownerId: string,
+  loanId: string,
+  today: string,
+): Promise<HandOverOutcome> {
+  return db.$transaction(async (tx) => {
+    const loan = await lockLoanForTransition(tx, loanId);
+    if (
+      !loan ||
+      loan.itemOwnerId !== ownerId ||
+      loan.borrowerId === null ||
+      effectiveStatus(loan, today) !== "approved" ||
+      loan.startDate > today
+    ) {
+      return "stale";
+    }
+    const occupying = await tx.loan.count({
+      where: otherOccupyingWhere(loan.itemId, loan.id),
+      take: 1,
+    });
+    if (occupying > 0) return "stillOut";
+    const now = new Date();
+    await tx.loan.update({
+      where: { id: loan.id },
+      data: { status: "out", changedAt: now, ownerSeenAt: now },
+      select: { id: true },
+    });
+    return "handedOver";
+  });
+}
+
+// `returnedOn ≤ today` is the action's check; the start date is the locked
+// row's. A return is not an ending decision, so `endedBy` stays null.
+export async function markLoanBack(
+  ownerId: string,
+  input: MarkReturnedInput,
+  today: string,
+): Promise<MarkBackOutcome> {
+  return db.$transaction(async (tx) => {
+    const loan = await lockLoanForTransition(tx, input.id);
+    const status = loan && effectiveStatus(loan, today);
+    if (
+      !loan ||
+      loan.itemOwnerId !== ownerId ||
+      (status !== "out" && status !== "overdue")
+    ) {
+      return "stale";
+    }
+    if (input.returnedOn < loan.startDate) return "beforeStart";
+    const now = new Date();
+    await tx.loan.update({
+      where: { id: loan.id },
+      data: {
+        status: "returned",
+        returnedOn: toDbDate(input.returnedOn),
+        returnedAsLent: input.asLent,
+        changedAt: now,
+        ownerSeenAt: now,
+      },
+      select: { id: true },
+    });
+    return "returned";
   });
 }

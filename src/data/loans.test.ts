@@ -446,6 +446,7 @@ describe("getLoanForViewer — the wire", () => {
         "returnedAsLent",
         "closedByName",
         "overlappingRequestCount",
+        "handOverBlocked",
         "contact",
         "actions",
       ].sort(),
