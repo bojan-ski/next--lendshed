@@ -47,8 +47,8 @@ export default function ItemDetailsFields({
       >
         {(control) => (
           <select
-            {...control}
             key={values.categoryId}
+            {...control}
             name="categoryId"
             aria-required
             defaultValue={values.categoryId}
@@ -70,8 +70,8 @@ export default function ItemDetailsFields({
       >
         {(control) => (
           <select
-            {...control}
             key={values.condition}
+            {...control}
             name="condition"
             aria-required
             defaultValue={values.condition}

@@ -13,6 +13,7 @@ import { createLinkToken, hashLinkToken } from "@/lib/auth/link-tokens";
 import { forwardSignIn } from "@/lib/auth/sign-in";
 import { env } from "@/lib/env/server";
 import { setFlash } from "@/lib/feedback/flash";
+import { reportUnexpected } from "@/lib/feedback/report";
 import {
   invitationIdSchema,
   invitationSchema,
@@ -44,7 +45,8 @@ export async function createInvitation(
       note: parsed.data.note,
       createdById: viewer.id,
     });
-  } catch {
+  } catch (error) {
+    reportUnexpected("createInvitation", error);
     return { formError: "unexpected" };
   }
 
@@ -68,7 +70,8 @@ export async function revokeInvitation(
   let result: Awaited<ReturnType<typeof revokeOpenInvitation>>;
   try {
     result = await revokeOpenInvitation(parsed.data.id);
-  } catch {
+  } catch (error) {
+    reportUnexpected("revokeInvitation", error);
     return { formError: "unexpected" };
   }
   // A stale revoke keeps the row on screen so its notice is seen there.
@@ -124,7 +127,8 @@ export async function joinWithInvitation(
       email,
       password,
     });
-  } catch {
+  } catch (error) {
+    reportUnexpected("joinWithInvitation", error);
     return { formError: "unexpected", ...echo };
   }
   if (outcome.kind === "invalidToken") return { linkBroken: true };

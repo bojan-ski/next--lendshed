@@ -43,6 +43,7 @@ export default async function MemberProfileSection({
             icon="box-open"
             heading={profile.emptyHeading}
             body={profile.emptyBody}
+            headingLevel="h3"
           />
         ) : (
           <ItemGrid items={member.items} headingLevel="h3" />

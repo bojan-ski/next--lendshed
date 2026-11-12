@@ -14,7 +14,7 @@ export type NewCategoryState = {
   values?: { name: string };
 };
 
-// `values` only on a fieldErrors refusal, so the field keeps the typed text.
+// `values` on a fieldErrors or `unexpected` refusal, so the field keeps the typed text.
 export type RenameCategoryState = {
   fieldErrors?: Partial<Record<"name", string[]>>;
   formError?: "stale" | "unexpected";

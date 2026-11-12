@@ -1,8 +1,9 @@
 import { isRedirectError } from "next/dist/client/components/redirect-error";
-import { createElement, type ReactNode } from "react";
+import { createElement, isValidElement, type ReactNode } from "react";
 import { prerender } from "react-dom/static";
 import AccountSections from "@/components/account/AccountSections";
 import InvitationsSection from "@/components/invitations/InvitationsSection";
+import ItemDetailsForm from "@/components/items/ItemDetailsForm";
 import ItemEditSection from "@/components/items/ItemEditSection";
 import NewItemSection from "@/components/items/NewItemSection";
 import OwnItemsSection from "@/components/items/OwnItemsSection";
@@ -63,6 +64,18 @@ async function html(tree: unknown): Promise<string> {
   return (await new Response(prelude).text())
     .replace(/<!-- -->/g, "")
     .replace(/&(?:amp|lt|gt|quot|#x27);/g, (entity) => ENTITIES[entity]);
+}
+
+// The unrendered elements of `type` in a section's tree, children included.
+function elementsOf(
+  tree: unknown,
+  type: unknown,
+): { props: Record<string, never> }[] {
+  if (Array.isArray(tree))
+    return tree.flatMap((node) => elementsOf(node, type));
+  if (!isValidElement<{ children?: unknown }>(tree)) return [];
+  const own = tree.type === type ? [tree as never] : [];
+  return [...own, ...elementsOf(tree.props.children, type)];
 }
 
 function statusLine(page: string): string | undefined {
@@ -426,5 +439,30 @@ describe("ItemEditSection", () => {
     expect(page).toContain("Handle broke");
     expect(page).not.toContain("<form");
     expect(page).not.toContain("<button");
+  });
+
+  // Island props serialise to the browser: the details form gets its seven
+  // fields, never the page's whole DTO (12a, contract-auditor).
+  test("the details island receives only the id and the six detail fields", async () => {
+    vi.mocked(getViewer).mockResolvedValue(member);
+    vi.mocked(getItemForEdit).mockResolvedValue(editItem());
+    vi.mocked(getCategories).mockResolvedValue(CATEGORIES);
+
+    const [form] = elementsOf(
+      await ItemEditSection(editParams),
+      ItemDetailsForm,
+    );
+
+    expect(Object.keys(form.props.item).sort()).toEqual(
+      [
+        "id",
+        "title",
+        "description",
+        "categoryId",
+        "condition",
+        "maxLoanDays",
+        "pickupNotes",
+      ].sort(),
+    );
   });
 });

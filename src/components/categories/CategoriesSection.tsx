@@ -14,6 +14,7 @@ export default async function CategoriesSection() {
         icon="tag"
         heading={categories.emptyHeading}
         body={categories.emptyBody}
+        headingLevel="h3"
       />
     );
   }

@@ -16,12 +16,14 @@ export default function NavLink({
   activePrefixes,
   children,
 }: NavLinkProps) {
-  const current = isCurrentPath(usePathname(), href, activePrefixes);
+  const pathname = usePathname();
+  const current = isCurrentPath(pathname, href, activePrefixes);
 
+  // "page" only on the linked page; a page inside its section gets "true".
   return (
     <Link
       href={href}
-      aria-current={current ? "page" : undefined}
+      aria-current={current ? (pathname === href ? "page" : "true") : undefined}
       className={navLinkClasses(current)}
     >
       {children}

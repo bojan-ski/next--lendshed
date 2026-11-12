@@ -9,6 +9,7 @@ import { seedInvitations, SEED_INVITATION_NOTES } from "./seed/invitations";
 import { seedItems, SEED_ITEMS } from "./seed/items";
 import { seedPeople, SEED_PEOPLE } from "./seed/people";
 import { seedPhotos } from "./seed/photos";
+import { REVIEW_LOANS, seedReviewLoans } from "./seed/review-loans";
 
 // Dev/test demo data. Later domain seeders run after seedPeople, in order.
 async function main(): Promise<number> {
@@ -35,6 +36,8 @@ async function main(): Promise<number> {
     console.log(`Items: ${SEED_ITEMS.length} present`);
     const { photographed, listed } = await seedPhotos(client);
     console.log(`Photos: ${photographed} added, ${listed} items listed`);
+    await seedReviewLoans(client);
+    console.log(`Review loans: ${REVIEW_LOANS.length} present`);
     return 0;
   } catch (error) {
     console.error(failureLine(error));

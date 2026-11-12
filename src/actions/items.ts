@@ -14,6 +14,7 @@ import {
 import { requireViewer } from "@/lib/auth/guards";
 import { communityToday } from "@/lib/dates/dates";
 import { setFlash } from "@/lib/feedback/flash";
+import { reportUnexpected } from "@/lib/feedback/report";
 import {
   itemDetailsSchema,
   itemIdSchema,
@@ -81,7 +82,8 @@ export async function createItem(
   let outcome: Awaited<ReturnType<typeof insertItem>>;
   try {
     outcome = await insertItem(viewer.id, parsed.data);
-  } catch {
+  } catch (error) {
+    reportUnexpected("createItem", error);
     return { formError: "unexpected", values };
   }
   if (outcome.kind === "capReached") return { formError: "capReached", values };
@@ -112,7 +114,8 @@ export async function updateItem(
   let result: Awaited<ReturnType<typeof updateOwnItem>>;
   try {
     result = await updateOwnItem(viewer.id, parsed.data.id, parsed.data);
-  } catch {
+  } catch (error) {
+    reportUnexpected("updateItem", error);
     return { formError: "unexpected", values };
   }
   if (result === "stale") return { formError: "stale" };
@@ -134,7 +137,8 @@ export async function listItem(
   let result: Awaited<ReturnType<typeof listOwnItem>>;
   try {
     result = await listOwnItem(viewer.id, parsed.data.id);
-  } catch {
+  } catch (error) {
+    reportUnexpected("listItem", error);
     return { formError: "unexpected" };
   }
   if (result !== "listed") return { formError: result };
@@ -155,7 +159,8 @@ export async function hideItem(
   let result: Awaited<ReturnType<typeof hideOwnItem>>;
   try {
     result = await hideOwnItem(viewer.id, parsed.data.id, communityToday());
-  } catch {
+  } catch (error) {
+    reportUnexpected("hideItem", error);
     return { formError: "unexpected" };
   }
   if (result === "stale") return { formError: "stale" };
@@ -180,7 +185,8 @@ export async function retireOwnItem(
       parsed.data.id,
       communityToday(),
     );
-  } catch {
+  } catch (error) {
+    reportUnexpected("retireOwnItem", error);
     return { formError: "unexpected" };
   }
   if (result !== "retired") return { formError: result };
@@ -201,7 +207,8 @@ export async function deleteItem(
   let result: Awaited<ReturnType<typeof deleteOwnItem>>;
   try {
     result = await deleteOwnItem(viewer.id, parsed.data.id);
-  } catch {
+  } catch (error) {
+    reportUnexpected("deleteItem", error);
     return { formError: "unexpected" };
   }
   if (result !== "deleted") return { formError: result };

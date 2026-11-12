@@ -15,8 +15,12 @@ function renderBrowseAt(pathname: string) {
 }
 
 describe("NavLink (Browse)", () => {
-  test.each(["/", "/items/x"])("is current on %s", (pathname) => {
-    expect(renderBrowseAt(pathname)).toHaveAttribute("aria-current", "page");
+  // "page" on the linked page, "true" on a page inside its section (12a).
+  test.each([
+    ["/", "page"],
+    ["/items/x", "true"],
+  ])("is current on %s (%s)", (pathname, current) => {
+    expect(renderBrowseAt(pathname)).toHaveAttribute("aria-current", current);
   });
 
   test.each(["/house-rules", "/itemsx", "/my/items"])(

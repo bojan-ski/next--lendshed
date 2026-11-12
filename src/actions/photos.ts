@@ -18,6 +18,7 @@ import {
   firstOfNextMonth,
   formatDate,
 } from "@/lib/dates/dates";
+import { reportUnexpected } from "@/lib/feedback/report";
 import { uploadCapRefusal } from "@/lib/photos/caps";
 import { encodeItemPhoto } from "@/lib/photos/encode";
 import { itemPhotoSchema } from "@/lib/schemas/photos";
@@ -78,7 +79,8 @@ export async function uploadItemPhoto(
     let url: string;
     try {
       ({ url } = await getPhotoStorage().put(key, encoded.bytes, "image/webp"));
-    } catch {
+    } catch (error) {
+      reportUnexpected("uploadItemPhoto", error);
       // The log row stays and counts towards the caps.
       await deletePendingBlobs([key]);
       return { formError: "unexpected" };
@@ -92,7 +94,8 @@ export async function uploadItemPhoto(
       bytes,
     });
     if (result === "stale") return { formError: "stale" };
-  } catch {
+  } catch (error) {
+    reportUnexpected("uploadItemPhoto", error);
     return { formError: "unexpected" };
   }
 

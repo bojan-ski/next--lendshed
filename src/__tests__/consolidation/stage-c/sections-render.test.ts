@@ -2,6 +2,7 @@ import { isRedirectError } from "next/dist/client/components/redirect-error";
 import { createElement, type ReactNode } from "react";
 import { prerender } from "react-dom/static";
 import BrowseSection from "@/components/browse/BrowseSection";
+import CategoriesSection from "@/components/categories/CategoriesSection";
 import ItemDetailSection from "@/components/items/ItemDetailSection";
 import MemberProfileSection from "@/components/profiles/MemberProfileSection";
 import {
@@ -9,11 +10,12 @@ import {
   getItemForViewer,
   getMemberProfile,
 } from "@/data/browse";
-import { getCategories } from "@/data/categories";
+import { getAdminCategories, getCategories } from "@/data/categories";
 import { getViewer } from "@/data/viewer";
 import { communityToday } from "@/lib/dates/dates";
 import { env } from "@/lib/env/server";
 import { t } from "@/lib/text/interpolate";
+import { categories } from "@/strings/categories";
 import { home } from "@/strings/home";
 import { itemPage } from "@/strings/itemPage";
 import { photos } from "@/strings/photos";
@@ -23,7 +25,10 @@ import type { BrowsePageDTO, ItemCardDTO, ItemDetailDTO } from "@/types/item";
 import type { ViewerDTO } from "@/types/viewer";
 
 vi.mock("@/data/viewer", () => ({ getViewer: vi.fn() }));
-vi.mock("@/data/categories", () => ({ getCategories: vi.fn() }));
+vi.mock("@/data/categories", () => ({
+  getCategories: vi.fn(),
+  getAdminCategories: vi.fn(),
+}));
 vi.mock("@/data/browse", () => ({
   getBrowseItems: vi.fn(),
   getItemForViewer: vi.fn(),
@@ -105,6 +110,41 @@ const browsePage = (overrides: Partial<BrowsePageDTO> = {}): BrowsePageDTO => ({
 
 const browse = (searchParams: Record<string, string> = {}) =>
   BrowseSection({ searchParams: Promise.resolve(searchParams) });
+
+// The guard is stage-b's admin-guard; these are the list's own states (12a,
+// test-coverage-auditor).
+describe("CategoriesSection", () => {
+  const organizer: ViewerDTO = { ...member, role: "organizer" };
+
+  test("no categories → the empty state, no table", async () => {
+    vi.mocked(getViewer).mockResolvedValue(organizer);
+    vi.mocked(getAdminCategories).mockResolvedValue([]);
+
+    const page = await html(await CategoriesSection());
+
+    // Under the page's list h2, so an h3 (12a, a11y-static-auditor).
+    expect(page).toContain(
+      `<h3 class="text-xl font-bold">${categories.emptyHeading}</h3>`,
+    );
+    expect(page).toContain(categories.emptyBody);
+    expect(page).not.toContain("<table");
+  });
+
+  test("an in-use row shows the line instead of Delete; an unused row has Delete", async () => {
+    vi.mocked(getViewer).mockResolvedValue(organizer);
+    vi.mocked(getAdminCategories).mockResolvedValue([
+      { id: "cat-1", name: "Garden", inUse: true },
+      { id: "cat-2", name: "Kitchen", inUse: false },
+    ]);
+
+    const page = await html(await CategoriesSection());
+
+    expect(page).toContain("<table");
+    expect(page).toContain(categories.inUse);
+    expect(page).not.toContain(t(categories.deleteFor, { name: "Garden" }));
+    expect(page).toContain(t(categories.deleteFor, { name: "Kitchen" }));
+  });
+});
 
 describe("BrowseSection", () => {
   beforeEach(() => {
@@ -279,6 +319,16 @@ describe("ItemDetailSection", () => {
 
     expect(page).toContain(`href="/members/owner-1"`);
     expect(page).toContain(t(itemPage.ownerArea, { area: "Oak Lane" }));
+    // A 44 px target whose focus ring no overflow box clips (12a, ui-reviewer).
+    const link = page.lastIndexOf(
+      "<a",
+      page.indexOf(`href="/members/owner-1"`),
+    );
+    const ownerRow = page.slice(page.lastIndexOf("<p", link), link);
+    expect(ownerRow).not.toMatch(/truncate|overflow/);
+    expect(/^<a [^>]*class="([^"]*)"/.exec(page.slice(link))?.[1]).toContain(
+      "min-h-11",
+    );
     expect(page).toContain("Two batteries");
     expect(page).toContain(t(itemPage.pickup, { notes: "Back gate" }));
     expect(page).toContain(itemPage.lendsForOne);
@@ -366,7 +416,10 @@ describe("MemberProfileSection", () => {
 
     expect(page).toContain("Ana P.");
     expect(page).toContain("Oak Lane");
-    expect(page).toContain(profile.emptyHeading);
+    expect(page).toContain(
+      `<h3 class="text-xl font-bold">${profile.emptyHeading}</h3>`,
+    );
+    expect(page.match(/<h2/g)).toHaveLength(1);
     expect(page).not.toMatch(/<a [^>]*h-12/);
   });
 

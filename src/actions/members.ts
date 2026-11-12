@@ -7,6 +7,7 @@ import type { Role } from "@/generated/prisma/enums";
 import { requireOrganizer } from "@/lib/auth/guards";
 import { createLinkToken } from "@/lib/auth/link-tokens";
 import { env } from "@/lib/env/server";
+import { reportUnexpected } from "@/lib/feedback/report";
 import { memberIdSchema } from "@/lib/schemas/members";
 import type {
   ResetGrantOutcome,
@@ -46,7 +47,8 @@ async function changeRole(
       memberId: parsed.data.id,
       to,
     });
-  } catch {
+  } catch (error) {
+    reportUnexpected("changeRole", error);
     return { formError: "unexpected" };
   }
   // A refusal keeps the card on screen so its notice is seen there.
@@ -74,7 +76,8 @@ export async function createResetLink(
       createdById: viewer.id,
       tokenHash,
     });
-  } catch {
+  } catch (error) {
+    reportUnexpected("createResetLink", error);
     return { formError: "unexpected" };
   }
   if (outcome.kind !== "created") return { formError: "stale" };

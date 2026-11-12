@@ -87,6 +87,9 @@ export type ItemDetailsField =
   | "maxLoanDays"
   | "pickupNotes";
 
+// The saved values ItemDetailsForm starts from; its props reach the browser.
+export type ItemDetailsDefaults = Pick<ItemEditDTO, "id" | ItemDetailsField>;
+
 // createItem never returns "stale"; updateItem never returns "capReached".
 export type ItemDetailsFormState = {
   fieldErrors?: Partial<Record<ItemDetailsField, string[]>>;

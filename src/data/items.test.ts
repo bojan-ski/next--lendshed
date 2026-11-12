@@ -1,4 +1,7 @@
-import { storedFileSize } from "@/__tests__/support/photo-storage";
+import {
+  storageControl,
+  storedFileSize,
+} from "@/__tests__/support/photo-storage";
 import { assertMigrated, createTestScope } from "@/__tests__/support/test-db";
 import { updateOwnContactDetails } from "@/data/account";
 import { isCategoryReferenced, isItemReferencedByLoan } from "@/data/db-errors";
@@ -18,6 +21,13 @@ import {
   retireItemByOwner,
   updateOwnItem,
 } from "./items";
+
+// The disk driver, with a switch to make deletes fail.
+vi.mock(
+  "@/lib/storage/storage",
+  async () =>
+    (await import("@/__tests__/support/photo-storage")).photoStorageModule,
+);
 
 vi.setConfig({ testTimeout: 60_000, hookTimeout: 60_000 });
 
@@ -377,10 +387,14 @@ async function fill(ownerId: string, count: number, status: ItemStatus) {
   });
 }
 
-// Holds a row so the transactions started meanwhile queue behind it.
+// Holds a row until released, so the transactions started meanwhile queue
+// behind it; `queued(n)` waits until n backends wait on it, directly or behind
+// one that does. A fixed pause lost that race under full-suite load (12a).
 function holdRow(table: "item" | "user", id: string) {
-  let rowHeld!: () => void;
-  const held = new Promise<void>((resolve) => (rowHeld = resolve));
+  let rowHeld!: (pid: number) => void;
+  let release!: () => void;
+  const held = new Promise<number>((resolve) => (rowHeld = resolve));
+  const released = new Promise<void>((resolve) => (release = resolve));
   const done = db.$transaction(
     async (tx) => {
       if (table === "item") {
@@ -388,15 +402,34 @@ function holdRow(table: "item" | "user", id: string) {
       } else {
         await tx.$queryRaw`SELECT id FROM "user" WHERE id = ${id} FOR UPDATE`;
       }
-      rowHeld();
-      await tx.$executeRaw`SELECT pg_sleep(2)`;
+      const [{ pid }] = await tx.$queryRaw<
+        { pid: number }[]
+      >`SELECT pg_backend_pid() AS pid`;
+      rowHeld(pid);
+      await released;
     },
     { maxWait: 15_000, timeout: 30_000 },
   );
-  return { held, done };
+  async function queued(count: number) {
+    const pid = await held;
+    await vi.waitFor(
+      async () => {
+        const [{ waiting }] = await db.$queryRaw<{ waiting: number }[]>`
+          WITH RECURSIVE chain AS (
+            SELECT a.pid FROM pg_stat_activity a
+            WHERE ${pid}::int = ANY (pg_blocking_pids(a.pid))
+            UNION
+            SELECT a.pid FROM pg_stat_activity a
+            JOIN chain c ON c.pid = ANY (pg_blocking_pids(a.pid))
+          )
+          SELECT count(*)::int AS waiting FROM chain`;
+        expect(waiting).toBeGreaterThanOrEqual(count);
+      },
+      { timeout: 15_000, interval: 50 },
+    );
+  }
+  return { held, queued, release, done };
 }
-
-const pause = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 describe("countActiveOwnItems", () => {
   test("counts the owner's hidden and listed items, never retired or others'", async () => {
@@ -567,8 +600,10 @@ describe("listOwnItem", () => {
     await hold.held;
 
     const list = listOwnItem(ownerId, id);
-    await pause(500);
+    await hold.queued(1);
     const clear = updateOwnContactDetails(ownerId, null, TODAY);
+    await hold.queued(2);
+    hold.release();
     const [listed, cleared] = await Promise.all([list, clear, hold.done]);
 
     expect([listed, cleared]).toEqual(["listed", "locked"]);
@@ -585,8 +620,10 @@ describe("listOwnItem", () => {
     await hold.held;
 
     const clear = updateOwnContactDetails(ownerId, null, TODAY);
-    await pause(500);
+    await hold.queued(1);
     const list = listOwnItem(ownerId, id);
+    await hold.queued(2);
+    hold.release();
     const [cleared, listed] = await Promise.all([clear, list, hold.done]);
 
     expect([cleared, listed]).toEqual(["saved", "needsContactDetails"]);
@@ -833,6 +870,42 @@ describe("the photo outbox on retire and delete", () => {
     expect(await storedFileSize(photo.photoKey)).toBeNull();
     expect(await queueRow(photo.photoKey)).toBeNull();
   });
+
+  // The change commits; the file stays queued for the daily retry (12a,
+  // test-coverage-auditor).
+  test.each([
+    [
+      "retire",
+      (ownerId: string, id: string) => retireItemByOwner(ownerId, id, TODAY),
+      "retired",
+    ],
+    [
+      "delete",
+      (ownerId: string, id: string) => deleteOwnItem(ownerId, id),
+      "deleted",
+    ],
+  ] as const)(
+    "a %s whose after-commit file delete fails still succeeds and leaves the file queued",
+    async (_case, act, outcome) => {
+      const ownerId = await owner();
+      const photo = await scope.createStoredPhoto();
+      const { id } = await scope.createItem({ ownerId, photo });
+      storageControl.failDelete = new Error("storage down");
+
+      try {
+        expect(await act(ownerId, id)).toBe(outcome);
+      } finally {
+        storageControl.reset();
+      }
+
+      expect(await queueRow(photo.photoKey)).toMatchObject({
+        bytes: photo.photoBytes,
+        attempts: 1,
+        lastError: "Error: storage down",
+      });
+      expect(await storedFileSize(photo.photoKey)).toBe(photo.photoBytes);
+    },
+  );
 
   test("a hasLoans delete keeps the photo and queues nothing", async () => {
     const ownerId = await owner();

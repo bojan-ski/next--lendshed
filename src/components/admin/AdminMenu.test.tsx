@@ -35,14 +35,14 @@ describe("AdminMenu", () => {
     expect(links.invitations).not.toHaveAttribute("aria-current");
   });
 
-  test.each(["/admin/members", "/admin/members/member-1"])(
-    "Members is current on %s",
-    (pathname) => {
-      const links = linksAt(pathname);
-      expect(links.members).toHaveAttribute("aria-current", "page");
-      expect(links.invitations).not.toHaveAttribute("aria-current");
-    },
-  );
+  test.each([
+    ["/admin/members", "page"],
+    ["/admin/members/member-1", "true"],
+  ])("Members is current on %s (%s)", (pathname, current) => {
+    const links = linksAt(pathname);
+    expect(links.members).toHaveAttribute("aria-current", current);
+    expect(links.invitations).not.toHaveAttribute("aria-current");
+  });
 
   test("Invitations is current only on its own page", () => {
     const links = linksAt("/admin/invitations");

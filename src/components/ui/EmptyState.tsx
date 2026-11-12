@@ -7,6 +7,8 @@ type EmptyStateProps = {
   heading: string;
   body: string;
   action?: ReactNode;
+  // h3 when the empty state sits under a section's own h2.
+  headingLevel?: "h2" | "h3";
 };
 
 export default function EmptyState({
@@ -14,11 +16,12 @@ export default function EmptyState({
   heading,
   body,
   action,
+  headingLevel: Heading = "h2",
 }: EmptyStateProps) {
   return (
     <Card className="flex flex-col items-center gap-3 px-6 py-10 text-center">
       <Icon name={icon} size={48} aria-hidden className="text-muted" />
-      <h2 className="text-xl font-bold">{heading}</h2>
+      <Heading className="text-xl font-bold">{heading}</Heading>
       <p className="text-muted">{body}</p>
       {action}
     </Card>

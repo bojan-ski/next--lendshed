@@ -16,7 +16,7 @@ import { communityToday } from "@/lib/dates/dates";
 import { itemStatus } from "@/lib/text/status";
 import { items } from "@/strings/items";
 import { photos } from "@/strings/photos";
-import type { ItemEditDTO } from "@/types/item";
+import type { ItemDetailsDefaults, ItemEditDTO } from "@/types/item";
 
 function EditCard({
   id,
@@ -52,6 +52,21 @@ function RemoveControl({ item }: { item: ItemEditDTO }) {
     return <RetireItemButton itemId={item.id} title={item.title} />;
   }
   return <p className="text-sm text-muted">{items.blockedLine}</p>;
+}
+
+// Island props serialise to the browser: only what the form fills in.
+function detailsDefaults(item: ItemEditDTO): ItemDetailsDefaults {
+  const { id, title, description, categoryId, condition } = item;
+  const { maxLoanDays, pickupNotes } = item;
+  return {
+    id,
+    title,
+    description,
+    categoryId,
+    condition,
+    maxLoanDays,
+    pickupNotes,
+  };
 }
 
 // Guards itself: the (app) layout doesn't re-run on a soft navigation. Someone
@@ -113,7 +128,10 @@ export default async function ItemEditSection({
             />
           </EditCard>
           <EditCard id="details" heading={items.detailsHeading}>
-            <ItemDetailsForm categories={categories} item={item} />
+            <ItemDetailsForm
+              categories={categories}
+              item={detailsDefaults(item)}
+            />
           </EditCard>
           <EditCard id="remove" heading={items.removeHeading}>
             <RemoveControl item={item} />

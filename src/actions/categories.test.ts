@@ -141,14 +141,17 @@ describe("createCategory", () => {
     expect(updateTag).not.toHaveBeenCalled();
   });
 
-  test("a data failure is unexpected and revalidates nothing", async () => {
+  test("a data failure is unexpected, keeps the typed name, is logged and revalidates nothing", async () => {
     await actAs("organizer");
+    const logged = vi.spyOn(console, "error").mockImplementation(() => {});
     vi.mocked(insertCategory).mockRejectedValueOnce(new Error("boom"));
-    const state = await createCategory(
-      idleNew,
-      form({ name: scope.categoryName("Broken") }),
+    const typed = scope.categoryName("Broken");
+    const state = await createCategory(idleNew, form({ name: typed }));
+    expect(state).toEqual({ formError: "unexpected", values: { name: typed } });
+    expect(logged).toHaveBeenCalledWith(
+      "createCategory: unexpected",
+      expect.objectContaining({ message: "boom" }),
     );
-    expect(state).toEqual({ formError: "unexpected" });
     expect(updateTag).not.toHaveBeenCalled();
   });
 });
@@ -237,15 +240,17 @@ describe("renameCategory", () => {
     });
   });
 
-  test("a data failure is unexpected", async () => {
+  test("a data failure is unexpected and keeps the typed name", async () => {
     await actAs("organizer");
+    vi.spyOn(console, "error").mockImplementation(() => {});
     const target = await scope.createCategory("Fragile");
     vi.mocked(updateCategoryName).mockRejectedValueOnce(new Error("boom"));
+    const typed = scope.categoryName("Other");
     const state = await renameCategory(
       idleRename,
-      form({ id: target.id, name: scope.categoryName("Other") }),
+      form({ id: target.id, name: typed }),
     );
-    expect(state).toEqual({ formError: "unexpected" });
+    expect(state).toEqual({ formError: "unexpected", values: { name: typed } });
     expect(updateTag).not.toHaveBeenCalled();
   });
 });

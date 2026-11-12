@@ -42,17 +42,18 @@ function Details({ item }: { item: ItemDetailDTO }) {
           ? itemPage.lendsForOne
           : t(itemPage.lendsForOther, { days: item.maxLoanDays })}
       </p>
+      {/* Only the area truncates: an overflow box would clip the link's ring. */}
       <p className="flex min-w-0 items-center gap-3">
         <Avatar initials={initialsOf(item.owner.displayName)} aria-hidden />
-        <span className="min-w-0 truncate whitespace-nowrap">
+        <span className="flex min-w-0 items-center">
           <Link
             href={`/members/${item.owner.id}`}
-            className="font-bold text-accent underline underline-offset-4"
+            className="inline-flex min-h-11 shrink-0 items-center font-bold text-accent underline underline-offset-4"
           >
             {item.owner.displayName}
           </Link>
           {item.owner.area && (
-            <span className="text-muted">
+            <span className="min-w-0 truncate whitespace-pre text-muted">
               {t(itemPage.ownerArea, { area: item.owner.area })}
             </span>
           )}

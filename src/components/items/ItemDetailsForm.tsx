@@ -12,15 +12,15 @@ import { errors } from "@/strings/errors";
 import { items } from "@/strings/items";
 import type { CategoryDTO } from "@/types/categories";
 import type {
+  ItemDetailsDefaults,
   ItemDetailsField,
   ItemDetailsFormState,
-  ItemEditDTO,
 } from "@/types/item";
 
 type ItemDetailsFormProps = {
   categories: CategoryDTO[];
   // Edit mode when present; create mode (step 1 of 2) otherwise.
-  item?: ItemEditDTO;
+  item?: ItemDetailsDefaults;
 };
 
 const initialState: ItemDetailsFormState = {};
@@ -35,7 +35,9 @@ async function saveAndAnnounce(
   return next;
 }
 
-function savedValues(item?: ItemEditDTO): Record<ItemDetailsField, string> {
+function savedValues(
+  item?: ItemDetailsDefaults,
+): Record<ItemDetailsField, string> {
   return {
     title: item?.title ?? "",
     description: item?.description ?? "",

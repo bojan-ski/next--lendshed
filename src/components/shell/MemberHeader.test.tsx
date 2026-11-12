@@ -40,15 +40,21 @@ describe("MemberHeader", () => {
     expect(links[1]).toHaveAttribute("href", "/my/items");
   });
 
-  test.each(["/my/items", "/my/items/new", "/my/items/item-1/edit"])(
-    "My items is current on %s, and Browse isn't",
-    (pathname) => {
+  // "page" only on the linked page itself; "true" for a page inside its section
+  // (12a, route/a11y auditors).
+  test.each([
+    ["/my/items", "page"],
+    ["/my/items/new", "true"],
+    ["/my/items/item-1/edit", "true"],
+  ])(
+    "My items is current on %s (%s), and Browse isn't",
+    (pathname, current) => {
       vi.mocked(usePathname).mockReturnValue(pathname);
       render(<MemberHeader />);
       const navigation = screen.getByRole("navigation", { name: nav.label });
       expect(
         within(navigation).getByRole("link", { name: nav.myItems }),
-      ).toHaveAttribute("aria-current", "page");
+      ).toHaveAttribute("aria-current", current);
       expect(
         within(navigation).getByRole("link", { name: nav.browse }),
       ).not.toHaveAttribute("aria-current");
@@ -70,19 +76,19 @@ describe("MemberHeader", () => {
     expect(within(navigation).getAllByRole("listitem")).toHaveLength(3);
   });
 
-  test.each(["/admin", "/admin/invitations"])(
-    "Organizer is current on %s",
-    async (pathname) => {
-      vi.mocked(usePathname).mockReturnValue(pathname);
-      const navigation = await renderWithSlotFor({
-        ...member,
-        role: "organizer",
-      });
-      expect(
-        within(navigation).getByRole("link", { name: nav.organizer }),
-      ).toHaveAttribute("aria-current", "page");
-    },
-  );
+  test.each([
+    ["/admin", "page"],
+    ["/admin/invitations", "true"],
+  ])("Organizer is current on %s (%s)", async (pathname, current) => {
+    vi.mocked(usePathname).mockReturnValue(pathname);
+    const navigation = await renderWithSlotFor({
+      ...member,
+      role: "organizer",
+    });
+    expect(
+      within(navigation).getByRole("link", { name: nav.organizer }),
+    ).toHaveAttribute("aria-current", current);
+  });
 
   test.each([
     ["a member", member],

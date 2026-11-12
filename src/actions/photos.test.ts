@@ -17,7 +17,9 @@ import { attachItemPhoto, getUploadCounts } from "@/data/photos";
 import { db } from "@/db";
 import {
   addDays,
+  communityMidnight,
   communityToday,
+  firstOfMonth,
   firstOfNextMonth,
   formatDate,
 } from "@/lib/dates/dates";
@@ -383,17 +385,15 @@ describe("uploadItemPhoto — caps", () => {
       dayCount: 20,
     });
 
+    const today = communityToday();
     await upload(id, asFile(await cameraJpeg()));
 
     const [userId, since] = vi.mocked(getUploadCounts).mock.calls[0];
     expect(userId).toBe(viewer.id);
-    expect(since.dayStart.getTime()).toBeLessThanOrEqual(Date.now());
-    expect(Date.now() - since.dayStart.getTime()).toBeLessThan(
-      25 * 60 * 60 * 1000,
-    );
-    expect(since.monthStart.getTime()).toBeLessThanOrEqual(
-      since.dayStart.getTime(),
-    );
+    expect(since).toEqual({
+      monthStart: communityMidnight(firstOfMonth(today)),
+      dayStart: communityMidnight(today),
+    });
   });
 });
 
@@ -410,6 +410,26 @@ describe("uploadItemPhoto — storage failure", () => {
     const key = storageControl.putKeys.at(-1)!;
     expect(await queueRow(key)).toBeNull();
     expect(await uploadRows(viewer.id)).toHaveLength(1);
+    expect((await itemRow(id)).photoKey).toBeNull();
+    expect(refresh).not.toHaveBeenCalled();
+  });
+
+  // The reservation made before storing keeps the stored file referenced:
+  // never an orphan the daily job can't find (12a, test-coverage-auditor).
+  test("an attach that throws after the put → unexpected; the stored file stays queued", async () => {
+    const viewer = await actAs();
+    const { id } = await scope.createItem({ ownerId: viewer.id });
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    vi.mocked(attachItemPhoto).mockRejectedValueOnce(new Error("lost"));
+
+    expect(await upload(id, asFile(await cameraJpeg()))).toEqual({
+      formError: "unexpected",
+    });
+
+    const key = storageControl.putKeys.at(-1)!;
+    const [logged] = await uploadRows(viewer.id);
+    expect(await queueRow(key)).toMatchObject({ bytes: logged.bytes });
+    expect(await storedFileSize(key)).toBe(logged.bytes);
     expect((await itemRow(id)).photoKey).toBeNull();
     expect(refresh).not.toHaveBeenCalled();
   });

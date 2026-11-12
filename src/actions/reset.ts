@@ -5,6 +5,7 @@ import { z } from "zod";
 import { resetPasswordThroughGrant } from "@/data/reset-grants";
 import { hashLinkToken } from "@/lib/auth/link-tokens";
 import { setFlash } from "@/lib/feedback/flash";
+import { reportUnexpected } from "@/lib/feedback/report";
 import { joinTokenSchema } from "@/lib/schemas/invitations";
 import { resetPasswordSchema } from "@/lib/schemas/members";
 import type { ResetOutcome, ResetPasswordState } from "@/types/auth";
@@ -35,7 +36,8 @@ export async function resetPasswordWithGrant(
       tokenHash: hashLinkToken(parsed.data.token),
       password: parsed.data.password,
     });
-  } catch {
+  } catch (error) {
+    reportUnexpected("resetPasswordWithGrant", error);
     return { formError: "unexpected" };
   }
   if (outcome.kind === "invalidToken") return { linkBroken: true };

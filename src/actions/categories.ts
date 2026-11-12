@@ -8,6 +8,7 @@ import {
   updateCategoryName,
 } from "@/data/categories";
 import { requireOrganizer } from "@/lib/auth/guards";
+import { reportUnexpected } from "@/lib/feedback/report";
 import {
   categoryIdSchema,
   categorySchema,
@@ -43,8 +44,9 @@ export async function createCategory(
   let result: Awaited<ReturnType<typeof insertCategory>>;
   try {
     result = await insertCategory(parsed.data.name);
-  } catch {
-    return { formError: "unexpected" };
+  } catch (error) {
+    reportUnexpected("createCategory", error);
+    return { formError: "unexpected", values: echoName(formData) };
   }
   if (result === "duplicate") {
     return {
@@ -79,8 +81,9 @@ export async function renameCategory(
   let result: Awaited<ReturnType<typeof updateCategoryName>>;
   try {
     result = await updateCategoryName(parsed.data);
-  } catch {
-    return { formError: "unexpected" };
+  } catch (error) {
+    reportUnexpected("renameCategory", error);
+    return { formError: "unexpected", values: echoName(formData) };
   }
   if (result === "missing") return { formError: "stale" };
   if (result === "duplicate") {
@@ -106,7 +109,8 @@ export async function deleteCategory(
   let result: Awaited<ReturnType<typeof removeCategory>>;
   try {
     result = await removeCategory(parsed.data.id);
-  } catch {
+  } catch (error) {
+    reportUnexpected("deleteCategory", error);
     return { formError: "unexpected" };
   }
   if (result === "missing") return { formError: "stale" };

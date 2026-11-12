@@ -28,7 +28,7 @@ function visibleItemWhere(): Prisma.ItemWhereInput {
 }
 
 const newestFirst = [
-  { listedAt: "desc" },
+  { listedAt: { sort: "desc", nulls: "last" } },
   { id: "desc" },
 ] satisfies Prisma.ItemOrderByWithRelationInput[];
 

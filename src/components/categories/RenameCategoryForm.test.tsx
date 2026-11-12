@@ -106,9 +106,11 @@ describe("RenameCategoryForm", () => {
     await screen.findByRole("button", { name: RENAME });
     expect(getActiveToast()?.key).toBe("categoryRenamed");
     expect(screen.queryByLabelText(FIELD)).toBeNull();
-    expect(
-      screen.getByRole("heading", { name: categories.listHeading }),
-    ).toHaveFocus();
+    await vi.waitFor(() =>
+      expect(
+        screen.getByRole("heading", { name: categories.listHeading }),
+      ).toHaveFocus(),
+    );
   });
 
   test("a stale rename replaces the editor with the focused stale notice", async () => {

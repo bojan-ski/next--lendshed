@@ -6,6 +6,7 @@ import { updateOwnContactDetails, updateOwnProfile } from "@/data/account";
 import { requireViewer } from "@/lib/auth/guards";
 import { forwardChangePassword } from "@/lib/auth/sign-in";
 import { communityToday } from "@/lib/dates/dates";
+import { reportUnexpected } from "@/lib/feedback/report";
 import {
   changePasswordSchema,
   contactDetailsSchema,
@@ -43,7 +44,8 @@ export async function updateProfile(
 
   try {
     await updateOwnProfile(viewer.id, parsed.data);
-  } catch {
+  } catch (error) {
+    reportUnexpected("updateProfile", error);
     return { formError: "unexpected", ...echo };
   }
 
@@ -74,7 +76,8 @@ export async function updateContactDetails(
       parsed.data.contactDetails,
       communityToday(),
     );
-  } catch {
+  } catch (error) {
+    reportUnexpected("updateContactDetails", error);
     return { formError: "unexpected", ...echo };
   }
   // A refused clear shows the saved details again, so nothing is echoed.

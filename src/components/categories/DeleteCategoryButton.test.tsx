@@ -95,11 +95,15 @@ describe("DeleteCategoryButton", () => {
 
     await userEvent.click(confirmButton());
 
-    expect(screen.queryByRole("button", { name: DELETE })).toBeNull();
+    await vi.waitFor(() =>
+      expect(screen.queryByRole("button", { name: DELETE })).toBeNull(),
+    );
     expect(getActiveToast()?.key).toBe("categoryDeleted");
-    expect(
-      screen.getByRole("heading", { name: categories.listHeading }),
-    ).toHaveFocus();
+    await vi.waitFor(() =>
+      expect(
+        screen.getByRole("heading", { name: categories.listHeading }),
+      ).toHaveFocus(),
+    );
   });
 
   test("a stale delete shows only the focused stale notice", async () => {

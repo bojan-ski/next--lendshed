@@ -225,6 +225,16 @@ describe("getBrowseItems order and paging", () => {
       [...ids].sort().reverse(),
     );
   });
+
+  // Every listing write sets listedAt, but nothing in the database enforces it;
+  // a listed row without one must not jump to the top (12a, contract-auditor).
+  test("a listed item without listedAt sorts last", async () => {
+    const gap = await category("Gap");
+    const dated = await item(gap, { listedAt: new Date(Date.UTC(2020, 0, 1)) });
+    const undated = await item(gap);
+    await db.item.update({ where: { id: undated }, data: { listedAt: null } });
+    expect(await browseIds({ category: gap })).toEqual([dated, undated]);
+  });
 });
 
 describe("Free today", () => {

@@ -92,9 +92,11 @@ describe("RetireItemButton", () => {
 
     await userEvent.click(confirmButton());
 
-    expect(screen.queryByRole("button")).toBeNull();
+    await vi.waitFor(() => expect(screen.queryByRole("button")).toBeNull());
     expect(getActiveToast()?.key).toBe("itemRetired");
-    expect(screen.getByRole("heading", { name: TITLE })).toHaveFocus();
+    await vi.waitFor(() =>
+      expect(screen.getByRole("heading", { name: TITLE })).toHaveFocus(),
+    );
   });
 
   test.each([

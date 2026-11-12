@@ -104,14 +104,37 @@ describe("getUploadCounts", () => {
     );
   });
 
-  test("an item's photoBytes count as stored", async () => {
+  // The month cap is app-wide. A window starting in the future holds only the
+  // rows this test dates into it, so the count is exact on a shared database.
+  test("monthCount is every member's rows from monthStart on, exactly", async () => {
+    const userId = await owner();
+    const other = await owner();
+    const monthStart = new Date(Date.now() + 365 * 24 * 60 * 60 * 1000);
+    const at = (offset: number) => new Date(monthStart.getTime() + offset);
+    await db.uploadLog.createMany({
+      data: [
+        { userId, bytes: 10, createdAt: at(0) },
+        { userId: other, bytes: 10, createdAt: at(1) },
+        { userId: other, bytes: 10, createdAt: at(-1) },
+      ],
+    });
+
+    const counts = await getUploadCounts(userId, {
+      monthStart,
+      dayStart: monthStart,
+    });
+
+    expect(counts.monthCount).toBe(2);
+  });
+
+  test("another member's item's photoBytes count as stored", async () => {
     const userId = await owner();
     const since = { monthStart: new Date(), dayStart: new Date() };
     const before = await getUploadCounts(userId, since);
 
     const photo = await scope.createStoredPhoto();
     await scope.createItem({
-      ownerId: userId,
+      ownerId: await owner(),
       photo: { ...photo, photoBytes: 9_000_000 },
     });
 

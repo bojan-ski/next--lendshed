@@ -178,6 +178,44 @@ describe("ItemDetailsForm", () => {
     },
   );
 
+  // React resets the form after every submit; the echoed values, not the saved
+  // ones, must come back (12a, test-coverage-auditor).
+  test.each([
+    ["capReached on create", createItem, "capReached", undefined],
+    ["unexpected on save", updateItem, "unexpected", ITEM],
+  ] as const)(
+    "%s keeps what was typed",
+    async (_case, action, formError, item) => {
+      await submit(
+        action,
+        {
+          formError,
+          values: {
+            title: "Typed title",
+            categoryId: "cat-1",
+            condition: "good",
+            maxLoanDays: "4",
+            description: "Typed description",
+            pickupNotes: "Typed notes",
+          },
+        },
+        item,
+      );
+
+      await screen.findByRole("button", {
+        name: item ? items.saveChanges : items.saveAndContinue,
+      });
+      await vi.waitFor(() =>
+        expect(field(items.titleLabel)).toHaveValue("Typed title"),
+      );
+      expect(field(items.categoryLabel)).toHaveValue("cat-1");
+      expect(field(items.conditionLabel)).toHaveValue("good");
+      expect(field(items.maxLoanDaysLabel)).toHaveValue(4);
+      expect(field(items.descriptionLabel)).toHaveValue("Typed description");
+      expect(field(items.pickupNotesLabel)).toHaveValue("Typed notes");
+    },
+  );
+
   test("a stale save focuses the stale notice", async () => {
     await submit(updateItem, { formError: "stale" }, ITEM);
 
