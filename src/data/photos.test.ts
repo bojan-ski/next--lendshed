@@ -17,6 +17,22 @@ vi.mock(
     (await import("@/__tests__/support/photo-storage")).photoStorageModule,
 );
 
+// While a snapshot is open, `db` (in this file, the scope and photos.ts) is
+// that transaction's client.
+const snapshot = vi.hoisted(() => ({ tx: null as object | null }));
+vi.mock("@/db", async (importOriginal) => {
+  const { db } = await importOriginal<typeof import("@/db")>();
+  return {
+    db: new Proxy(db, {
+      get(target, key) {
+        const source = (snapshot.tx ?? target) as Record<PropertyKey, unknown>;
+        const value = source[key];
+        return typeof value === "function" ? value.bind(source) : value;
+      },
+    }),
+  };
+});
+
 vi.setConfig({ testTimeout: 60_000, hookTimeout: 60_000 });
 
 const scope = createTestScope();
@@ -28,6 +44,31 @@ afterAll(() => scope.cleanup());
 const owner = async () => (await scope.createTestUser()).id;
 const queueRow = (storageKey: string) =>
   db.pendingBlobDeletion.findUnique({ where: { storageKey } });
+
+// The month and storage sums are app-wide, and other files write those tables
+// meanwhile. One REPEATABLE READ snapshot sees only this test's writes, so a
+// before/after difference is exact; it is rolled back, leaving no rows.
+const ROLLBACK = Symbol("rollback");
+async function inOneSnapshot<T>(run: () => Promise<T>): Promise<T> {
+  let result: T | undefined;
+  try {
+    await db.$transaction(
+      async (tx) => {
+        snapshot.tx = tx;
+        try {
+          result = await run();
+        } finally {
+          snapshot.tx = null;
+        }
+        throw ROLLBACK;
+      },
+      { isolationLevel: "RepeatableRead", maxWait: 15_000, timeout: 30_000 },
+    );
+  } catch (error) {
+    if (error !== ROLLBACK) throw error;
+  }
+  return result as T;
+}
 
 // A stored, reserved file, as the action leaves it just before attaching.
 async function reservedPhoto(userId: string) {
@@ -81,27 +122,27 @@ describe("getUploadCounts", () => {
     expect(counts.dayCount).toBe(2);
   });
 
-  test("N new rows raise monthCount by at least N; queued bytes count as stored", async () => {
+  test("N new rows raise monthCount by N; queued bytes count as stored", async () => {
     const userId = await owner();
     const since = {
       monthStart: new Date(Date.now() - 1000),
       dayStart: new Date(0),
     };
-    const before = await getUploadCounts(userId, since);
-
-    await db.uploadLog.createMany({
-      data: Array.from({ length: 3 }, () => ({ userId, bytes: 5 })),
-    });
     const photo = await scope.createStoredPhoto();
-    await db.pendingBlobDeletion.create({
-      data: { storageKey: photo.photoKey, bytes: 7_000_000 },
-    });
-    const after = await getUploadCounts(userId, since);
 
-    expect(after.monthCount - before.monthCount).toBeGreaterThanOrEqual(3);
-    expect(after.storedBytes - before.storedBytes).toBeGreaterThanOrEqual(
-      7_000_000,
-    );
+    const [before, after] = await inOneSnapshot(async () => {
+      const first = await getUploadCounts(userId, since);
+      await db.uploadLog.createMany({
+        data: Array.from({ length: 3 }, () => ({ userId, bytes: 5 })),
+      });
+      await db.pendingBlobDeletion.create({
+        data: { storageKey: photo.photoKey, bytes: 7_000_000 },
+      });
+      return [first, await getUploadCounts(userId, since)];
+    });
+
+    expect(after.monthCount - before.monthCount).toBe(3);
+    expect(after.storedBytes - before.storedBytes).toBe(7_000_000);
   });
 
   // The month cap is app-wide. A window starting in the future holds only the
@@ -130,17 +171,22 @@ describe("getUploadCounts", () => {
   test("another member's item's photoBytes count as stored", async () => {
     const userId = await owner();
     const since = { monthStart: new Date(), dayStart: new Date() };
-    const before = await getUploadCounts(userId, since);
-
+    const ownerId = await owner();
+    // Made outside the snapshot: createItem would memoise a rolled-back one.
+    const { id: categoryId } = await scope.createCategory("Snapshot");
     const photo = await scope.createStoredPhoto();
-    await scope.createItem({
-      ownerId: await owner(),
-      photo: { ...photo, photoBytes: 9_000_000 },
+
+    const [before, after] = await inOneSnapshot(async () => {
+      const first = await getUploadCounts(userId, since);
+      await scope.createItem({
+        ownerId,
+        categoryId,
+        photo: { ...photo, photoBytes: 9_000_000 },
+      });
+      return [first, await getUploadCounts(userId, since)];
     });
 
-    expect(
-      (await getUploadCounts(userId, since)).storedBytes - before.storedBytes,
-    ).toBeGreaterThanOrEqual(9_000_000);
+    expect(after.storedBytes - before.storedBytes).toBe(9_000_000);
   });
 });
 
