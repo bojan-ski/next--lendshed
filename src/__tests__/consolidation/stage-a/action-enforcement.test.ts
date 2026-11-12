@@ -74,11 +74,14 @@ describe("action enforcement — derivation", () => {
 
   test("the built actions are exactly the expected set", () => {
     expect(exportedNames).toEqual([
+      "approveLoan",
+      "cancelLoan",
       "changePassword",
       "createCategory",
       "createInvitation",
       "createItem",
       "createResetLink",
+      "declineLoan",
       "deleteCategory",
       "deleteItem",
       "demoteMember",

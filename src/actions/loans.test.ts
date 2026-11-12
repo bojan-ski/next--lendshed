@@ -9,17 +9,23 @@ import {
 } from "@/__tests__/support/test-db";
 import { TEST_ZONES, useProcessTimeZone } from "@/__tests__/support/time-zone";
 import { fromDbDate } from "@/data/db-dates";
-import { insertLoanRequest } from "@/data/loans";
+import {
+  approveLoanRequest,
+  cancelLoanByParty,
+  declineLoanRequest,
+  insertLoanRequest,
+} from "@/data/loans";
 import { db } from "@/db";
 import type { ItemStatus, LoanStatus } from "@/generated/prisma/enums";
 import { addDays, communityToday } from "@/lib/dates/dates";
 import { FLASH_COOKIE } from "@/lib/feedback/toast";
 import { REQUEST_AHEAD_DAYS } from "@/lib/loans/limits";
-import { LOAN_MESSAGE_MAX } from "@/lib/schemas/loans";
+import { LOAN_MESSAGE_MAX, LOAN_REASON_MAX } from "@/lib/schemas/loans";
 import { t } from "@/lib/text/interpolate";
+import { loanActions } from "@/strings/loanActions";
 import { requestForm } from "@/strings/requestForm";
-import type { RequestLoanState } from "@/types/loan";
-import { requestLoan } from "./loans";
+import type { LoanDecisionState, RequestLoanState } from "@/types/loan";
+import { approveLoan, cancelLoan, declineLoan, requestLoan } from "./loans";
 
 vi.mock(
   "next/headers",
@@ -33,7 +39,13 @@ vi.mock(
 // Spied, not replaced: real queries unless a test overrides one call.
 vi.mock("@/data/loans", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/data/loans")>();
-  return { ...actual, insertLoanRequest: vi.fn(actual.insertLoanRequest) };
+  return {
+    ...actual,
+    insertLoanRequest: vi.fn(actual.insertLoanRequest),
+    approveLoanRequest: vi.fn(actual.approveLoanRequest),
+    declineLoanRequest: vi.fn(actual.declineLoanRequest),
+    cancelLoanByParty: vi.fn(actual.cancelLoanByParty),
+  };
 });
 
 vi.setConfig({ testTimeout: 60_000, hookTimeout: 60_000 });
@@ -512,5 +524,298 @@ describe.each(TEST_ZONES)("requestLoan — window in %s", (zone) => {
       expect(Object.keys((await request).fieldErrors ?? {})).toEqual([
         "startDate",
       ]);
+  });
+});
+
+const undecided: LoanDecisionState = {};
+const DECISIONS = [
+  ["approveLoan", approveLoan],
+  ["declineLoan", declineLoan],
+  ["cancelLoan", cancelLoan],
+] as const;
+
+// The signed-in owner of a fresh item with one loan on it borrowed by `otherId`.
+async function ownRequest(status: LoanStatus = "requested") {
+  const owner = await actAs();
+  const itemId = await item({ owner: owner.id });
+  const { id } = await loanOn(itemId, otherId, status, day(2), day(3));
+  return { owner, itemId, id };
+}
+
+// The signed-in borrower of a loan on an item `ownerId` owns.
+async function myRequest(status: LoanStatus = "requested") {
+  const borrower = await actAs();
+  const { id } = await loanOn(
+    await item(),
+    borrower.id,
+    status,
+    day(2),
+    day(3),
+  );
+  return { borrower, id };
+}
+
+const loanRow = (id: string) => db.loan.findUniqueOrThrow({ where: { id } });
+
+describe("loan decisions — guard and shape", () => {
+  test.each(DECISIONS)(
+    "%s signed out → /login before any parse or write",
+    async (_, action) => {
+      const { id } = await loanOn(
+        await item(),
+        otherId,
+        "requested",
+        day(2),
+        day(3),
+      );
+      mockNextRequest({ ip: scope.ip() });
+
+      expect(
+        await redirectTarget(action(undecided, form({ id, stage: "request" }))),
+      ).toMatch(/^\/login/);
+      expect((await loanRow(id)).status).toBe("requested");
+    },
+  );
+
+  test.each(DECISIONS)(
+    "%s with a missing or empty id → stale, no field error",
+    async (_, action) => {
+      await actAs();
+      expect(await action(undecided, form({ stage: "request" }))).toEqual({
+        formError: "stale",
+      });
+      expect(
+        await action(undecided, form({ id: "", stage: "request" })),
+      ).toEqual({ formError: "stale" });
+      expect(refresh).not.toHaveBeenCalled();
+    },
+  );
+
+  test("cancelLoan with a missing or unknown stage → stale, nothing written", async () => {
+    const { id } = await myRequest();
+    expect(await cancelLoan(undecided, form({ id }))).toEqual({
+      formError: "stale",
+    });
+    expect(await cancelLoan(undecided, form({ id, stage: "out" }))).toEqual({
+      formError: "stale",
+    });
+    expect((await loanRow(id)).status).toBe("requested");
+  });
+
+  test("a 301-character reason → fieldErrors.reason, echoed, nothing written; 300 is accepted", async () => {
+    const { id } = await ownRequest();
+    const tooLong = "x".repeat(LOAN_REASON_MAX + 1);
+
+    expect(await declineLoan(undecided, form({ id, reason: tooLong }))).toEqual(
+      {
+        fieldErrors: {
+          reason: [t(loanActions.reasonTooLong, { max: LOAN_REASON_MAX })],
+        },
+        values: { reason: tooLong },
+      },
+    );
+    expect((await loanRow(id)).status).toBe("requested");
+
+    const exact = "y".repeat(LOAN_REASON_MAX);
+    expect(await declineLoan(undecided, form({ id, reason: exact }))).toEqual({
+      flash: "loanDeclined",
+    });
+    expect((await loanRow(id)).statusReason).toBe(exact);
+  });
+
+  test("the reason is trimmed; whitespace-only is stored as null", async () => {
+    const first = await ownRequest();
+    await declineLoan(undecided, form({ id: first.id, reason: "  Away  " }));
+    expect((await loanRow(first.id)).statusReason).toBe("Away");
+
+    const second = await myRequest();
+    await cancelLoan(
+      undecided,
+      form({ id: second.id, stage: "request", reason: " \r\n " }),
+    );
+    expect((await loanRow(second.id)).statusReason).toBeNull();
+  });
+
+  test("server-controlled fields in the form are ignored", async () => {
+    const { id } = await ownRequest();
+    await declineLoan(
+      undecided,
+      form({
+        id,
+        status: "approved",
+        endedBy: "system",
+        ownerSeenAt: "2020-01-01T00:00:00Z",
+        borrowerId: ownerId,
+      }),
+    );
+    const row = await loanRow(id);
+    expect(row).toMatchObject({
+      status: "declined",
+      endedBy: "owner",
+      borrowerId: otherId,
+    });
+    expect(row.ownerSeenAt!.getTime()).toBeGreaterThan(Date.now() - 60_000);
+  });
+});
+
+describe("loan decisions — success", () => {
+  test("approveLoan → approved, refresh once, the flash returned, no tag, no cookie", async () => {
+    const { id } = await ownRequest();
+
+    expect(await approveLoan(undecided, form({ id }))).toEqual({
+      flash: "loanApproved",
+    });
+    expect((await loanRow(id)).status).toBe("approved");
+    expect(refresh).toHaveBeenCalledTimes(1);
+    expect(updateTag).not.toHaveBeenCalled();
+    expect(readCookie(FLASH_COOKIE)).toBeUndefined();
+  });
+
+  test("declineLoan → declined by the owner, refresh once, the flash returned", async () => {
+    const { id } = await ownRequest();
+
+    expect(await declineLoan(undecided, form({ id, reason: "Away" }))).toEqual({
+      flash: "loanDeclined",
+    });
+    expect(await loanRow(id)).toMatchObject({
+      status: "declined",
+      endedBy: "owner",
+      statusReason: "Away",
+    });
+    expect(refresh).toHaveBeenCalledTimes(1);
+    expect(updateTag).not.toHaveBeenCalled();
+    expect(readCookie(FLASH_COOKIE)).toBeUndefined();
+  });
+
+  test.each([
+    ["a request", "requested", "request"],
+    ["an approved loan", "approved", "loan"],
+  ] as const)(
+    "cancelLoan by the borrower on %s → cancelled by the borrower",
+    async (_, status, stage) => {
+      const { id } = await myRequest(status);
+
+      expect(await cancelLoan(undecided, form({ id, stage }))).toEqual({
+        flash: "loanCancelled",
+      });
+      expect(await loanRow(id)).toMatchObject({
+        status: "cancelled",
+        endedBy: "borrower",
+      });
+      expect(refresh).toHaveBeenCalledTimes(1);
+      expect(updateTag).not.toHaveBeenCalled();
+    },
+  );
+
+  test("cancelLoan by the owner on an approved loan → cancelled by the owner", async () => {
+    const { id } = await ownRequest("approved");
+    expect(await cancelLoan(undecided, form({ id, stage: "loan" }))).toEqual({
+      flash: "loanCancelled",
+    });
+    expect((await loanRow(id)).endedBy).toBe("owner");
+  });
+});
+
+describe("loan decisions — refusals", () => {
+  test("approve by the borrower → stale, no refresh, nothing written", async () => {
+    const { id } = await myRequest();
+    expect(await approveLoan(undecided, form({ id }))).toEqual({
+      formError: "stale",
+    });
+    expect((await loanRow(id)).status).toBe("requested");
+    expect(refresh).not.toHaveBeenCalled();
+  });
+
+  test("approve into a fixture approved loan → datesTaken, no refresh", async () => {
+    const { itemId, id } = await ownRequest();
+    await loanOn(itemId, ownerId, "approved", day(2), day(3));
+
+    expect(await approveLoan(undecided, form({ id }))).toEqual({
+      formError: "datesTaken",
+    });
+    expect((await loanRow(id)).status).toBe("requested");
+    expect(refresh).not.toHaveBeenCalled();
+  });
+
+  test("the owner cancelling a request, or declining an approved loan → stale", async () => {
+    const request = await ownRequest();
+    expect(
+      await cancelLoan(undecided, form({ id: request.id, stage: "request" })),
+    ).toEqual({ formError: "stale" });
+
+    const approved = await ownRequest("approved");
+    expect(await declineLoan(undecided, form({ id: approved.id }))).toEqual({
+      formError: "stale",
+    });
+    expect(refresh).not.toHaveBeenCalled();
+  });
+
+  test.each([
+    ["approveLoan", approveLoan, approveLoanRequest],
+    ["declineLoan", declineLoan, declineLoanRequest],
+    ["cancelLoan", cancelLoan, cancelLoanByParty],
+  ] as const)(
+    "%s: a data failure → reported, unexpected, nothing written",
+    async (name, action, data) => {
+      const { id } = await ownRequest("approved");
+      const report = vi.spyOn(console, "error").mockImplementation(() => {});
+      vi.mocked(data).mockRejectedValueOnce(new Error("boom"));
+
+      const state = await action(
+        undecided,
+        form({ id, stage: "loan", reason: "Typed" }),
+      );
+
+      expect(state.formError).toBe("unexpected");
+      if (name !== "approveLoan") {
+        expect(state.values).toEqual({ reason: "Typed" });
+      }
+      expect(report).toHaveBeenCalledWith(
+        `${name}: unexpected`,
+        expect.objectContaining({ name: "Error", message: "boom" }),
+      );
+      expect((await loanRow(id)).status).toBe("approved");
+      expect(refresh).not.toHaveBeenCalled();
+    },
+  );
+});
+
+// 00:30 in Belgrade on 15 June 2030 is 22:30Z on the 14th: approve and cancel
+// judge the loan by the community date whatever the process zone.
+describe.each(TEST_ZONES)("loan decisions — today in %s", (zone) => {
+  useProcessTimeZone(zone);
+  const NOW = new Date("2030-06-14T22:30:00Z");
+  const TODAY = "2030-06-15";
+  const YESTERDAY = "2030-06-14";
+
+  async function actAtNight() {
+    vi.useFakeTimers({ toFake: ["Date"], now: NOW });
+    return actAs();
+  }
+  afterEach(() => vi.useRealTimers());
+
+  test.each([
+    [TODAY, { flash: "loanApproved" }],
+    [YESTERDAY, { formError: "stale" }],
+  ])("a request starting %s → %j", async (startDate, expected) => {
+    const owner = await actAtNight();
+    const itemId = await item({ owner: owner.id });
+    const { id } = await loanOn(itemId, otherId, "requested", startDate, TODAY);
+    expect(await approveLoan(undecided, form({ id }))).toEqual(expected);
+  });
+
+  test("an approval that ended yesterday is lapsed: cancelling it is stale", async () => {
+    const borrower = await actAtNight();
+    const { id } = await loanOn(
+      await item(),
+      borrower.id,
+      "approved",
+      "2030-06-12",
+      YESTERDAY,
+    );
+    expect(await cancelLoan(undecided, form({ id, stage: "loan" }))).toEqual({
+      formError: "stale",
+    });
+    expect((await loanRow(id)).status).toBe("approved");
   });
 });

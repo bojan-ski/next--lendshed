@@ -458,7 +458,7 @@ describe("getLoanForViewer — the wire", () => {
       owner: { id: ownerId, displayName: "Olga M." },
       borrower: { id: borrowerId, displayName: "Ana P." },
       requestMessage: "Saturday morning?",
-      actions: [],
+      actions: ["cancel"],
     });
     expect(Object.keys(loan.item).sort()).toEqual(
       ["id", "title", "photo", "status", "viewable"].sort(),

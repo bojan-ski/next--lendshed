@@ -1,5 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { LOAN_HEADING_ID } from "@/components/loans/ids";
+import LoanActionsCard from "@/components/loans/LoanActionsCard";
 import LoanContactCard from "@/components/loans/LoanContactCard";
 import LoanNextSteps from "@/components/loans/LoanNextSteps";
 import Card from "@/components/ui/Card";
@@ -92,7 +94,11 @@ export default async function LoanDetailSection({
     <div className="flex flex-col gap-6">
       <div className="flex flex-col gap-3">
         <div className="flex flex-wrap items-center gap-3">
-          <h1 className="min-w-0 text-3xl font-bold wrap-break-word">
+          <h1
+            id={LOAN_HEADING_ID}
+            tabIndex={-1}
+            className="min-w-0 text-3xl font-bold wrap-break-word"
+          >
             {loan.item.title}
           </h1>
           <StatusLabel status={loanStatus[loan.status]} />
@@ -102,6 +108,7 @@ export default async function LoanDetailSection({
       </div>
       <div className="grid gap-6 lg:grid-cols-2">
         <div className="flex min-w-0 flex-col gap-6">
+          {loan.actions.length > 0 && <LoanActionsCard loan={loan} />}
           <LoanNextSteps loan={loan} today={today} />
           {loan.requestMessage !== null && <MessageCard loan={loan} />}
         </div>

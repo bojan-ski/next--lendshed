@@ -18,4 +18,7 @@ export const flash = {
   itemDeleted: "Item deleted.",
   photoSaved: "Photo saved.",
   requestSent: "Request sent.",
+  loanApproved: "Request approved.",
+  loanDeclined: "Request declined.",
+  loanCancelled: "Cancelled.",
 } as const satisfies Record<string, string>;

@@ -1,9 +1,27 @@
 import { z } from "zod";
 import { isIsoDate } from "@/lib/dates/dates";
 import { t } from "@/lib/text/interpolate";
+import { loanActions } from "@/strings/loanActions";
 import { requestForm } from "@/strings/requestForm";
 
 export const LOAN_MESSAGE_MAX = 500;
+// OQ-29 (assumed).
+export const LOAN_REASON_MAX = 300;
+
+// Browsers submit textarea line breaks as CRLF: normalise before counting.
+function optionalText(max: number, tooLong: string) {
+  return z
+    .string()
+    .nullish()
+    .transform((text) => (text ?? "").replace(/\r\n?/g, "\n"))
+    .pipe(
+      z
+        .string()
+        .trim()
+        .max(max, { error: t(tooLong, { max }) }),
+    )
+    .transform((text) => text || null);
+}
 
 const isoDate = z
   .string({ error: requestForm.dateInvalid })
@@ -17,20 +35,7 @@ export const requestLoanSchema = z
   .object({
     itemId: z.string().min(1),
     ...loanDates.shape,
-    // Browsers submit textarea line breaks as CRLF: normalise before counting.
-    message: z
-      .string()
-      .nullish()
-      .transform((text) => (text ?? "").replace(/\r\n?/g, "\n"))
-      .pipe(
-        z
-          .string()
-          .trim()
-          .max(LOAN_MESSAGE_MAX, {
-            error: t(requestForm.messageTooLong, { max: LOAN_MESSAGE_MAX }),
-          }),
-      )
-      .transform((text) => text || null),
+    message: optionalText(LOAN_MESSAGE_MAX, requestForm.messageTooLong),
   })
   .refine((input) => input.endDate >= input.startDate, {
     error: requestForm.endBeforeStart,
@@ -40,3 +45,16 @@ export const requestLoanSchema = z
   });
 
 export type RequestLoanInput = z.infer<typeof requestLoanSchema>;
+
+// A bad id is a stale screen, never a field error.
+export const loanIdSchema = z.object({ id: z.string().min(1) });
+
+export const reasonSchema = z.object({
+  id: loanIdSchema.shape.id,
+  reason: optionalText(LOAN_REASON_MAX, loanActions.reasonTooLong),
+});
+
+export type ReasonInput = z.infer<typeof reasonSchema>;
+
+// What the cancel form showed; a mismatch with the loan now is a stale screen.
+export const cancelStageSchema = z.enum(["request", "loan"]);

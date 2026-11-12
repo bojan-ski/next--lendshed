@@ -1,7 +1,15 @@
 import { z } from "zod";
 import { t } from "@/lib/text/interpolate";
+import { loanActions } from "@/strings/loanActions";
 import { requestForm } from "@/strings/requestForm";
-import { LOAN_MESSAGE_MAX, requestLoanSchema } from "./loans";
+import {
+  cancelStageSchema,
+  LOAN_MESSAGE_MAX,
+  LOAN_REASON_MAX,
+  loanIdSchema,
+  reasonSchema,
+  requestLoanSchema,
+} from "./loans";
 
 const valid = {
   itemId: "item-1",
@@ -91,5 +99,62 @@ describe("requestLoanSchema", () => {
       "message",
       "startDate",
     ]);
+  });
+});
+
+describe("reasonSchema", () => {
+  const reasonErrors = (reason: unknown) => {
+    const parsed = reasonSchema.safeParse({ id: "loan-1", reason });
+    return parsed.success ? {} : z.flattenError(parsed.error).fieldErrors;
+  };
+
+  test("the reason is trimmed; empty, whitespace-only or missing is null", () => {
+    expect(reasonSchema.parse({ id: "loan-1", reason: "  Away  " })).toEqual({
+      id: "loan-1",
+      reason: "Away",
+    });
+    for (const reason of ["", "  \r\n ", undefined, null]) {
+      expect(reasonSchema.parse({ id: "loan-1", reason }).reason).toBeNull();
+    }
+  });
+
+  test("300 characters pass; 301 fail on reason with the limit in the message", () => {
+    expect(reasonErrors("x".repeat(LOAN_REASON_MAX))).toEqual({});
+    expect(reasonErrors("x".repeat(LOAN_REASON_MAX + 1))).toEqual({
+      reason: [t(loanActions.reasonTooLong, { max: LOAN_REASON_MAX })],
+    });
+  });
+
+  test("a CRLF line break counts as one character", () => {
+    // Mid-text, so the trim can't remove it: 300 after normalising, 301 before.
+    const middle = `${"x".repeat(150)}\r\n${"x".repeat(LOAN_REASON_MAX - 151)}`;
+    expect(reasonErrors(middle)).toEqual({});
+  });
+
+  test("a missing or empty id fails on id only", () => {
+    for (const id of [undefined, ""]) {
+      const parsed = reasonSchema.safeParse({ id, reason: "Away" });
+      expect(parsed.success).toBe(false);
+      if (!parsed.success) {
+        expect(Object.keys(z.flattenError(parsed.error).fieldErrors)).toEqual([
+          "id",
+        ]);
+      }
+    }
+  });
+
+  test("the schema carries no server-controlled field", () => {
+    expect(Object.keys(reasonSchema.shape)).toEqual(["id", "reason"]);
+    expect(Object.keys(loanIdSchema.shape)).toEqual(["id"]);
+  });
+});
+
+describe("cancelStageSchema", () => {
+  test("accepts request and loan only", () => {
+    expect(cancelStageSchema.parse("request")).toBe("request");
+    expect(cancelStageSchema.parse("loan")).toBe("loan");
+    for (const stage of ["out", "", null, undefined]) {
+      expect(cancelStageSchema.safeParse(stage).success).toBe(false);
+    }
   });
 });

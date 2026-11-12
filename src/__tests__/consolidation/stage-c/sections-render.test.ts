@@ -4,6 +4,7 @@ import { prerender } from "react-dom/static";
 import BrowseSection from "@/components/browse/BrowseSection";
 import CategoriesSection from "@/components/categories/CategoriesSection";
 import ItemDetailSection from "@/components/items/ItemDetailSection";
+import { LOAN_HEADING_ID } from "@/components/loans/ids";
 import LoanDetailSection from "@/components/loans/LoanDetailSection";
 import MemberProfileSection from "@/components/profiles/MemberProfileSection";
 import {
@@ -20,6 +21,7 @@ import { t } from "@/lib/text/interpolate";
 import { categories } from "@/strings/categories";
 import { home } from "@/strings/home";
 import { itemPage } from "@/strings/itemPage";
+import { loanActions } from "@/strings/loanActions";
 import { loanPage } from "@/strings/loanPage";
 import { photos } from "@/strings/photos";
 import { profile } from "@/strings/profile";
@@ -618,4 +620,67 @@ describe("LoanDetailSection", () => {
       expect(page).not.toContain("<ol");
     },
   );
+});
+
+// Spec 14: the decisions card, exactly the controls `actions` lists.
+describe("LoanDetailSection — the decisions card", () => {
+  beforeEach(() => {
+    vi.mocked(getViewer).mockResolvedValue(member);
+  });
+
+  const button = (label: string) =>
+    new RegExp(`<button[^>]*>${label}</button>`);
+
+  test("no actions → no card", async () => {
+    const page = await loanPageOf({ status: "declined", actions: [] });
+    expect(page).not.toContain(loanActions.heading);
+  });
+
+  test("the owner on a request: the card first in the left column, Approve and Decline", async () => {
+    const page = await loanPageOf({
+      viewerRole: "owner",
+      actions: ["approve", "decline"],
+    });
+
+    expect(page).toMatch(new RegExp(`<h2[^>]*>${loanActions.heading}</h2>`));
+    expect(page.indexOf(loanActions.heading)).toBeLessThan(
+      page.indexOf(loanPage.nextHeading),
+    );
+    expect(page).toMatch(button(loanActions.approve));
+    expect(page).toMatch(button(loanActions.decline));
+    expect(page).not.toContain(loanActions.overlapOne);
+    expect(page).toMatch(new RegExp(`<h1[^>]*id="${LOAN_HEADING_ID}"`));
+  });
+
+  test.each([
+    [1, loanActions.overlapOne],
+    [2, t(loanActions.overlapOther, { count: 2 })],
+  ])("%i overlapping request(s) → the matching notice", async (count, text) => {
+    const page = await loanPageOf({
+      viewerRole: "owner",
+      actions: ["approve", "decline"],
+      overlappingRequestCount: count,
+    });
+    expect(page).toContain(text);
+  });
+
+  test("decline alone: no Approve and no overlap notice", async () => {
+    const page = await loanPageOf({
+      viewerRole: "owner",
+      actions: ["decline"],
+      overlappingRequestCount: 1,
+    });
+    expect(page).toMatch(button(loanActions.decline));
+    expect(page).not.toMatch(button(loanActions.approve));
+    expect(page).not.toContain(loanActions.overlapOne);
+  });
+
+  test.each([
+    ["requested", loanActions.cancelRequest],
+    ["approved", loanActions.cancelLoan],
+  ] as const)("cancel on a %s loan reads %s", async (loanStatus, label) => {
+    const page = await loanPageOf({ status: loanStatus, actions: ["cancel"] });
+    expect(page).toMatch(button(label));
+    expect(page).not.toMatch(button(loanActions.approve));
+  });
 });

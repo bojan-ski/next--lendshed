@@ -16,6 +16,7 @@ import { itemPage } from "./itemPage";
 import { items } from "./items";
 import { join } from "./join";
 import { linkBroken } from "./linkBroken";
+import { loanActions } from "./loanActions";
 import { loanCard } from "./loanCard";
 import { loanPage } from "./loanPage";
 import { login } from "./login";
@@ -65,6 +66,7 @@ export const strings = {
   profile,
   requestForm,
   loanPage,
+  loanActions,
 } as const;
 
 export type FlashKey = keyof typeof strings.flash;

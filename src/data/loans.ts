@@ -1,17 +1,27 @@
 import "server-only";
 import { db } from "@/db";
 import { fromDbDate, toDbDate } from "@/data/db-dates";
+import { isDatesTaken } from "@/data/db-errors";
 import { blockingLoanWhere, openLoanWhere } from "@/data/loan-scopes";
 import { personName, toPhotoDTO } from "@/data/mappers";
 import type { Prisma } from "@/generated/prisma/client";
-import type { ItemStatus, MemberStatus } from "@/generated/prisma/enums";
+import type {
+  ItemStatus,
+  LoanStatus,
+  MemberStatus,
+} from "@/generated/prisma/enums";
 import { addDays, loanLengthDays } from "@/lib/dates/dates";
 import { effectiveStatus } from "@/lib/dates/effective-status";
 import { REQUEST_LIMITS } from "@/lib/loans/limits";
 import type { RequestLoanInput } from "@/lib/schemas/loans";
 import type {
+  ApproveOutcome,
+  CancelOutcome,
+  CancelStage,
+  DeclineOutcome,
   EffectiveLoanStatus,
   InsertLoanRequestOutcome,
+  LoanAction,
   LoanDetailDTO,
   LoanViewerRole,
 } from "@/types/loan";
@@ -19,6 +29,14 @@ import type { ViewerDTO } from "@/types/viewer";
 
 // Contact details stay on a returned loan for this many days (brief §7.4).
 const CONTACT_GRACE_DAYS = 7;
+
+// Both ends count: a loan ending on another's first day overlaps it.
+function overlapsWhere(start: string, end: string): Prisma.LoanWhereInput {
+  return {
+    startDate: { lte: toDbDate(end) },
+    endDate: { gte: toDbDate(start) },
+  };
+}
 
 // The actor's own row FOR UPDATE first (updateOwnContactDetails takes it too,
 // so a clear runs strictly before or after), then the item FOR SHARE (hide and
@@ -73,8 +91,7 @@ export async function insertLoanRequest(
         AND: [
           { itemId: input.itemId },
           blockingLoanWhere(today),
-          { startDate: { lte: toDbDate(input.endDate) } },
-          { endDate: { gte: toDbDate(input.startDate) } },
+          overlapsWhere(input.startDate, input.endDate),
         ],
       },
       take: 1,
@@ -209,8 +226,23 @@ function toLoanDetailDTO(
       role === "owner" ? row.borrower : owner,
       today,
     ),
-    actions: [],
+    actions: actionsFor(row, role, status),
   };
+}
+
+// Exactly what the transitions below would accept from this viewer; a
+// non-party organizer gets nothing here.
+function actionsFor(
+  row: DetailRow,
+  role: LoanViewerRole,
+  status: EffectiveLoanStatus,
+): LoanAction[] {
+  if (role === "organizer") return [];
+  if (status === "approved") return ["cancel"];
+  if (status !== "requested") return [];
+  if (role === "borrower") return ["cancel"];
+  const approvable = row.item.status === "listed" && row.borrowerId !== null;
+  return approvable ? ["approve", "decline"] : ["decline"];
 }
 
 // Owner, borrower or any organizer; null otherwise, whatever the reason. A
@@ -251,12 +283,199 @@ export async function getLoanForViewer(
             AND: [
               { itemId: row.item.id, id: { not: row.id } },
               openLoanWhere(today),
-              { startDate: { lte: toDbDate(endDate) } },
-              { endDate: { gte: toDbDate(startDate) } },
+              overlapsWhere(startDate, endDate),
             ],
           },
         })
       : 0,
   ]);
   return toLoanDetailDTO(row, role, overlapping, today);
+}
+
+type LockedLoan = {
+  id: string;
+  itemId: string;
+  itemOwnerId: string | null;
+  itemStatus: ItemStatus;
+  borrowerId: string | null;
+  status: LoanStatus;
+  startDate: string;
+  endDate: string;
+  returnedOn: string | null;
+};
+
+// Every loan transition locks the item, then the loan, and no `user` row
+// (rules/data.md), so a decision, a new request (item FOR SHARE) and a hide
+// or retire (item FOR UPDATE) on one item run one after another. Then it
+// re-reads the loan under those locks; null for an unknown id.
+async function lockLoanForTransition(
+  tx: Prisma.TransactionClient,
+  loanId: string,
+): Promise<LockedLoan | null> {
+  const target = await tx.loan.findUnique({
+    where: { id: loanId },
+    select: { itemId: true },
+  });
+  if (!target) return null;
+  await tx.$queryRaw`SELECT id FROM item WHERE id = ${target.itemId} FOR UPDATE`;
+  await tx.$queryRaw`SELECT id FROM loan WHERE id = ${loanId} FOR UPDATE`;
+  const loan = await tx.loan.findUnique({
+    where: { id: loanId },
+    select: {
+      id: true,
+      itemId: true,
+      borrowerId: true,
+      status: true,
+      startDate: true,
+      endDate: true,
+      returnedOn: true,
+      item: { select: { ownerId: true, status: true } },
+    },
+  });
+  if (!loan) return null;
+  return {
+    id: loan.id,
+    itemId: loan.itemId,
+    itemOwnerId: loan.item.ownerId,
+    itemStatus: loan.item.status,
+    borrowerId: loan.borrowerId,
+    status: loan.status,
+    startDate: fromDbDate(loan.startDate),
+    endDate: fromDbDate(loan.endDate),
+    returnedOn: fromDbDate(loan.returnedOn),
+  };
+}
+
+function partyOf(
+  loan: LockedLoan,
+  actorId: string,
+): "owner" | "borrower" | null {
+  if (loan.itemOwnerId === actorId) return "owner";
+  if (loan.borrowerId === actorId) return "borrower";
+  return null;
+}
+
+// Only the actor's own seen-at moves, so only the other party gets a dot.
+function seenAtFor(party: "owner" | "borrower", now: Date) {
+  return party === "owner" ? { ownerSeenAt: now } : { borrowerSeenAt: now };
+}
+
+// No overlap query: approvals on one item serialise on the item lock, and the
+// winner's sweep turns the loser stale. loan_no_overlap is the backstop; its
+// 23P01 aborts the transaction, so it is mapped outside it.
+export async function approveLoanRequest(
+  ownerId: string,
+  loanId: string,
+  today: string,
+): Promise<ApproveOutcome> {
+  try {
+    return await db.$transaction(async (tx) => {
+      const loan = await lockLoanForTransition(tx, loanId);
+      if (
+        !loan ||
+        loan.itemOwnerId !== ownerId ||
+        loan.itemStatus !== "listed" ||
+        loan.borrowerId === null ||
+        effectiveStatus(loan, today) !== "requested"
+      ) {
+        return "stale";
+      }
+      const now = new Date();
+      await tx.loan.update({
+        where: { id: loan.id },
+        data: { status: "approved", changedAt: now, ownerSeenAt: now },
+        select: { id: true },
+      });
+      await tx.loan.updateMany({
+        where: {
+          AND: [
+            { itemId: loan.itemId, id: { not: loan.id } },
+            openLoanWhere(today),
+            overlapsWhere(loan.startDate, loan.endDate),
+          ],
+        },
+        data: {
+          status: "declined",
+          endedBy: "system",
+          systemReason: "dates_taken",
+          changedAt: now,
+          ownerSeenAt: now,
+        },
+      });
+      return "approved";
+    });
+  } catch (error) {
+    if (isDatesTaken(error)) return "datesTaken";
+    throw error;
+  }
+}
+
+export async function declineLoanRequest(
+  ownerId: string,
+  loanId: string,
+  reason: string | null,
+  today: string,
+): Promise<DeclineOutcome> {
+  return db.$transaction(async (tx) => {
+    const loan = await lockLoanForTransition(tx, loanId);
+    if (
+      !loan ||
+      loan.itemOwnerId !== ownerId ||
+      effectiveStatus(loan, today) !== "requested"
+    ) {
+      return "stale";
+    }
+    const now = new Date();
+    await tx.loan.update({
+      where: { id: loan.id },
+      data: {
+        status: "declined",
+        endedBy: "owner",
+        systemReason: null,
+        statusReason: reason,
+        changedAt: now,
+        ownerSeenAt: now,
+      },
+      select: { id: true },
+    });
+    return "declined";
+  });
+}
+
+// The borrower withdraws a request or an approved loan; the owner calls off
+// an approved one. Never once it is out. `stage` is what the screen offered:
+// a "Cancel request" that finds the loan approved since is stale, not a
+// second change.
+export async function cancelLoanByParty(
+  actorId: string,
+  loanId: string,
+  stage: CancelStage,
+  reason: string | null,
+  today: string,
+): Promise<CancelOutcome> {
+  return db.$transaction(async (tx) => {
+    const loan = await lockLoanForTransition(tx, loanId);
+    const party = loan && partyOf(loan, actorId);
+    if (!loan || !party) return "stale";
+    const status = effectiveStatus(loan, today);
+    const allowed =
+      stage === "loan"
+        ? status === "approved"
+        : status === "requested" && party === "borrower";
+    if (!allowed) return "stale";
+    const now = new Date();
+    await tx.loan.update({
+      where: { id: loan.id },
+      data: {
+        status: "cancelled",
+        endedBy: party,
+        systemReason: null,
+        statusReason: reason,
+        changedAt: now,
+        ...seenAtFor(party, now),
+      },
+      select: { id: true },
+    });
+    return "cancelled";
+  });
 }

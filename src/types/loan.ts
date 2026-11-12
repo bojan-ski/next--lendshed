@@ -5,6 +5,7 @@ import type {
   LoanSystemReason,
   ReturnedAsLent,
 } from "@/generated/prisma/enums";
+import type { FlashKey } from "@/strings";
 import type { PhotoDTO } from "@/types/item";
 
 export type { LoanActor, LoanStatus, LoanSystemReason, ReturnedAsLent };
@@ -88,6 +89,21 @@ export type RequestLoanState = {
     | "unexpected";
   values?: Partial<Record<RequestLoanField, string>>;
 };
+
+// One state for approve, decline and cancel; approve never returns a reason.
+export type LoanDecisionState = {
+  flash?: FlashKey;
+  formError?: "stale" | "datesTaken" | "unexpected";
+  fieldErrors?: { reason?: string[] };
+  values?: { reason?: string };
+};
+
+// Which cancel the screen offered: a request, or an approved loan.
+export type CancelStage = "request" | "loan";
+
+export type ApproveOutcome = "approved" | "stale" | "datesTaken";
+export type DeclineOutcome = "declined" | "stale";
+export type CancelOutcome = "cancelled" | "stale";
 
 export type InsertLoanRequestOutcome =
   | { kind: "created"; id: string }
