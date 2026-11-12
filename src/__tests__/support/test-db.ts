@@ -22,6 +22,7 @@ import {
   diskStorageRoot,
 } from "@/lib/storage/disk";
 import { newPhotoKey } from "@/lib/storage/keys";
+import { REQUIRED_MIGRATIONS } from "@/__tests__/support/required-migrations";
 
 // The app's disk driver (`.env.test` sets STORAGE_DRIVER=disk) at its root.
 const testPhotoStorage = createDiskStorage({
@@ -36,16 +37,6 @@ const testPhotoStorage = createDiskStorage({
 
 export const SESSION_COOKIE = "better-auth.session_token";
 export const TEST_PASSWORD = "correct-horse-battery";
-
-const REQUIRED_MIGRATIONS = [
-  "auth",
-  "invitations",
-  "password_reset_grants",
-  "categories",
-  "items_and_loans",
-  "loan_no_overlap",
-  "uploads",
-];
 
 export async function assertMigrated(): Promise<void> {
   const failure = (name: string) =>
