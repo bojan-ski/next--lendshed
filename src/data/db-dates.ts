@@ -8,6 +8,9 @@ export function toDbDate(date: string): Date {
   return new Date(`${date}T00:00:00.000Z`);
 }
 
-export function fromDbDate(value: Date): string {
-  return value.toISOString().slice(0, 10);
+// Null passes through, for the nullable `returnedOn`.
+export function fromDbDate(value: Date): string;
+export function fromDbDate(value: Date | null): string | null;
+export function fromDbDate(value: Date | null): string | null {
+  return value === null ? null : value.toISOString().slice(0, 10);
 }

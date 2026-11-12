@@ -17,4 +17,5 @@ export const flash = {
   itemRetired: "Item retired.",
   itemDeleted: "Item deleted.",
   photoSaved: "Photo saved.",
+  requestSent: "Request sent.",
 } as const satisfies Record<string, string>;

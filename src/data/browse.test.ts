@@ -429,6 +429,49 @@ describe("viewerCanRequest", () => {
     expect(await canRequest(me, id)).toBe(true);
   });
 
+  const blockOf = async (borrower: string, itemId: string) => {
+    const detail = await getItemForViewer(as(borrower), itemId, TODAY);
+    // viewerCanRequest agrees with requestBlock in every case.
+    expect(detail?.viewerCanRequest).toBe(
+      !detail?.isOwn && detail?.requestBlock === null,
+    );
+    return detail?.requestBlock;
+  };
+
+  test("requestBlock: own item → null; free to request → null", async () => {
+    const categoryId = await category("BlockNone");
+    const me = await requester();
+    expect(await blockOf(me, await item(categoryId, { owner: me }))).toBe(null);
+    expect(await blockOf(me, await item(categoryId))).toBe(null);
+  });
+
+  test("requestBlock: no contact details → contact_details, even at both limits", async () => {
+    const id = await item(await category("BlockContact"));
+    const me = await requester(null);
+    await loan(id, "requested", "2030-06-20", "2030-06-21", me);
+    await openRequests(me, 4);
+    expect(await blockOf(me, id)).toBe("contact_details");
+  });
+
+  test("requestBlock: an open request on the item → item_limit, ahead of the overall limit", async () => {
+    const id = await item(await category("BlockItem"));
+    const me = await requester();
+    await loan(id, "requested", "2030-06-20", "2030-06-21", me);
+    expect(await blockOf(me, id)).toBe("item_limit");
+    await openRequests(me, 4);
+    expect(await blockOf(me, id)).toBe("item_limit");
+  });
+
+  test("requestBlock: five open elsewhere → overall_limit; four → null", async () => {
+    const id = await item(await category("BlockOverall"));
+    const atLimit = await requester();
+    const underLimit = await requester();
+    await openRequests(atLimit, 5);
+    await openRequests(underLimit, 4);
+    expect(await blockOf(atLimit, id)).toBe("overall_limit");
+    expect(await blockOf(underLimit, id)).toBe(null);
+  });
+
   test("viewerCanRetireAsOrganizer is false for organizers too", async () => {
     const organizer = (await scope.createTestUser({ role: "organizer" })).id;
     const id = await item(await category("Retire"));

@@ -87,6 +87,7 @@ describe("action enforcement — derivation", () => {
       "listItem",
       "promoteMember",
       "renameCategory",
+      "requestLoan",
       "resetPasswordWithGrant",
       "retireOwnItem",
       "revokeInvitation",

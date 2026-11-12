@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import BookedRanges from "@/components/items/BookedRanges";
+import RequestCard from "@/components/items/RequestCard";
 import Avatar from "@/components/ui/Avatar";
 import ButtonLink from "@/components/ui/ButtonLink";
 import PhotoImage from "@/components/ui/PhotoImage";
@@ -102,7 +103,7 @@ export default async function ItemDetailSection({
       </div>
       <div className="grid gap-6 lg:grid-cols-2">
         <BookedRanges ranges={item.bookedRanges} today={today} />
-        {/* Spec 13 adds the request card for other members' items here. */}
+        {!item.isOwn && <RequestCard item={item} today={today} />}
         {item.isOwn && (
           <div className="flex flex-col items-start gap-3">
             <p className="font-bold">{itemPage.ownItem}</p>

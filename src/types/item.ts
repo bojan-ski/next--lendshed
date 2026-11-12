@@ -36,6 +36,8 @@ export type ItemDetailDTO = ItemCardDTO & {
   owner: { id: string; displayName: string; area: string | null };
   bookedRanges: BookedRangeDTO[];
   isOwn: boolean;
+  // Why another member's item can't be requested; null for an own item.
+  requestBlock: "contact_details" | "item_limit" | "overall_limit" | null;
   viewerCanRequest: boolean;
   viewerCanRetireAsOrganizer: boolean;
 };

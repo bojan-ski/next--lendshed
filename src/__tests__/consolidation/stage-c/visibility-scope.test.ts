@@ -9,6 +9,7 @@ import {
 } from "@/__tests__/support/import-graph";
 import { assertMigrated, createTestScope } from "@/__tests__/support/test-db";
 import ItemDetailSection from "@/components/items/ItemDetailSection";
+import LoanDetailSection from "@/components/loans/LoanDetailSection";
 import MemberProfileSection from "@/components/profiles/MemberProfileSection";
 import {
   getBrowseItems,
@@ -252,6 +253,48 @@ describe("MemberProfileSection", () => {
   });
 });
 
+// The loan scope (spec 13): owner, borrower or any organizer; a non-party
+// member can't tell the loan exists.
+describe("LoanDetailSection", () => {
+  let loanId: string;
+  let borrower: ViewerDTO;
+
+  beforeAll(async () => {
+    borrower = asViewer(
+      await scope.createTestUser({ contactDetails: "Phone" }),
+    );
+    ({ id: loanId } = await scope.createLoan({
+      itemId: fixture.items.visible,
+      borrowerId: borrower.id,
+      status: "requested",
+      startDate: "2030-06-20",
+      endDate: "2030-06-21",
+    }));
+  });
+
+  test.each([
+    ["a non-party member", () => loanId],
+    ["an unknown id", () => fixture.unknownId],
+  ])("%s is the same not-found", async (_label, id) => {
+    vi.mocked(getViewer).mockResolvedValue(fixture.member);
+    const error = await rejection(LoanDetailSection({ params: params(id()) }));
+    expect((error as { digest?: string }).digest).toBe(NOT_FOUND);
+  });
+
+  test.each(["owner", "borrower", "organizer"] as const)(
+    "the %s sees the loan",
+    async (role) => {
+      vi.mocked(getViewer).mockResolvedValue(
+        role === "borrower" ? borrower : fixture[role],
+      );
+      const page = await html(
+        await LoanDetailSection({ params: params(loanId) }),
+      );
+      expect(page).toContain(`${term} visible`);
+    },
+  );
+});
+
 // --- Derived: who may read items, and with whose id --------------------------
 
 const appSources = sourceFiles("src/**/*.{ts,tsx}").filter(
@@ -318,8 +361,8 @@ function foreignOwnerCalls(file: string, source = parseFile(file)): string[] {
 }
 
 describe("the derived import rule", () => {
-  const readers = appSources.filter(
-    (file) => importsFrom(file, "@/data/browse"),
+  const readers = appSources.filter((file) =>
+    importsFrom(file, "@/data/browse"),
   );
 
   test("the modules reading other members' items are the three sections", () => {
@@ -331,9 +374,9 @@ describe("the derived import rule", () => {
   });
 
   test("none of them imports from @/data/items", () => {
-    expect(
-      readers.filter((file) => importsFrom(file, "@/data/items")),
-    ).toEqual([]);
+    expect(readers.filter((file) => importsFrom(file, "@/data/items"))).toEqual(
+      [],
+    );
   });
 
   test("the matcher accepts the viewer's id and flags anything else", () => {
@@ -354,8 +397,8 @@ describe("the derived import rule", () => {
   });
 
   test("every @/data/items call passes the caller's own requireViewer() id", () => {
-    const callers = appSources.filter(
-      (file) => importsFrom(file, "@/data/items"),
+    const callers = appSources.filter((file) =>
+      importsFrom(file, "@/data/items"),
     );
     expect(callers.length).toBeGreaterThan(0);
     expect(callers.flatMap((file) => foreignOwnerCalls(file))).toEqual([]);

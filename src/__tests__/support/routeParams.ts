@@ -8,6 +8,7 @@ export const routeParams: Record<string, Record<string, string | string[]>> = {
   "/my/items/[id]/edit": { id: "item-1" },
   "/items/[id]": { id: "item-1" },
   "/members/[id]": { id: "member-1" },
+  "/loans/[id]": { id: "loan-1" },
 };
 
 const DYNAMIC_SEGMENT = /^\[{1,2}(?:\.\.\.)?([^\]]+)\]{1,2}$/;

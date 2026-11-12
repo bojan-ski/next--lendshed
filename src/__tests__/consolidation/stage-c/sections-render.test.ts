@@ -4,6 +4,7 @@ import { prerender } from "react-dom/static";
 import BrowseSection from "@/components/browse/BrowseSection";
 import CategoriesSection from "@/components/categories/CategoriesSection";
 import ItemDetailSection from "@/components/items/ItemDetailSection";
+import LoanDetailSection from "@/components/loans/LoanDetailSection";
 import MemberProfileSection from "@/components/profiles/MemberProfileSection";
 import {
   getBrowseItems,
@@ -11,17 +12,21 @@ import {
   getMemberProfile,
 } from "@/data/browse";
 import { getAdminCategories, getCategories } from "@/data/categories";
+import { getLoanForViewer } from "@/data/loans";
 import { getViewer } from "@/data/viewer";
-import { communityToday } from "@/lib/dates/dates";
+import { communityToday, formatDate, formatDateRange } from "@/lib/dates/dates";
 import { env } from "@/lib/env/server";
 import { t } from "@/lib/text/interpolate";
 import { categories } from "@/strings/categories";
 import { home } from "@/strings/home";
 import { itemPage } from "@/strings/itemPage";
+import { loanPage } from "@/strings/loanPage";
 import { photos } from "@/strings/photos";
 import { profile } from "@/strings/profile";
+import { requestForm } from "@/strings/requestForm";
 import { status } from "@/strings/status";
 import type { BrowsePageDTO, ItemCardDTO, ItemDetailDTO } from "@/types/item";
+import type { LoanDetailDTO } from "@/types/loan";
 import type { ViewerDTO } from "@/types/viewer";
 
 vi.mock("@/data/viewer", () => ({ getViewer: vi.fn() }));
@@ -29,6 +34,7 @@ vi.mock("@/data/categories", () => ({
   getCategories: vi.fn(),
   getAdminCategories: vi.fn(),
 }));
+vi.mock("@/data/loans", () => ({ getLoanForViewer: vi.fn() }));
 vi.mock("@/data/browse", () => ({
   getBrowseItems: vi.fn(),
   getItemForViewer: vi.fn(),
@@ -276,6 +282,7 @@ const detail = (overrides: Partial<ItemDetailDTO> = {}): ItemDetailDTO => ({
   owner: { id: "owner-1", displayName: "Ana P.", area: null },
   bookedRanges: [],
   isOwn: false,
+  requestBlock: null,
   viewerCanRequest: true,
   viewerCanRetireAsOrganizer: false,
   ...overrides,
@@ -305,7 +312,7 @@ describe("ItemDetailSection", () => {
     );
   });
 
-  test("another member's item: owner link, details, no own-item line or Edit", async () => {
+  test("another member's item: owner link, details, the request card, no own-item line or Edit", async () => {
     vi.mocked(getItemForViewer).mockResolvedValue(
       detail({
         description: "Two batteries",
@@ -336,7 +343,8 @@ describe("ItemDetailSection", () => {
     expect(page).not.toContain(itemPage.ownItem);
     expect(page).not.toContain(`href="/my/items/item-1/edit"`);
     expect(page).not.toContain(status.item.listed);
-    expect(page).not.toContain("<form");
+    expect(page).toContain(requestForm.heading);
+    expect(page).toContain(`name="itemId" value="item-1"`);
   });
 
   test("no description or pickup notes: neither line renders", async () => {
@@ -354,6 +362,8 @@ describe("ItemDetailSection", () => {
     expect(page).toContain(status.item.listed);
     expect(page).toContain(itemPage.ownItem);
     expect(page).toContain(`href="/my/items/item-1/edit"`);
+    expect(page).not.toContain(requestForm.heading);
+    expect(page).not.toContain("<form");
   });
 
   test("own retired item: no Edit", async () => {
@@ -437,4 +447,175 @@ describe("MemberProfileSection", () => {
     expect(page.match(/<h3[^>]*>Ladder \d<\/h3>/g)).toHaveLength(2);
     expect(page).not.toContain(profile.emptyHeading);
   });
+});
+
+// Spec 13: the loan page section, on mocked DTOs.
+const loanDetail = (overrides: Partial<LoanDetailDTO> = {}): LoanDetailDTO => ({
+  id: "loan-1",
+  status: "requested",
+  startDate: "2030-06-20",
+  endDate: "2030-06-22",
+  lengthDays: 3,
+  item: {
+    id: "item-1",
+    title: "Step ladder",
+    photo: null,
+    status: "listed",
+    viewable: true,
+  },
+  owner: { id: "owner-1", displayName: "Olga M." },
+  borrower: { id: "u1", displayName: "Ana P." },
+  viewerRole: "borrower",
+  requestMessage: null,
+  statusReason: null,
+  endedBy: null,
+  systemReason: null,
+  returnedOn: null,
+  returnedAsLent: null,
+  closedByName: null,
+  overlappingRequestCount: 0,
+  contact: null,
+  actions: [],
+  ...overrides,
+});
+
+const loanParams = { params: Promise.resolve({ id: "loan-1" }) };
+const names = { owner: "Olga M.", borrower: "Ana P." };
+const loanPageOf = async (overrides: Partial<LoanDetailDTO> = {}) => {
+  vi.mocked(getLoanForViewer).mockResolvedValue(loanDetail(overrides));
+  return html(await LoanDetailSection(loanParams));
+};
+
+describe("LoanDetailSection", () => {
+  beforeEach(() => {
+    vi.mocked(getViewer).mockResolvedValue(member);
+  });
+
+  test("a guest is redirected to /login before the loan is read", async () => {
+    vi.mocked(getViewer).mockResolvedValue(null);
+    expectLoginRedirect(await thrown(LoanDetailSection(loanParams)));
+    expect(getLoanForViewer).not.toHaveBeenCalled();
+  });
+
+  test("outside the scope (null) is not-found, with one community today", async () => {
+    vi.mocked(getLoanForViewer).mockResolvedValue(null);
+    expectNotFound(await thrown(LoanDetailSection(loanParams)));
+    expect(getLoanForViewer).toHaveBeenCalledWith(
+      member,
+      "loan-1",
+      communityToday(),
+    );
+  });
+
+  test("the borrower: heading, status, dates line from the owner, steps, no cards", async () => {
+    const today = communityToday();
+    const page = await loanPageOf();
+
+    expect(page).toMatch(/<h1[^>]*>Step ladder<\/h1>/);
+    expect(page).toContain(status.loan.requested);
+    expect(page).toContain(formatDateRange("2030-06-20", "2030-06-22", today));
+    expect(page).toContain(t(loanPage.lengthOther, { days: 3 }));
+    expect(page).toContain(
+      t(loanPage.partyLine, { party: t(loanPage.party.borrower, names) }),
+    );
+    expect(page).toContain(`href="/items/item-1"`);
+    expect(page).toContain(loanPage.nextHeading);
+    expect(page).toContain(
+      t(loanPage.steps.requested.borrower[0], { ...names }),
+    );
+    expect(page).not.toContain(loanPage.messageBorrower);
+    expect(page).not.toContain(loanPage.contactNote);
+  });
+
+  test("the owner of an approved loan: the borrower's message and contact card", async () => {
+    const page = await loanPageOf({
+      status: "approved",
+      viewerRole: "owner",
+      requestMessage: "Saturday\nmorning?",
+      contact: { name: "Ana P.", details: "Flat 3\nCall 555" },
+    });
+
+    expect(page).toContain(
+      t(loanPage.partyLine, { party: t(loanPage.party.owner, names) }),
+    );
+    expect(page).toContain(t(loanPage.messageOther, { borrower: "Ana P." }));
+    expect(page).toContain("Saturday\nmorning?");
+    expect(page).toContain(t(loanPage.contactHeading, { name: "Ana P." }));
+    expect(page).toContain("Flat 3\nCall 555");
+    expect(page).toContain(loanPage.contactNote);
+  });
+
+  test("a non-party organizer: both names, third-person steps, no contact card", async () => {
+    const page = await loanPageOf({ viewerRole: "organizer", status: "out" });
+
+    expect(page).toContain(
+      t(loanPage.partyLine, { party: t(loanPage.party.organizer, names) }),
+    );
+    expect(page).toContain(t(loanPage.steps.out.organizer[1], { ...names }));
+    expect(page).not.toContain(loanPage.contactNote);
+  });
+
+  test("an item the viewer can't open is plain text, not a link", async () => {
+    const page = await loanPageOf({
+      item: { ...loanDetail().item, status: "retired", viewable: false },
+    });
+    expect(page).not.toContain(`href="/items/item-1"`);
+    expect(page).toContain("Step ladder");
+  });
+
+  test("an overdue loan names the date it was due", async () => {
+    const today = communityToday();
+    const page = await loanPageOf({ status: "overdue" });
+    expect(page).toContain(
+      t(loanPage.steps.overdue.borrower[0], {
+        ...names,
+        due: formatDate("2030-06-22", today),
+      }),
+    );
+  });
+
+  test.each([
+    [
+      "returned, not as lent, with a reason",
+      {
+        status: "returned",
+        returnedOn: "2030-06-21",
+        returnedAsLent: "no",
+        statusReason: "Handle cracked",
+      },
+      (today: string) => [
+        t(loanPage.ended.returned, { date: formatDate("2030-06-21", today) }),
+        loanPage.ended.notAsLent,
+        t(loanPage.reasonQuote, { reason: "Handle cracked" }),
+      ],
+    ],
+    [
+      "declined by the system for dates taken",
+      { status: "declined", endedBy: "system", systemReason: "dates_taken" },
+      () => [
+        t(loanPage.ended.declinedAuto, {
+          reason: loanPage.reasons.dates_taken,
+        }),
+      ],
+    ],
+    [
+      "cancelled by the viewing borrower",
+      { status: "cancelled", endedBy: "borrower" },
+      () => [t(loanPage.ended.cancelled, { actor: loanPage.you })],
+    ],
+    [
+      "declined by the owner",
+      { status: "declined", endedBy: "owner" },
+      () => [t(loanPage.ended.declined, { actor: "Olga M." })],
+    ],
+    ["expired", { status: "expired" }, () => [loanPage.ended.expired]],
+    ["lapsed", { status: "lapsed" }, () => [loanPage.ended.lapsed]],
+  ] as const)(
+    "%s: the ended lines, no steps",
+    async (_label, overrides, lines) => {
+      const page = await loanPageOf(overrides as Partial<LoanDetailDTO>);
+      for (const line of lines(communityToday())) expect(page).toContain(line);
+      expect(page).not.toContain("<ol");
+    },
+  );
 });

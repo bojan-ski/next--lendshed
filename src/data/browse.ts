@@ -133,6 +133,25 @@ function toBookedRanges(row: DetailRow, today: string): BookedRangeDTO[] {
   ];
 }
 
+// First match wins; requestLoan re-checks all three in its transaction. A
+// missing viewer row can't request either, so it reads as no details.
+function toRequestBlock(
+  borrower: {
+    contactDetails: string | null;
+    _count: { loansBorrowed: number };
+    loansBorrowed: { id: string }[];
+  } | null,
+): ItemDetailDTO["requestBlock"] {
+  if (!borrower || borrower.contactDetails === null) return "contact_details";
+  if (borrower.loansBorrowed.length >= REQUEST_LIMITS.perItem) {
+    return "item_limit";
+  }
+  if (borrower._count.loansBorrowed >= REQUEST_LIMITS.overall) {
+    return "overall_limit";
+  }
+  return null;
+}
+
 // A visible item, or any item the viewer owns; null otherwise. Organizers get
 // no extra visibility here (`role` is first read in spec 19).
 export async function getItemForViewer(
@@ -164,12 +183,7 @@ export async function getItemForViewer(
   if (!row || !row.owner || row.ownerId === null) return null;
 
   const isOwn = row.ownerId === viewer.id;
-  const viewerCanRequest =
-    !isOwn &&
-    borrower !== null &&
-    borrower.contactDetails !== null &&
-    borrower.loansBorrowed.length < REQUEST_LIMITS.perItem &&
-    borrower._count.loansBorrowed < REQUEST_LIMITS.overall;
+  const requestBlock = isOwn ? null : toRequestBlock(borrower);
 
   return {
     ...toItemCardDTO(row),
@@ -185,7 +199,8 @@ export async function getItemForViewer(
     },
     bookedRanges: toBookedRanges(row, today),
     isOwn,
-    viewerCanRequest,
+    requestBlock,
+    viewerCanRequest: !isOwn && requestBlock === null,
     viewerCanRetireAsOrganizer: false,
   };
 }

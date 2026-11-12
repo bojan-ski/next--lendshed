@@ -17,6 +17,7 @@ import { items } from "./items";
 import { join } from "./join";
 import { linkBroken } from "./linkBroken";
 import { loanCard } from "./loanCard";
+import { loanPage } from "./loanPage";
 import { login } from "./login";
 import { members } from "./members";
 import { nav } from "./nav";
@@ -25,6 +26,7 @@ import { people } from "./people";
 import { photos } from "./photos";
 import { privacy } from "./privacy";
 import { profile } from "./profile";
+import { requestForm } from "./requestForm";
 import { resetPassword } from "./resetPassword";
 import { status } from "./status";
 import { toast } from "./toast";
@@ -61,6 +63,8 @@ export const strings = {
   photos,
   itemPage,
   profile,
+  requestForm,
+  loanPage,
 } as const;
 
 export type FlashKey = keyof typeof strings.flash;

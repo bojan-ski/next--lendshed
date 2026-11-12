@@ -56,6 +56,7 @@ const ISLANDS = [
   "src/components/items/ItemDetailsForm.tsx",
   "src/components/items/ItemPhotoForm.tsx",
   "src/components/items/ItemVisibilityControl.tsx",
+  "src/components/items/RequestLoanForm.tsx",
   "src/components/items/RetireItemButton.tsx",
   "src/components/members/ResetLinkForm.tsx",
   "src/components/members/RoleChangeButton.tsx",
