@@ -9,6 +9,11 @@ import {
   SESSION_COOKIE,
   signInForCookie,
 } from "@/__tests__/support/test-db";
+import {
+  importSpecifiers,
+  parseFile,
+  readSource,
+} from "@/__tests__/support/import-graph";
 import { db } from "@/db";
 import { requireOrganizer } from "@/lib/auth/guards";
 import { getViewer } from "./viewer";
@@ -57,7 +62,6 @@ describe("getViewer", () => {
       displayName: "Mira K.",
       initials: "MK",
       role: "member",
-      needsActionCount: 0,
     });
   });
 
@@ -123,5 +127,15 @@ describe("getViewer", () => {
       data: { status: "suspended" },
     });
     expect(await getViewer()).toBeNull();
+  });
+});
+
+// Spec 16: the needs-action count lives in the header's badge slot, so the
+// session read that every action and section runs stays one query.
+describe("getViewer and the needs-action count", () => {
+  test("the viewer module reads no loan and imports no loan module", () => {
+    const imports = importSpecifiers(parseFile("src/data/viewer.ts"));
+    expect(imports.filter((name) => /loan/i.test(name))).toEqual([]);
+    expect(readSource("src/data/viewer.ts")).not.toMatch(/\.loan\b|needsAction/);
   });
 });

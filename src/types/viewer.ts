@@ -3,5 +3,4 @@ export type ViewerDTO = {
   displayName: string;
   initials: string;
   role: "member" | "organizer";
-  needsActionCount: number;
 };

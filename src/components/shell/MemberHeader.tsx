@@ -6,21 +6,31 @@ import { navLinkClasses } from "@/components/shell/nav-styles";
 import Wordmark from "@/components/shell/Wordmark";
 import { nav } from "@/strings/nav";
 
-const entries = [
-  { href: "/", label: nav.browse, activePrefixes: ["/items"] },
-  { href: "/my/items", label: nav.myItems, activePrefixes: ["/my/items"] },
-];
-
 type MemberHeaderProps = {
   avatar?: ReactNode;
+  // Rendered inside the My loans link, after its label, so the count is part
+  // of the link's accessible name.
+  myLoansBadge?: ReactNode;
   // The last nav item, rendered as its own <li> (or nothing) by the slot.
   organizerEntry?: ReactNode;
 };
 
 export default function MemberHeader({
   avatar,
+  myLoansBadge,
   organizerEntry,
 }: MemberHeaderProps) {
+  const entries = [
+    { href: "/", label: nav.browse, activePrefixes: ["/items"] },
+    {
+      href: "/my/loans",
+      label: nav.myLoans,
+      activePrefixes: ["/my/loans", "/loans"],
+      badge: myLoansBadge,
+    },
+    { href: "/my/items", label: nav.myItems, activePrefixes: ["/my/items"] },
+  ];
+
   return (
     <header className="border-b border-line bg-card">
       <Container className="flex flex-wrap items-center gap-x-6 py-2">
@@ -45,6 +55,7 @@ export default function MemberHeader({
                     activePrefixes={entry.activePrefixes}
                   >
                     {entry.label}
+                    {entry.badge}
                   </NavLink>
                 </Suspense>
               </li>

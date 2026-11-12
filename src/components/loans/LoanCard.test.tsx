@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { strings } from "@/strings";
 import type { LoanCardDTO } from "@/types/loan";
 import LoanCard from "./LoanCard";
@@ -95,6 +95,61 @@ describe("LoanCard", () => {
     );
     expect(openLoan()).toHaveAttribute("href", "/loans/loan-1");
     expect(accentButtons(container)).toHaveLength(0);
+  });
+
+  test("a photo renders as a decorative 64 px thumb", () => {
+    const { container } = render(
+      <LoanCard
+        loan={{
+          ...loan,
+          item: {
+            ...loan.item,
+            photo: { url: "/uploads/items/a.webp", width: 1200, height: 900 },
+          },
+        }}
+        dateRange="x"
+        nextStep={null}
+      />,
+    );
+    const image = container.querySelector("img");
+    expect(image).toHaveAttribute("alt", "");
+    expect(image).toHaveClass("size-16", "object-cover");
+    expect(screen.queryByTestId("photo-placeholder")).not.toBeInTheDocument();
+  });
+
+  test("no photo, or a failed load, shows the placeholder", () => {
+    const withPhoto: LoanCardDTO = {
+      ...loan,
+      item: {
+        ...loan.item,
+        photo: { url: "/uploads/items/a.webp", width: 1200, height: 900 },
+      },
+    };
+    const { container, rerender } = render(
+      <LoanCard loan={loan} dateRange="x" nextStep={null} />,
+    );
+    expect(screen.getByTestId("photo-placeholder")).toHaveClass("size-16");
+
+    rerender(<LoanCard loan={withPhoto} dateRange="x" nextStep={null} />);
+    fireEvent.error(container.querySelector("img")!);
+
+    expect(screen.getByTestId("photo-placeholder")).toBeInTheDocument();
+  });
+
+  test("the title is an h2 by default and an h3 when asked", () => {
+    const { rerender } = render(
+      <LoanCard loan={loan} dateRange="x" nextStep={null} />,
+    );
+    expect(
+      screen.getByRole("heading", { level: 2, name: loan.item.title }),
+    ).toBeInTheDocument();
+    rerender(
+      <LoanCard loan={loan} dateRange="x" nextStep={null} headingLevel="h3" />,
+    );
+    expect(
+      screen.getByRole("heading", { level: 3, name: loan.item.title }),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { level: 2 })).not.toBeInTheDocument();
   });
 
   test("Open loan is the one accent button when the loan needs you", () => {

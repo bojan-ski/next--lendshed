@@ -10,6 +10,8 @@ import {
 import { assertMigrated, createTestScope } from "@/__tests__/support/test-db";
 import ItemDetailSection from "@/components/items/ItemDetailSection";
 import LoanDetailSection from "@/components/loans/LoanDetailSection";
+import MyLoansSection from "@/components/loans/MyLoansSection";
+import { countNeedsAction, getMyLoans } from "@/data/my-loans";
 import MemberProfileSection from "@/components/profiles/MemberProfileSection";
 import {
   getBrowseItems,
@@ -17,7 +19,7 @@ import {
   getMemberProfile,
 } from "@/data/browse";
 import { getViewer } from "@/data/viewer";
-import { communityToday } from "@/lib/dates/dates";
+import { addDays, communityToday } from "@/lib/dates/dates";
 import type { ViewerDTO } from "@/types/viewer";
 
 vi.mock("@/data/viewer", () => ({ getViewer: vi.fn() }));
@@ -54,7 +56,6 @@ const asViewer = (
   displayName: "Mira K.",
   initials: "MK",
   role,
-  needsActionCount: 0,
 });
 
 beforeAll(async () => {
@@ -359,6 +360,51 @@ function foreignOwnerCalls(file: string, source = parseFile(file)): string[] {
   });
   return hits;
 }
+
+// Spec 16: My loans is the viewer's own side only, organizer or not.
+describe("getMyLoans and MyLoansSection", () => {
+  let loanId: string;
+
+  beforeAll(async () => {
+    ({ id: loanId } = await scope.createLoan({
+      itemId: fixture.items.visible,
+      borrowerId: fixture.member.id,
+      status: "requested",
+      startDate: addDays(today, 1),
+      endDate: addDays(today, 1),
+    }));
+  });
+
+  test("the parties see the loan on their own side", async () => {
+    const lending = await getMyLoans(fixture.owner.id, "lending", today);
+    const borrowing = await getMyLoans(fixture.member.id, "borrowing", today);
+    expect(lending.needs_you.map(({ id }) => id)).toContain(loanId);
+    expect(borrowing.active.map(({ id }) => id)).toContain(loanId);
+  });
+
+  test.each(["organizer", "suspendedOwner"] as const)(
+    "a member never sees another member's loans in either tab (%s)",
+    async (who) => {
+      const viewer = fixture[who];
+      for (const side of ["lending", "borrowing"] as const) {
+        const loans = await getMyLoans(viewer.id, side, today);
+        expect(
+          [...loans.needs_you, ...loans.active, ...loans.past].map(
+            ({ id }) => id,
+          ),
+        ).not.toContain(loanId);
+        vi.mocked(getViewer).mockResolvedValue(viewer);
+        const page = await html(
+          await MyLoansSection({
+            searchParams: Promise.resolve({ tab: side }),
+          }),
+        );
+        expect(page).not.toContain(`/loans/${loanId}`);
+      }
+      expect(await countNeedsAction(viewer.id, today)).toBe(0);
+    },
+  );
+});
 
 describe("the derived import rule", () => {
   const readers = appSources.filter((file) =>

@@ -71,3 +71,10 @@ export const markReturnedSchema = z.object({
 });
 
 export type MarkReturnedInput = z.infer<typeof markReturnedSchema>;
+
+// A missing or unknown tab is absent, never an error; the section picks one.
+export const myLoansQuerySchema = z.object({
+  tab: z.enum(["borrowing", "lending"]).optional().catch(undefined),
+});
+
+export type MyLoansQuery = z.infer<typeof myLoansQuerySchema>;

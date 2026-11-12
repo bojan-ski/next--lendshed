@@ -63,7 +63,6 @@ const asViewer = (
   displayName: "Mira K.",
   initials: "MK",
   role,
-  needsActionCount: 0,
 });
 
 function form(fields: Record<string, string | File>): FormData {

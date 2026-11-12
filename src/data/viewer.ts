@@ -13,7 +13,6 @@ function toViewerDTO(user: SessionUser): ViewerDTO {
     displayName: user.name,
     initials: initialsOf(user.name),
     role: user.role,
-    needsActionCount: 0,
   };
 }
 

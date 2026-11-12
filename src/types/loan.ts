@@ -35,6 +35,9 @@ export type LoanCardDTO = {
   changed: boolean;
 };
 
+// One tab of /my/loans, each group already ordered.
+export type MyLoansDTO = Record<LoanCardDTO["group"], LoanCardDTO[]>;
+
 export type LoanViewerRole = "owner" | "borrower" | "organizer";
 
 export type LoanAction =

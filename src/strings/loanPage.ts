@@ -1,5 +1,6 @@
 export const loanPage = {
   title: "Loan",
+  back: "Back to My loans",
   lengthOne: "(1 day)",
   lengthOther: "({days} days)",
   partyLine: "· {party}",

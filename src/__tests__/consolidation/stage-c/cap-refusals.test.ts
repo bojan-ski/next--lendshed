@@ -66,7 +66,6 @@ const asViewer = ({ id }: { id: string }): ViewerDTO => ({
   displayName: "Mira K.",
   initials: "MK",
   role: "member",
-  needsActionCount: 0,
 });
 
 beforeAll(async () => {

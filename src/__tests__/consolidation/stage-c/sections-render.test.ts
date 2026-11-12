@@ -6,6 +6,7 @@ import CategoriesSection from "@/components/categories/CategoriesSection";
 import ItemDetailSection from "@/components/items/ItemDetailSection";
 import { LOAN_HEADING_ID } from "@/components/loans/ids";
 import LoanDetailSection from "@/components/loans/LoanDetailSection";
+import MyLoansSection from "@/components/loans/MyLoansSection";
 import MemberProfileSection from "@/components/profiles/MemberProfileSection";
 import {
   getBrowseItems,
@@ -14,6 +15,7 @@ import {
 } from "@/data/browse";
 import { getAdminCategories, getCategories } from "@/data/categories";
 import { getLoanForViewer } from "@/data/loans";
+import { getMyLoans } from "@/data/my-loans";
 import { getViewer } from "@/data/viewer";
 import { communityToday, formatDate, formatDateRange } from "@/lib/dates/dates";
 import { env } from "@/lib/env/server";
@@ -22,13 +24,15 @@ import { categories } from "@/strings/categories";
 import { home } from "@/strings/home";
 import { itemPage } from "@/strings/itemPage";
 import { loanActions } from "@/strings/loanActions";
+import { loanCard } from "@/strings/loanCard";
 import { loanPage } from "@/strings/loanPage";
+import { myLoans } from "@/strings/myLoans";
 import { photos } from "@/strings/photos";
 import { profile } from "@/strings/profile";
 import { requestForm } from "@/strings/requestForm";
 import { status } from "@/strings/status";
 import type { BrowsePageDTO, ItemCardDTO, ItemDetailDTO } from "@/types/item";
-import type { LoanDetailDTO } from "@/types/loan";
+import type { LoanCardDTO, LoanDetailDTO } from "@/types/loan";
 import type { ViewerDTO } from "@/types/viewer";
 
 vi.mock("@/data/viewer", () => ({ getViewer: vi.fn() }));
@@ -37,6 +41,10 @@ vi.mock("@/data/categories", () => ({
   getAdminCategories: vi.fn(),
 }));
 vi.mock("@/data/loans", () => ({ getLoanForViewer: vi.fn() }));
+vi.mock("@/data/my-loans", () => ({
+  getMyLoans: vi.fn(),
+  countNeedsAction: vi.fn(),
+}));
 vi.mock("@/data/browse", () => ({
   getBrowseItems: vi.fn(),
   getItemForViewer: vi.fn(),
@@ -53,7 +61,6 @@ const member: ViewerDTO = {
   displayName: "Mira K.",
   initials: "MK",
   role: "member",
-  needsActionCount: 0,
 };
 
 const ENTITIES: Record<string, string> = {
@@ -757,5 +764,92 @@ describe("LoanDetailSection — handover and return", () => {
     const page = await loanPageOf({ status: "out", actions: [] });
     expect(page).not.toContain(loanActions.headingReturn);
     expect(page).not.toMatch(button(loanActions.markBack));
+  });
+});
+
+// Spec 16: back to the tab the loan sits on; an organizer looking in has none.
+describe("LoanDetailSection — the back link", () => {
+  beforeEach(() => {
+    vi.mocked(getViewer).mockResolvedValue(member);
+  });
+
+  test.each([
+    ["owner", "/my/loans?tab=lending"],
+    ["borrower", "/my/loans?tab=borrowing"],
+  ] as const)(
+    "the %s's link goes to %s, above the h1",
+    async (viewerRole, href) => {
+      const page = await loanPageOf({ viewerRole });
+      const anchor = /<a [^>]*>(?:(?!<\/a>).)*<\/a>/g;
+      const back = page.match(anchor)?.find((a) => a.includes(loanPage.back));
+      expect(back).toContain(`href="${href}"`);
+      expect(page.indexOf(loanPage.back)).toBeLessThan(page.indexOf("<h1"));
+    },
+  );
+
+  test("a non-party organizer gets no back link", async () => {
+    const page = await loanPageOf({ viewerRole: "organizer" });
+    expect(page).not.toContain(loanPage.back);
+    expect(page).not.toContain("/my/loans");
+  });
+});
+
+// Spec 16: the My loans section, on mocked DTOs.
+describe("MyLoansSection", () => {
+  const myCard = (overrides: Partial<LoanCardDTO> = {}): LoanCardDTO => ({
+    id: "loan-1",
+    side: "lending",
+    item: { id: "item-1", title: "Step ladder", photo: null },
+    otherPartyName: "Ana P.",
+    startDate: "2030-06-20",
+    endDate: "2030-06-22",
+    status: "requested",
+    group: "needs_you",
+    needsYou: "review_request",
+    changed: true,
+    ...overrides,
+  });
+  const myLoansPage = (tab: string) =>
+    MyLoansSection({ searchParams: Promise.resolve({ tab }) });
+
+  beforeEach(() => {
+    vi.mocked(getViewer).mockResolvedValue(member);
+  });
+
+  test("a guest is redirected to /login before any loan is read", async () => {
+    vi.mocked(getViewer).mockResolvedValue(null);
+    expectLoginRedirect(await thrown(myLoansPage("lending")));
+    expect(getMyLoans).not.toHaveBeenCalled();
+  });
+
+  test("reads the viewer's own side on one community today, and renders h2 groups over h3 cards", async () => {
+    vi.mocked(getMyLoans).mockResolvedValue({
+      needs_you: [myCard()],
+      active: [],
+      past: [
+        myCard({
+          id: "loan-2",
+          status: "returned",
+          group: "past",
+          needsYou: null,
+          changed: false,
+        }),
+      ],
+    });
+    const page = await html(await myLoansPage("lending"));
+
+    expect(getMyLoans).toHaveBeenCalledWith("u1", "lending", communityToday());
+    expect(page).toContain(
+      `<h2 class="text-xl font-bold">${myLoans.groups.needs_you}</h2>`,
+    );
+    expect(page).toContain(
+      `<h2 class="text-xl font-bold">${myLoans.groups.past}</h2>`,
+    );
+    expect(page).not.toContain(myLoans.groups.active);
+    expect(page.match(/<h3 /g)).toHaveLength(2);
+    expect(page).toContain(
+      t(loanCard.nextStep.review_request, { name: "Ana P." }),
+    );
+    expect(page).toContain(loanCard.changed);
   });
 });

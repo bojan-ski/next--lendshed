@@ -47,7 +47,6 @@ const member: ViewerDTO = {
   displayName: "Mira K.",
   initials: "MK",
   role: "member",
-  needsActionCount: 0,
 };
 const organizer: ViewerDTO = { ...member, role: "organizer" };
 

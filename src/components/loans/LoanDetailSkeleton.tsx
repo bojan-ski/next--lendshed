@@ -1,9 +1,10 @@
 import Card from "@/components/ui/Card";
 
-// The heading, the dates line and item row, then the two cards.
+// The back link, the heading, the dates line and item row, then the two cards.
 export default function LoanDetailSkeleton() {
   return (
     <div aria-hidden className="flex flex-col gap-6">
+      <div className="h-11 w-44 rounded-control bg-neutral-soft" />
       <div className="flex flex-col gap-3">
         <div className="flex flex-wrap items-center gap-3">
           <div className="h-9 w-56 rounded-control bg-neutral-soft" />

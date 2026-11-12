@@ -37,7 +37,7 @@ const GUARDING_LAYOUTS: Record<
   },
 };
 
-const PAGE_COUNT = 18;
+const PAGE_COUNT = 19;
 const ORIGIN = "http://localhost:3000";
 const SEARCH = "?probe=1";
 
@@ -73,7 +73,6 @@ const member: ViewerDTO = {
   displayName: "Mira K.",
   initials: "MK",
   role: "member",
-  needsActionCount: 0,
 };
 const organizer: ViewerDTO = { ...member, role: "organizer" };
 

@@ -7,6 +7,7 @@ import {
   LOAN_MESSAGE_MAX,
   LOAN_REASON_MAX,
   loanIdSchema,
+  myLoansQuerySchema,
   reasonSchema,
   requestLoanSchema,
 } from "./loans";
@@ -156,5 +157,35 @@ describe("cancelStageSchema", () => {
     for (const stage of ["out", "", null, undefined]) {
       expect(cancelStageSchema.safeParse(stage).success).toBe(false);
     }
+  });
+});
+
+describe("myLoansQuerySchema", () => {
+  test("borrowing and lending pass through", () => {
+    expect(myLoansQuerySchema.parse({ tab: "borrowing" })).toEqual({
+      tab: "borrowing",
+    });
+    expect(myLoansQuerySchema.parse({ tab: "lending" })).toEqual({
+      tab: "lending",
+    });
+  });
+
+  test("missing, empty, repeated or unknown → absent, never an error", () => {
+    for (const tab of [
+      undefined,
+      "",
+      ["lending", "borrowing"],
+      "both",
+      "LENDING",
+    ]) {
+      expect(myLoansQuerySchema.parse({ tab }).tab).toBeUndefined();
+    }
+    expect(myLoansQuerySchema.parse({}).tab).toBeUndefined();
+  });
+
+  test("other params are dropped", () => {
+    expect(myLoansQuerySchema.parse({ tab: "lending", page: "2" })).toEqual({
+      tab: "lending",
+    });
   });
 });

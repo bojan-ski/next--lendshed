@@ -1,4 +1,7 @@
 import { assertMigrated, createTestScope } from "@/__tests__/support/test-db";
+import { TEST_ZONES, useProcessTimeZone } from "@/__tests__/support/time-zone";
+import { toDbDate } from "@/data/db-dates";
+import { type MyLoanRow, toLoanCardDTO } from "@/data/my-loans";
 import { db } from "@/db";
 import type { LoanStatus } from "@/generated/prisma/enums";
 import type { Prisma } from "@/generated/prisma/client";
@@ -7,11 +10,13 @@ import { effectiveStatus } from "@/lib/dates/effective-status";
 import type { EffectiveLoanStatus } from "@/types/loan";
 import {
   blockingLoanWhere,
+  borrowerNeedsActionLoanWhere,
   coversTodayLoanWhere,
   effectiveLoanWhere,
   notFreeTodayLoanWhere,
   occupyingLoanWhere,
   openLoanWhere,
+  ownerNeedsActionLoanWhere,
 } from "./loan-scopes";
 
 vi.setConfig({ testTimeout: 60_000, hookTimeout: 120_000 });
@@ -160,6 +165,57 @@ describe("the composites", () => {
     );
     expect(await idsMatching(notFreeTodayLoanWhere(TODAY))).toEqual(expected);
   });
+});
+
+// A row in toLoanCardDTO's shape; only its status and dates decide needsYou.
+const cardRow = (row: Row): MyLoanRow => ({
+  id: row.id,
+  status: row.status,
+  startDate: toDbDate(row.startDate),
+  endDate: toDbDate(row.endDate),
+  changedAt: new Date(0),
+  ownerSeenAt: null,
+  borrowerSeenAt: null,
+  item: {
+    id: "item",
+    title: "Ladder",
+    photoUrl: null,
+    photoWidth: null,
+    photoHeight: null,
+    owner: { name: "Olga M." },
+  },
+  borrower: { name: "Ana P." },
+});
+
+// Spec 16: the header count and the Needs you group are one rule. Read at
+// 00:30 community time (22:30Z the day before, Belgrade being UTC+2 in June).
+describe.each(TEST_ZONES)("the needs-action fragments in %s", (zone) => {
+  useProcessTimeZone(zone);
+  beforeEach(() => {
+    vi.useFakeTimers({
+      toFake: ["Date"],
+      now: new Date("2030-06-14T22:30:00Z"),
+    });
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  test.each([
+    ["lending", ownerNeedsActionLoanWhere],
+    ["borrowing", borrowerNeedsActionLoanWhere],
+  ] as const)(
+    "the %s fragment matches exactly the rows whose card needs you",
+    async (side, fragment) => {
+      const today = communityToday();
+      expect(today).toBe(TODAY);
+      const expected = idsWhere(
+        (row) => toLoanCardDTO(cardRow(row), side, today).needsYou !== null,
+      );
+      expect(expected.length).toBeGreaterThan(0);
+      expect(await idsMatching(fragment(today))).toEqual(expected);
+    },
+  );
 });
 
 // Belgrade is UTC+1 in November: 22:59:59Z is still the 14th there, 23:00Z the 15th.

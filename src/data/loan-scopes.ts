@@ -86,3 +86,41 @@ export function coversTodayLoanWhere(today: string): Prisma.LoanWhereInput {
 export function notFreeTodayLoanWhere(today: string): Prisma.LoanWhereInput {
   return { OR: [coversTodayLoanWhere(today), occupyingLoanWhere()] };
 }
+
+function startedApprovedLoanWhere(today: string): Prisma.LoanWhereInput {
+  return {
+    AND: [
+      effectiveLoanWhere("approved", today),
+      { startDate: { lte: toDbDate(today) } },
+    ],
+  };
+}
+
+// The query side of toLoanCardDTO's needsYou (src/data/my-loans.ts): a row
+// matches a side's fragment exactly when its card on that side needs you.
+// hand_over counts even while another loan still holds the item (OQ-34).
+export function ownerNeedsActionLoanWhere(
+  today: string,
+): Prisma.LoanWhereInput {
+  return {
+    OR: [
+      effectiveLoanWhere("requested", today),
+      startedApprovedLoanWhere(today),
+      effectiveLoanWhere("overdue", today),
+    ],
+  };
+}
+
+export function borrowerNeedsActionLoanWhere(
+  today: string,
+): Prisma.LoanWhereInput {
+  return {
+    OR: [
+      startedApprovedLoanWhere(today),
+      {
+        AND: [effectiveLoanWhere("out", today), { endDate: toDbDate(today) }],
+      },
+      effectiveLoanWhere("overdue", today),
+    ],
+  };
+}

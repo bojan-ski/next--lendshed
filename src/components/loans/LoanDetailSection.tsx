@@ -5,12 +5,14 @@ import LoanActionsCard from "@/components/loans/LoanActionsCard";
 import LoanContactCard from "@/components/loans/LoanContactCard";
 import LoanNextSteps from "@/components/loans/LoanNextSteps";
 import Card from "@/components/ui/Card";
+import { Icon } from "@/components/ui/icons";
 import PhotoImage from "@/components/ui/PhotoImage";
 import PhotoPlaceholder from "@/components/ui/PhotoPlaceholder";
 import StatusLabel from "@/components/ui/StatusLabel";
 import { getLoanForViewer } from "@/data/loans";
 import { requireViewer } from "@/lib/auth/guards";
-import { communityToday, formatDateRange } from "@/lib/dates/dates";
+import { formatDateRange } from "@/lib/dates/dates";
+import { requestToday } from "@/lib/dates/request-today";
 import { t } from "@/lib/text/interpolate";
 import { loanStatus } from "@/lib/text/status";
 import { loanPage } from "@/strings/loanPage";
@@ -78,6 +80,20 @@ function MessageCard({ loan }: { loan: LoanDetailDTO }) {
   );
 }
 
+// Back to the tab the loan sits on; an organizer looking in has no tab.
+function BackLink({ role }: { role: LoanDetailDTO["viewerRole"] }) {
+  if (role === "organizer") return null;
+  return (
+    <Link
+      href={`/my/loans?tab=${role === "owner" ? "lending" : "borrowing"}`}
+      className="inline-flex min-h-11 items-center gap-2 self-start font-bold text-accent"
+    >
+      <Icon name="arrow-left" aria-hidden />
+      {loanPage.back}
+    </Link>
+  );
+}
+
 // Guards itself: soft navigations don't re-run the layout. Anything outside
 // the loan scope is not-found, whatever the reason. Reads params, so Partial
 // Prefetching never renders it, and a prefetch never records a view.
@@ -85,13 +101,14 @@ export default async function LoanDetailSection({
   params,
 }: Pick<PageProps<"/loans/[id]">, "params">) {
   const viewer = await requireViewer();
-  const today = communityToday();
+  const today = requestToday();
   const { id } = await params;
   const loan = await getLoanForViewer(viewer, id, today);
   if (!loan) notFound();
 
   return (
     <div className="flex flex-col gap-6">
+      <BackLink role={loan.viewerRole} />
       <div className="flex flex-col gap-3">
         <div className="flex flex-wrap items-center gap-3">
           <h1

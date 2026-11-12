@@ -21,6 +21,7 @@ import { loanCard } from "./loanCard";
 import { loanPage } from "./loanPage";
 import { login } from "./login";
 import { members } from "./members";
+import { myLoans } from "./myLoans";
 import { nav } from "./nav";
 import { oneTimeLink } from "./oneTimeLink";
 import { people } from "./people";
@@ -67,6 +68,7 @@ export const strings = {
   requestForm,
   loanPage,
   loanActions,
+  myLoans,
 } as const;
 
 export type FlashKey = keyof typeof strings.flash;

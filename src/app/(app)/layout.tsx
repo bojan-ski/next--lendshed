@@ -4,6 +4,7 @@ import AvatarMenuSkeleton from "@/components/auth/AvatarMenuSkeleton";
 import AvatarMenuSlot from "@/components/auth/AvatarMenuSlot";
 import ContentSkeleton from "@/components/auth/ContentSkeleton";
 import ViewerGate from "@/components/auth/ViewerGate";
+import NeedsActionBadge from "@/components/loans/NeedsActionBadge";
 import MemberHeader from "@/components/shell/MemberHeader";
 import Shell from "@/components/shell/Shell";
 
@@ -15,6 +16,11 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           avatar={
             <Suspense fallback={<AvatarMenuSkeleton />}>
               <AvatarMenuSlot />
+            </Suspense>
+          }
+          myLoansBadge={
+            <Suspense fallback={null}>
+              <NeedsActionBadge />
             </Suspense>
           }
           organizerEntry={
