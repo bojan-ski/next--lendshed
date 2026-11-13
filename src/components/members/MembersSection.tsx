@@ -4,6 +4,7 @@ import ButtonLink from "@/components/ui/ButtonLink";
 import EmptyState from "@/components/ui/EmptyState";
 import { getAdminMembers } from "@/data/members";
 import { requireOrganizer } from "@/lib/auth/guards";
+import { requestToday } from "@/lib/dates/request-today";
 import { memberSearchSchema } from "@/lib/schemas/members";
 import { t } from "@/lib/text/interpolate";
 import { members } from "@/strings/members";
@@ -24,8 +25,9 @@ export default async function MembersSection({
   searchParams,
 }: Pick<PageProps<"/admin/members">, "searchParams">) {
   await requireOrganizer();
+  const today = requestToday();
   const { q } = memberSearchSchema.parse(await searchParams);
-  const rows = await getAdminMembers(q);
+  const rows = await getAdminMembers(q, today);
 
   return (
     <div className="flex flex-col gap-4">

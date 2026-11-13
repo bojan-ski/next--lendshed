@@ -56,7 +56,9 @@ export default function NewInvitationForm() {
           {state.formError && (
             <div ref={notice} tabIndex={-1}>
               <Notice tone="error" alert={false}>
-                {errors.actionFailed}
+                {state.formError === "stale"
+                  ? errors.stale
+                  : errors.actionFailed}
               </Notice>
             </div>
           )}

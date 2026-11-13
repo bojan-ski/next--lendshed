@@ -78,6 +78,16 @@ describe("NewInvitationForm", () => {
     expect(document.activeElement).toHaveTextContent(errors.actionFailed);
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
   });
+
+  test("a stale refusal (organizer role gone) focuses the stale notice", async () => {
+    await submitWith({ formError: "stale" });
+    const notice = await screen.findByText(errors.stale);
+    await vi.waitFor(() =>
+      expect(notice.closest("[tabindex='-1']")).toHaveFocus(),
+    );
+    expect(screen.queryByText(errors.actionFailed)).toBeNull();
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  });
 });
 
 describe("OneTimeLinkPanel copy", () => {

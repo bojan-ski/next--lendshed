@@ -10,7 +10,7 @@ export type InvitationRowDTO = {
 
 export type InvitationFormState = {
   fieldErrors?: Partial<Record<"note", string[]>>;
-  formError?: "unexpected";
+  formError?: "stale" | "unexpected";
   created?: CreatedLinkDTO;
 };
 

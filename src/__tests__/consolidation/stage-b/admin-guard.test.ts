@@ -276,6 +276,7 @@ describe("admin data sections — runtime", () => {
     expect(getAdminMemberDetail).toHaveBeenCalledWith(
       organizer.id,
       routeParams["/admin/members/[id]"].id,
+      expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/),
     );
   });
 });

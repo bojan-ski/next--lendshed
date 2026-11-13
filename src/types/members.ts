@@ -36,6 +36,15 @@ export type RoleChangeState = {
   formError?: "self" | "stale" | "lastOrganizer" | "unexpected";
 };
 
+export type SuspendOutcome = "suspended" | "stale" | "lastOrganizer";
+
+export type ReinstateOutcome = "reinstated" | "stale";
+
+export type MemberStatusState = {
+  flash?: FlashKey;
+  formError?: "self" | "stale" | "lastOrganizer" | "unexpected";
+};
+
 export type ResetLinkState = {
   created?: CreatedLinkDTO;
   formError?: "self" | "stale" | "unexpected";

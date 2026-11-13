@@ -62,6 +62,7 @@ const ISLANDS = [
   "src/components/loans/HandOverControl.tsx",
   "src/components/loans/LoanDecisionControls.tsx",
   "src/components/loans/MarkReturnedForm.tsx",
+  "src/components/members/MemberStatusControl.tsx",
   "src/components/members/ResetLinkForm.tsx",
   "src/components/members/RoleChangeButton.tsx",
   "src/components/shell/NavLink.tsx",

@@ -1,6 +1,6 @@
 import Card from "@/components/ui/Card";
 
-// The heading row and three cards.
+// The heading row and four cards.
 export default function MemberDetailSkeleton() {
   return (
     <div aria-hidden className="flex flex-col gap-6">
@@ -11,7 +11,7 @@ export default function MemberDetailSkeleton() {
           <div className="h-5 w-3/4 rounded-control bg-neutral-soft" />
         </div>
       </div>
-      {[0, 1, 2].map((card) => (
+      {[0, 1, 2, 3].map((card) => (
         <Card key={card} className="flex flex-col gap-4 p-6">
           <div className="h-7 w-40 rounded-control bg-neutral-soft" />
           <div className="h-12 rounded-control bg-neutral-soft" />

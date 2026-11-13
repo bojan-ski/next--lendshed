@@ -7,6 +7,7 @@ import ItemDetailsForm from "@/components/items/ItemDetailsForm";
 import ItemEditSection from "@/components/items/ItemEditSection";
 import NewItemSection from "@/components/items/NewItemSection";
 import OwnItemsSection from "@/components/items/OwnItemsSection";
+import MemberOpenLoans from "@/components/members/MemberOpenLoans";
 import MembersSection from "@/components/members/MembersSection";
 import { getAccount } from "@/data/account";
 import { getCategories } from "@/data/categories";
@@ -14,16 +15,17 @@ import { getOpenInvitations } from "@/data/invitations";
 import { countActiveOwnItems, getItemForEdit, getOwnItems } from "@/data/items";
 import { getAdminMembers } from "@/data/members";
 import { getViewer } from "@/data/viewer";
-import { communityToday } from "@/lib/dates/dates";
+import { communityToday, formatDate } from "@/lib/dates/dates";
 import { ITEM_CAP } from "@/lib/schemas/items";
 import { t } from "@/lib/text/interpolate";
+import { loanStatus } from "@/lib/text/status";
 import { invitations } from "@/strings/invitations";
 import { items } from "@/strings/items";
 import { members } from "@/strings/members";
 import type { AccountDTO } from "@/types/account";
 import type { InvitationRowDTO } from "@/types/invitation";
 import type { ItemEditDTO, OwnItemRowDTO } from "@/types/item";
-import type { AdminMemberRowDTO } from "@/types/members";
+import type { AdminMemberOpenLoan, AdminMemberRowDTO } from "@/types/members";
 import type { ViewerDTO } from "@/types/viewer";
 
 vi.mock("@/data/viewer", () => ({ getViewer: vi.fn() }));
@@ -138,7 +140,10 @@ describe("MembersSection", () => {
       await MembersSection({ searchParams: Promise.resolve({ q }) }),
     );
 
-    expect(getAdminMembers).toHaveBeenCalledWith(q);
+    expect(getAdminMembers).toHaveBeenCalledWith(
+      q,
+      expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/),
+    );
     expect(statusLine(page)).toBe(line);
   });
 
@@ -166,6 +171,75 @@ describe("MembersSection", () => {
 
     expect(page).toContain("<table");
     expect(page).not.toContain(members.emptyBody);
+  });
+
+  test("rows show their real open-loan counts", async () => {
+    vi.mocked(getViewer).mockResolvedValue(organizer);
+    vi.mocked(getAdminMembers).mockResolvedValue([
+      { ...row(1), openLoanCount: 1 },
+      { ...row(2), openLoanCount: 3 },
+    ]);
+
+    const page = await html(
+      await MembersSection({ searchParams: Promise.resolve({}) }),
+    );
+
+    expect(page).toContain(t(members.openLoansOne, { count: 1 }));
+    expect(page).toContain(t(members.openLoansOther, { count: 3 }));
+  });
+});
+
+describe("MemberOpenLoans", () => {
+  const today = "2026-11-13";
+  const loans: AdminMemberOpenLoan[] = [
+    {
+      id: "l1",
+      itemTitle: "Ladder 3 m",
+      side: "borrowed",
+      otherPartyName: "Ada P.",
+      status: "overdue",
+      endDate: "2026-11-12",
+    },
+    {
+      id: "l2",
+      itemTitle: "Hedge trimmer",
+      side: "lent",
+      otherPartyName: "Tom B.",
+      status: "out",
+      endDate: "2026-11-21",
+    },
+  ];
+
+  test("no open loans: the empty line", async () => {
+    const page = await html(
+      MemberOpenLoans({ loans: [], suspended: true, today }),
+    );
+    expect(page).toContain(members.noOpenLoans);
+    expect(page).not.toContain(members.awaitsOrganizerClose);
+  });
+
+  test("each loan is a link to its page with title, side, status and end date", async () => {
+    const page = await html(
+      MemberOpenLoans({ loans, suspended: false, today }),
+    );
+    expect(page).toContain('href="/loans/l1"');
+    expect(page).toContain('href="/loans/l2"');
+    expect(page.indexOf("Ladder 3 m")).toBeLessThan(
+      page.indexOf("Hedge trimmer"),
+    );
+    expect(page).toContain(t(members.borrowedFrom, { name: "Ada P." }));
+    expect(page).toContain(t(members.lentTo, { name: "Tom B." }));
+    expect(page).toContain(loanStatus.overdue.label);
+    expect(page).toContain(loanStatus.out.label);
+    expect(page).toContain(
+      t(members.until, { date: formatDate("2026-11-21", today) }),
+    );
+    expect(page).not.toContain(members.awaitsOrganizerClose);
+  });
+
+  test("a suspended member's open loans add the organizer-close line", async () => {
+    const page = await html(MemberOpenLoans({ loans, suspended: true, today }));
+    expect(page).toContain(members.awaitsOrganizerClose);
   });
 });
 

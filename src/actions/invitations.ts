@@ -39,8 +39,9 @@ export async function createInvitation(
   }
 
   const { token, tokenHash } = createLinkToken();
+  let outcome: Awaited<ReturnType<typeof insertInvitation>>;
   try {
-    await insertInvitation({
+    outcome = await insertInvitation({
       tokenHash,
       note: parsed.data.note,
       createdById: viewer.id,
@@ -49,6 +50,8 @@ export async function createInvitation(
     reportUnexpected("createInvitation", error);
     return { formError: "unexpected" };
   }
+  // Demoted or suspended since requireOrganizer(): nothing was written.
+  if (outcome === "actorGone") return { formError: "stale" };
 
   refresh();
   return {

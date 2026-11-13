@@ -111,9 +111,11 @@ type Guarded = {
   writers: string[];
   // Writers that touch a loan before locking it.
   unlockedFirst: string[];
-  // Every caller of a sweep, and those that run it before lockOwnItem.
+  // Every caller of a sweep, and those that run it before any item lock.
   sweepCallers: string[];
   unguardedSweeps: string[];
+  // Functions whose raw SQL locks item rows FOR UPDATE.
+  itemLockers: string[];
   // Functions behind lockLoanForTransition that lock or write a `user` row.
   userLocks: string[];
   // The helper's raw SQL, in order.
@@ -142,6 +144,7 @@ function analyse(files: { file: string; source: ts.SourceFile }[]): Guarded {
     unlockedFirst: [],
     sweepCallers: [],
     unguardedSweeps: [],
+    itemLockers: [],
     userLocks: [],
     helperSql: [],
   };
@@ -169,6 +172,23 @@ function analyse(files: { file: string; source: ts.SourceFile }[]): Guarded {
   }
   result.writers = [...writers.keys()].sort();
 
+  // Derived, never listed: a function whose raw SQL locks item rows FOR UPDATE.
+  const itemLockers = [...functions.entries()]
+    .filter(([, fn]) => {
+      let locks = false;
+      walk(fn, (node) => {
+        if (
+          ts.isTaggedTemplateExpression(node) &&
+          /FROM item\b[\s\S]*FOR UPDATE/.test(node.template.getText())
+        ) {
+          locks = true;
+        }
+      });
+      return locks;
+    })
+    .map(([name]) => name);
+  result.itemLockers = itemLockers.sort();
+
   for (const [name, { file, fn }] of writers) {
     // An arrow at module level can't be traced to its callers: it fails the
     // writer set by name and counts as unlocked.
@@ -189,7 +209,8 @@ function analyse(files: { file: string; source: ts.SourceFile }[]): Guarded {
       }
       continue;
     }
-    // A sweep outside loans.ts: every caller locks the item first.
+    // A sweep outside loans.ts: every caller locks the item rows first, with
+    // any item-lock helper (one owner's item, or a suspended member's items).
     const sweep = fn.name!.text;
     for (const { file: callerFile, source } of files) {
       walk(source, (node) => {
@@ -197,8 +218,10 @@ function analyse(files: { file: string; source: ts.SourceFile }[]): Guarded {
         const caller = namedFunction(node);
         if (!caller) return;
         result.sweepCallers.push(`${callerFile}#${caller.name!.text}`);
-        const lock = firstCall(caller, "lockOwnItem");
-        if (lock === null || lock > position(node)) {
+        const locks = itemLockers
+          .map((locker) => firstCall(caller, locker))
+          .filter((at): at is number => at !== null);
+        if (locks.length === 0 || Math.min(...locks) > position(node)) {
           result.unguardedSweeps.push(`${callerFile}#${caller.name!.text}`);
         }
       });
@@ -310,7 +333,7 @@ describe("loan-lock-order — src/data/", () => {
     .map((file) => ({ file, source: parseFile(file) }));
   const report = analyse(files);
 
-  test("the loan-status writers: the five transitions and the item sweep", () => {
+  test("the loan-status writers: the five transitions, the item sweep and the member sweep", () => {
     expect(report.writers).toEqual(
       [
         "src/data/items.ts#declineOpenRequests",
@@ -319,6 +342,7 @@ describe("loan-lock-order — src/data/", () => {
         "src/data/loans.ts#declineLoanRequest",
         "src/data/loans.ts#handOverLoan",
         "src/data/loans.ts#markLoanBack",
+        "src/data/members.ts#sweepMemberLoans",
       ].sort(),
     );
   });
@@ -327,9 +351,51 @@ describe("loan-lock-order — src/data/", () => {
     expect(report.unlockedFirst).toEqual([]);
   });
 
-  test("the sweep runs only after lockOwnItem", () => {
-    expect(report.sweepCallers.length).toBeGreaterThan(0);
+  test("the item locks are found from their SQL", () => {
+    expect(report.itemLockers).toEqual(
+      expect.arrayContaining(["lockMemberLoanItems", "lockOwnItem"]),
+    );
+  });
+
+  test("every sweep runs only after an item lock", () => {
+    expect(report.sweepCallers).toEqual(
+      expect.arrayContaining(["src/data/members.ts#suspendMemberAccount"]),
+    );
     expect(report.unguardedSweeps).toEqual([]);
+  });
+
+  // Organizers → the member's user row → their items → the sweep.
+  test("suspendMemberAccount locks in the documented order", () => {
+    const [source] = files
+      .filter(({ file }) => file === "src/data/members.ts")
+      .map(({ source }) => source);
+    let fn: ts.FunctionDeclaration | undefined;
+    walk(source, (node) => {
+      if (
+        ts.isFunctionDeclaration(node) &&
+        node.name?.text === "suspendMemberAccount"
+      ) {
+        fn = node;
+      }
+    });
+    let memberRow: number | null = null;
+    walk(fn!, (node) => {
+      if (
+        memberRow === null &&
+        ts.isTaggedTemplateExpression(node) &&
+        /FROM "user"[\s\S]*FOR UPDATE/.test(node.template.getText())
+      ) {
+        memberRow = position(node);
+      }
+    });
+    const steps = [
+      firstCall(fn!, "lockActiveOrganizerIds"),
+      memberRow,
+      firstCall(fn!, "lockMemberLoanItems"),
+      firstCall(fn!, "sweepMemberLoans"),
+    ];
+    expect(steps.every((at) => at !== null)).toBe(true);
+    expect([...steps].sort((a, b) => a! - b!)).toEqual(steps);
   });
 
   test("lockLoanForTransition locks the item, then the loan", () => {

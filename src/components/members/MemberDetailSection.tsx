@@ -1,7 +1,13 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ROLE_HEADING_ID } from "@/components/members/ids";
+import {
+  ACCESS_HEADING_ID,
+  LOANS_HEADING_ID,
+  ROLE_HEADING_ID,
+} from "@/components/members/ids";
 import MemberCard from "@/components/members/MemberCard";
+import MemberOpenLoans from "@/components/members/MemberOpenLoans";
+import MemberStatusControl from "@/components/members/MemberStatusControl";
 import ResetLinkForm from "@/components/members/ResetLinkForm";
 import RoleChangeButton from "@/components/members/RoleChangeButton";
 import Avatar from "@/components/ui/Avatar";
@@ -30,16 +36,48 @@ function RoleControl({ member }: { member: AdminMemberDetailDTO }) {
   return <RoleChangeButton key="demote" memberId={member.id} change="demote" />;
 }
 
+function AccessControl({ member }: { member: AdminMemberDetailDTO }) {
+  if (member.status === "suspended") {
+    return (
+      <>
+        <p className="text-sm text-muted">{members.accessSuspendedBody}</p>
+        <MemberStatusControl
+          key="reinstate"
+          memberId={member.id}
+          memberName={member.displayName}
+          change="reinstate"
+          isOrganizer={member.role === "organizer"}
+        />
+      </>
+    );
+  }
+  if (member.isLastActiveOrganizer) {
+    return <p className="text-sm text-muted">{members.lastOrganizer}</p>;
+  }
+  return (
+    <>
+      <p className="text-sm text-muted">{members.accessActiveBody}</p>
+      <MemberStatusControl
+        key="suspend"
+        memberId={member.id}
+        memberName={member.displayName}
+        change="suspend"
+        isOrganizer={member.role === "organizer"}
+      />
+    </>
+  );
+}
+
 // Guards itself: the admin layout doesn't re-run on a soft navigation.
 // Suspended members are shown; only a missing row is not-found.
 export default async function MemberDetailSection({
   params,
 }: Pick<PageProps<"/admin/members/[id]">, "params">) {
   const viewer = await requireOrganizer();
-  const { id } = await params;
-  const member = await getAdminMemberDetail(viewer.id, id);
-  if (!member) notFound();
   const today = requestToday();
+  const { id } = await params;
+  const member = await getAdminMemberDetail(viewer.id, id, today);
+  if (!member) notFound();
 
   return (
     <>
@@ -69,9 +107,12 @@ export default async function MemberDetailSection({
         </div>
       </header>
 
-      {/* Spec 18 lists the member's open loans here. */}
-      <MemberCard id="loans-heading" heading={members.loansHeading}>
-        <p className="text-muted">{members.noOpenLoans}</p>
+      <MemberCard id={LOANS_HEADING_ID} heading={members.loansHeading}>
+        <MemberOpenLoans
+          loans={member.openLoans}
+          suspended={member.status === "suspended"}
+          today={today}
+        />
       </MemberCard>
 
       {member.isSelf ? (
@@ -84,6 +125,9 @@ export default async function MemberDetailSection({
         </p>
       ) : (
         <>
+          <MemberCard id={ACCESS_HEADING_ID} heading={members.accessHeading}>
+            <AccessControl member={member} />
+          </MemberCard>
           <MemberCard id={ROLE_HEADING_ID} heading={members.roleHeading}>
             <RoleControl member={member} />
           </MemberCard>

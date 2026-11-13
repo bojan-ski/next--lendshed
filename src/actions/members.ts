@@ -1,19 +1,27 @@
 "use server";
 
 import { refresh } from "next/cache";
-import { changeMemberRole } from "@/data/members";
+import {
+  changeMemberRole,
+  reinstateMemberAccount,
+  suspendMemberAccount,
+} from "@/data/members";
 import { insertResetGrant } from "@/data/reset-grants";
 import type { Role } from "@/generated/prisma/enums";
 import { requireOrganizer } from "@/lib/auth/guards";
 import { createLinkToken } from "@/lib/auth/link-tokens";
+import { communityToday } from "@/lib/dates/dates";
 import { env } from "@/lib/env/server";
 import { reportUnexpected } from "@/lib/feedback/report";
 import { memberIdSchema } from "@/lib/schemas/members";
 import type {
+  MemberStatusState,
+  ReinstateOutcome,
   ResetGrantOutcome,
   ResetLinkState,
   RoleChangeOutcome,
   RoleChangeState,
+  SuspendOutcome,
 } from "@/types/members";
 
 export async function promoteMember(
@@ -56,6 +64,51 @@ async function changeRole(
 
   refresh();
   return { flash: to === "organizer" ? "memberPromoted" : "memberDemoted" };
+}
+
+export async function suspendMember(
+  _prev: MemberStatusState,
+  formData: FormData,
+): Promise<MemberStatusState> {
+  return changeStatus("suspend", formData);
+}
+
+export async function reinstateMember(
+  _prev: MemberStatusState,
+  formData: FormData,
+): Promise<MemberStatusState> {
+  return changeStatus("reinstate", formData);
+}
+
+// Not exported, as changeRole.
+async function changeStatus(
+  change: "suspend" | "reinstate",
+  formData: FormData,
+): Promise<MemberStatusState> {
+  const viewer = await requireOrganizer();
+  const parsed = memberIdSchema.safeParse({ id: formData.get("id") });
+  if (!parsed.success) return { formError: "stale" };
+  if (parsed.data.id === viewer.id) return { formError: "self" };
+
+  const input = { actorId: viewer.id, memberId: parsed.data.id };
+  let outcome: SuspendOutcome | ReinstateOutcome;
+  try {
+    outcome =
+      change === "suspend"
+        ? await suspendMemberAccount({ ...input, today: communityToday() })
+        : await reinstateMemberAccount(input);
+  } catch (error) {
+    reportUnexpected("changeStatus", error);
+    return { formError: "unexpected" };
+  }
+  if (outcome !== "suspended" && outcome !== "reinstated") {
+    return { formError: outcome };
+  }
+
+  refresh();
+  return {
+    flash: outcome === "suspended" ? "memberSuspended" : "memberReinstated",
+  };
 }
 
 // Nothing on the page shows grants, so there is nothing to refresh.

@@ -158,6 +158,15 @@ describe("createInvitation", () => {
     expect(refresh).not.toHaveBeenCalled();
   });
 
+  test("an actor demoted or suspended since the guard is stale: no link, no refresh", async () => {
+    await actAs("organizer");
+    vi.mocked(insertInvitation).mockResolvedValueOnce("actorGone");
+    expect(await createInvitation(idleForm, form({ note: "" }))).toEqual({
+      formError: "stale",
+    });
+    expect(refresh).not.toHaveBeenCalled();
+  });
+
   test("a member gets not-found and writes nothing", async () => {
     const member = await actAs("member");
     const error = await thrownBy(createInvitation(idleForm, form({})));

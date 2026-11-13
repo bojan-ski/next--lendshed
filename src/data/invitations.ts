@@ -1,4 +1,5 @@
 import "server-only";
+import { lockActiveOrganizerIds } from "@/data/members";
 import { db } from "@/db";
 import { createCredentialUser } from "@/db/credentials";
 import { Prisma } from "@/generated/prisma/client";
@@ -9,6 +10,8 @@ import type { InvitationRowDTO } from "@/types/invitation";
 const LIFETIME_MS = 7 * 24 * 60 * 60 * 1000;
 // Hashing happens inside the join transaction (.claude/rules/auth.md).
 const JOIN_TRANSACTION = { maxWait: 15_000, timeout: 30_000 };
+// A create may queue behind a role change's organizer locks.
+const LOCKING_TRANSACTION = { maxWait: 15_000, timeout: 30_000 };
 
 const rowSelect = {
   id: true,
@@ -46,19 +49,27 @@ export async function getOpenInvitations(): Promise<InvitationRowDTO[]> {
   return rows.map(toInvitationRowDTO);
 }
 
+// Organizer locks first, as insertResetGrant: the invitation's foreign key
+// takes a key-share lock on its creator, and a suspension of that creator
+// either runs first (actorGone) or revokes this invitation after it commits.
 export async function insertInvitation(input: {
   tokenHash: string;
   note: string | null;
   createdById: string;
-}): Promise<void> {
+}): Promise<"created" | "actorGone"> {
   const now = new Date();
-  await db.invitation.create({
-    data: {
-      ...input,
-      createdAt: now,
-      expiresAt: new Date(now.getTime() + LIFETIME_MS),
-    },
-  });
+  return db.$transaction(async (tx) => {
+    const organizers = await lockActiveOrganizerIds(tx);
+    if (!organizers.includes(input.createdById)) return "actorGone";
+    await tx.invitation.create({
+      data: {
+        ...input,
+        createdAt: now,
+        expiresAt: new Date(now.getTime() + LIFETIME_MS),
+      },
+    });
+    return "created";
+  }, LOCKING_TRANSACTION);
 }
 
 export async function revokeOpenInvitation(

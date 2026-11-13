@@ -1,12 +1,15 @@
+import { holdRow } from "@/__tests__/support/hold-row";
 import {
   assertMigrated,
   createTestScope,
   type InvitationState,
 } from "@/__tests__/support/test-db";
+import { suspendMemberAccount } from "@/data/members";
 import { db } from "@/db";
 import { createCredentialUser } from "@/db/credentials";
 import { Prisma } from "@/generated/prisma/client";
 import { createLinkToken, hashLinkToken } from "@/lib/auth/link-tokens";
+import { communityToday } from "@/lib/dates/dates";
 import { people } from "@/strings/people";
 import {
   getOpenInvitations,
@@ -199,6 +202,88 @@ describe("insertInvitation", () => {
     });
     expect(row.expiresAt.getTime() - row.createdAt.getTime()).toBe(7 * DAY_MS);
   });
+
+  test("an active organizer's create is created", async () => {
+    const creator = await scope.createTestUser({ role: "organizer" });
+    const { tokenHash } = createLinkToken();
+    expect(
+      await insertInvitation({
+        tokenHash,
+        note: null,
+        createdById: creator.id,
+      }),
+    ).toBe("created");
+  });
+
+  test.each([
+    ["demoted to member", "member", "active"],
+    ["suspended", "organizer", "suspended"],
+  ] as const)(
+    "an actor %s since the guard is actorGone and nothing is written",
+    async (_label, role, status) => {
+      const creator = await scope.createTestUser({ role, status });
+      const { tokenHash } = createLinkToken();
+
+      expect(
+        await insertInvitation({
+          tokenHash,
+          note: null,
+          createdById: creator.id,
+        }),
+      ).toBe("actorGone");
+      expect(
+        await db.invitation.findUnique({ where: { tokenHash } }),
+      ).toBeNull();
+    },
+  );
+
+  // Both queue on the organizer locks behind a held row; whichever runs second
+  // decides, and no open invitation by the suspended organizer remains.
+  test.each(["create first", "suspend first"] as const)(
+    "a create and its organizer's suspension at once, %s",
+    async (order) => {
+      const actor = await scope.createTestUser({ role: "organizer" });
+      const creator = await scope.createTestUser({ role: "organizer" });
+      const { tokenHash } = createLinkToken();
+      const create = () =>
+        insertInvitation({ tokenHash, note: null, createdById: creator.id });
+      const suspend = () =>
+        suspendMemberAccount({
+          actorId: actor.id,
+          memberId: creator.id,
+          today: communityToday(),
+        });
+
+      const held = holdRow("user", creator.id);
+      await held.held;
+      const first = order === "create first" ? create() : suspend();
+      await held.queued(1);
+      const second = order === "create first" ? suspend() : create();
+      await held.queued(2);
+      held.release();
+      await held.done;
+      const outcomes = [await first, await second];
+
+      const row = await db.invitation.findUnique({ where: { tokenHash } });
+      if (order === "create first") {
+        expect(outcomes).toEqual(["created", "suspended"]);
+        expect(row?.revokedAt).not.toBeNull();
+      } else {
+        expect(outcomes).toEqual(["suspended", "actorGone"]);
+        expect(row).toBeNull();
+      }
+      expect(
+        await db.invitation.count({
+          where: {
+            createdById: creator.id,
+            usedAt: null,
+            revokedAt: null,
+            expiresAt: { gt: new Date() },
+          },
+        }),
+      ).toBe(0);
+    },
+  );
 });
 
 describe("revokeOpenInvitation", () => {

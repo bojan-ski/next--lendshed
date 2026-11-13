@@ -7,6 +7,8 @@ export const flash = {
   passwordChanged: "Password changed. Your other devices are signed out.",
   memberPromoted: "Organizer role given.",
   memberDemoted: "Organizer role removed.",
+  memberSuspended: "Account suspended.",
+  memberReinstated: "Account reinstated.",
   passwordReset: "Password saved. Sign in with your new password.",
   categoryAdded: "Category added.",
   categoryRenamed: "Category renamed.",

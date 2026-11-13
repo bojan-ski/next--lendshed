@@ -22,7 +22,12 @@ import {
 } from "@/__tests__/support/test-db";
 import { demoteMember } from "@/actions/members";
 import MemberDetailSection from "@/components/members/MemberDetailSection";
-import { changeMemberRole, getAdminMemberDetail } from "@/data/members";
+import {
+  changeMemberRole,
+  getAdminMemberDetail,
+  reinstateMemberAccount,
+  suspendMemberAccount,
+} from "@/data/members";
 import { insertResetGrant } from "@/data/reset-grants";
 import { db } from "@/db";
 import { members } from "@/strings/members";
@@ -41,13 +46,19 @@ vi.mock("@/data/members", async (importOriginal) => {
     ...actual,
     changeMemberRole: vi.fn(actual.changeMemberRole),
     getAdminMemberDetail: vi.fn(actual.getAdminMemberDetail),
+    suspendMemberAccount: vi.fn(actual.suspendMemberAccount),
+    reinstateMemberAccount: vi.fn(actual.reinstateMemberAccount),
   };
 });
 vi.mock("@/data/reset-grants", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/data/reset-grants")>();
   return { ...actual, insertResetGrant: vi.fn(actual.insertResetGrant) };
 });
-// The two member controls, as markers the rendered tree can be searched for.
+// The member controls, as markers the rendered tree can be searched for.
+vi.mock("@/components/members/MemberStatusControl", () => ({
+  default: ({ change }: { change: string }) =>
+    createElement("member-status-control", { "data-change": change }),
+}));
 vi.mock("@/components/members/RoleChangeButton", () => ({
   default: ({ change }: { change: string }) =>
     createElement("role-change-button", { "data-change": change }),
@@ -95,11 +106,13 @@ async function loadAction(file: string, name: string): Promise<Action> {
 }
 
 describe("organizer actions never target yourself", () => {
-  test("the 'not self' actions in code are promote, demote and reset link", () => {
+  test("the 'not self' actions in code are promote, demote, reset link, suspend and reinstate", () => {
     expect(notSelf.map(({ name }) => name).sort()).toEqual([
       "createResetLink",
       "demoteMember",
       "promoteMember",
+      "reinstateMember",
+      "suspendMember",
     ]);
   });
 
@@ -108,22 +121,45 @@ describe("organizer actions never target yourself", () => {
     async ({ file, name }) => {
       const action = await loadAction(file, name);
       const viewer = await actAsOrganizer();
-      const before = await db.user.findUniqueOrThrow({
-        where: { id: viewer.id },
+      const { id: invitationId } = await scope.createInvitation({
+        createdById: viewer.id,
       });
+      const before = {
+        user: await db.user.findUniqueOrThrow({ where: { id: viewer.id } }),
+        sessions: await scope.sessionsOf(viewer.id),
+        invitation: await db.invitation.findUniqueOrThrow({
+          where: { id: invitationId },
+        }),
+        loans: await db.loan.findMany({
+          where: {
+            OR: [{ borrowerId: viewer.id }, { item: { ownerId: viewer.id } }],
+          },
+        }),
+      };
 
       expect(await action({}, idForm(viewer.id))).toEqual({
         formError: "self",
       });
 
-      expect(
-        await db.user.findUniqueOrThrow({ where: { id: viewer.id } }),
-      ).toEqual(before);
+      expect({
+        user: await db.user.findUniqueOrThrow({ where: { id: viewer.id } }),
+        sessions: await scope.sessionsOf(viewer.id),
+        invitation: await db.invitation.findUniqueOrThrow({
+          where: { id: invitationId },
+        }),
+        loans: await db.loan.findMany({
+          where: {
+            OR: [{ borrowerId: viewer.id }, { item: { ownerId: viewer.id } }],
+          },
+        }),
+      }).toEqual(before);
       expect(
         await db.passwordResetGrant.findMany({ where: { userId: viewer.id } }),
       ).toEqual([]);
       expect(changeMemberRole).not.toHaveBeenCalled();
       expect(insertResetGrant).not.toHaveBeenCalled();
+      expect(suspendMemberAccount).not.toHaveBeenCalled();
+      expect(reinstateMemberAccount).not.toHaveBeenCalled();
       expect(refresh).not.toHaveBeenCalled();
     },
   );
@@ -218,11 +254,26 @@ const dataFiles = sourceFiles("src/data/**/*.ts").filter(
 );
 
 describe("lock-first: role and status writes take the organizer locks first", () => {
-  test("finds the Stage B writer: changeMemberRole", () => {
+  test("finds the writers: changeMemberRole, suspendMemberAccount and reinstateMemberAccount", () => {
     const writers = dataFiles.filter(
       (file) => roleOrStatusWrites(parseFile(file)).length > 0,
     );
     expect(writers).toEqual(["src/data/members.ts"]);
+    // Named by the declaration around the transaction callback.
+    const declaredIn = (node: ts.Node) => {
+      let current: ts.Node | undefined = node.parent;
+      while (current && !ts.isFunctionDeclaration(current)) {
+        current = current.parent;
+      }
+      return current?.name?.text;
+    };
+    expect(
+      roleOrStatusWrites(parseFile("src/data/members.ts")).map(declaredIn),
+    ).toEqual([
+      "changeMemberRole",
+      "suspendMemberAccount",
+      "reinstateMemberAccount",
+    ]);
   });
 
   test.each(dataFiles)(
@@ -286,7 +337,11 @@ async function renderDetail(dto: AdminMemberDetailDTO): Promise<string> {
   const tree = (await MemberDetailSection({
     params: Promise.resolve({ id: dto.id }),
   })) as ReactNode;
-  expect(getAdminMemberDetail).toHaveBeenCalledWith(viewer.id, dto.id);
+  expect(getAdminMemberDetail).toHaveBeenCalledWith(
+    viewer.id,
+    dto.id,
+    expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/),
+  );
   const { prelude } = await prerender(tree);
   return new Response(prelude).text();
 }
@@ -330,5 +385,51 @@ describe("MemberDetailSection's role and reset controls", () => {
   test("another organizer who isn't the last: demote (control)", async () => {
     const html = await renderDetail({ ...otherMember, role: "organizer" });
     expect(html).toContain('<role-change-button data-change="demote">');
+  });
+});
+
+describe("MemberDetailSection's Access card", () => {
+  test("an active member: the suspend control, after the open loans and before Role", async () => {
+    const html = await renderDetail(otherMember);
+    expect(html).toContain('<member-status-control data-change="suspend">');
+    expect(html).toContain(members.accessActiveBody);
+    const order = [
+      members.loansHeading,
+      members.accessHeading,
+      members.roleHeading,
+      members.resetHeading,
+    ].map((heading) => html.indexOf(`>${heading}</h2>`));
+    expect(order.every((at) => at >= 0)).toBe(true);
+    expect([...order].sort((a, b) => a - b)).toEqual(order);
+  });
+
+  test("a suspended member: says so and offers reinstate", async () => {
+    const html = await renderDetail({ ...otherMember, status: "suspended" });
+    expect(html).toContain('<member-status-control data-change="reinstate">');
+    // React's HTML escapes the apostrophe in "can't".
+    expect(html).toContain(
+      members.accessSuspendedBody.replaceAll("'", "&#x27;"),
+    );
+  });
+
+  test("the last active organizer: the reason, no control", async () => {
+    const html = await renderDetail({
+      ...otherMember,
+      role: "organizer",
+      isLastActiveOrganizer: true,
+    });
+    expect(html).toContain(`>${members.accessHeading}</h2>`);
+    expect(html).not.toContain("<member-status-control");
+    expect(html).toContain(members.lastOrganizer);
+  });
+
+  test("your own record: no Access card and no suspend or reinstate control", async () => {
+    const html = await renderDetail({
+      ...otherMember,
+      role: "organizer",
+      isSelf: true,
+    });
+    expect(html).not.toContain(`>${members.accessHeading}</h2>`);
+    expect(html).not.toContain("<member-status-control");
   });
 });

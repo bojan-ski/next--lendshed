@@ -7,14 +7,30 @@ import {
   SESSION_COOKIE,
   signInForCookie,
 } from "@/__tests__/support/test-db";
-import { changeMemberRole } from "@/data/members";
+import {
+  changeMemberRole,
+  reinstateMemberAccount,
+  suspendMemberAccount,
+} from "@/data/members";
 import { insertResetGrant } from "@/data/reset-grants";
 import { db } from "@/db";
 import type { MemberStatus, Role } from "@/generated/prisma/enums";
 import { hashLinkToken } from "@/lib/auth/link-tokens";
+import { addDays, communityToday } from "@/lib/dates/dates";
 import { env } from "@/lib/env/server";
-import type { ResetLinkState, RoleChangeState } from "@/types/members";
-import { createResetLink, demoteMember, promoteMember } from "./members";
+import { reportUnexpected } from "@/lib/feedback/report";
+import type {
+  MemberStatusState,
+  ResetLinkState,
+  RoleChangeState,
+} from "@/types/members";
+import {
+  createResetLink,
+  demoteMember,
+  promoteMember,
+  reinstateMember,
+  suspendMember,
+} from "./members";
 
 vi.mock(
   "next/headers",
@@ -25,8 +41,14 @@ vi.mock("next/cache", () => ({ refresh: vi.fn() }));
 // Spied, not replaced: real queries unless a test overrides one call.
 vi.mock("@/data/members", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/data/members")>();
-  return { ...actual, changeMemberRole: vi.fn(actual.changeMemberRole) };
+  return {
+    ...actual,
+    changeMemberRole: vi.fn(actual.changeMemberRole),
+    suspendMemberAccount: vi.fn(actual.suspendMemberAccount),
+    reinstateMemberAccount: vi.fn(actual.reinstateMemberAccount),
+  };
 });
+vi.mock("@/lib/feedback/report", () => ({ reportUnexpected: vi.fn() }));
 vi.mock("@/data/reset-grants", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/data/reset-grants")>();
   return { ...actual, insertResetGrant: vi.fn(actual.insertResetGrant) };
@@ -304,4 +326,194 @@ describe("createResetLink", () => {
     );
     expect(insertResetGrant).not.toHaveBeenCalled();
   });
+});
+
+describe("suspendMember / reinstateMember", () => {
+  const idle: MemberStatusState = {};
+
+  test("suspends an active member: sessions gone, requests swept, refreshed, flash key returned", async () => {
+    const viewer = await actAs("organizer");
+    const member = await scope.createTestUser();
+    await signInForCookie({ ...member, ip: scope.ip() });
+    const owner = await scope.createTestUser();
+    const { id: itemId } = await scope.createItem({
+      ownerId: owner.id,
+      status: "listed",
+    });
+    const today = communityToday();
+    const { id: loanId } = await scope.createLoan({
+      itemId,
+      borrowerId: member.id,
+      status: "requested",
+      startDate: addDays(today, 2),
+      endDate: addDays(today, 3),
+    });
+
+    expect(await suspendMember(idle, idForm(member.id))).toEqual({
+      flash: "memberSuspended",
+    });
+
+    expect(suspendMemberAccount).toHaveBeenCalledWith({
+      actorId: viewer.id,
+      memberId: member.id,
+      today,
+    });
+    expect(await userRow(member.id)).toMatchObject({
+      status: "suspended",
+      role: "member",
+    });
+    expect(await scope.sessionsOf(member.id)).toEqual([]);
+    expect(
+      await db.loan.findUniqueOrThrow({ where: { id: loanId } }),
+    ).toMatchObject({
+      status: "cancelled",
+      systemReason: "borrower_suspended",
+    });
+    expect(refresh).toHaveBeenCalledTimes(1);
+  });
+
+  test("reinstates a suspended member: status only, refreshed, flash key returned", async () => {
+    const viewer = await actAs("organizer");
+    const member = await scope.createTestUser({ status: "suspended" });
+    const before = await userRow(member.id);
+
+    expect(await reinstateMember(idle, idForm(member.id))).toEqual({
+      flash: "memberReinstated",
+    });
+
+    expect(reinstateMemberAccount).toHaveBeenCalledWith({
+      actorId: viewer.id,
+      memberId: member.id,
+    });
+    const after = await userRow(member.id);
+    expect({ ...after, updatedAt: before.updatedAt }).toEqual({
+      ...before,
+      status: "active",
+    });
+    expect(await scope.sessionsOf(member.id)).toEqual([]);
+    expect(refresh).toHaveBeenCalledTimes(1);
+  });
+
+  test.each<[string, typeof suspendMember, MemberStatus]>([
+    ["suspend of a suspended member", suspendMember, "suspended"],
+    ["reinstate of an active member", reinstateMember, "active"],
+  ])(
+    "%s is stale: nothing written, no refresh",
+    async (_label, action, status) => {
+      await actAs("organizer");
+      const target = await scope.createTestUser({ status });
+      const before = await userRow(target.id);
+
+      expect(await action(idle, idForm(target.id))).toEqual({
+        formError: "stale",
+      });
+      expect(await userRow(target.id)).toEqual(before);
+      expect(refresh).not.toHaveBeenCalled();
+    },
+  );
+
+  test.each([
+    ["an unknown id", "no-such-member"],
+    ["an empty id", ""],
+    ["no id at all", undefined],
+  ])("%s is stale for both", async (_label, id) => {
+    await actAs("organizer");
+    expect(await suspendMember(idle, idForm(id))).toEqual({
+      formError: "stale",
+    });
+    expect(await reinstateMember(idle, idForm(id))).toEqual({
+      formError: "stale",
+    });
+    expect(refresh).not.toHaveBeenCalled();
+  });
+
+  test.each([suspendMember, reinstateMember])(
+    "your own id is refused before any database read",
+    async (action) => {
+      const viewer = await actAs("organizer");
+      expect(await action(idle, idForm(viewer.id))).toEqual({
+        formError: "self",
+      });
+      expect(suspendMemberAccount).not.toHaveBeenCalled();
+      expect(reinstateMemberAccount).not.toHaveBeenCalled();
+      expect(await userRow(viewer.id)).toMatchObject({ status: "active" });
+      expect(await scope.sessionsOf(viewer.id)).not.toEqual([]);
+      expect(refresh).not.toHaveBeenCalled();
+    },
+  );
+
+  test("the last-organizer refusal is returned inline with no refresh", async () => {
+    await actAs("organizer");
+    const organizer = await scope.createTestUser({ role: "organizer" });
+    vi.mocked(suspendMemberAccount).mockResolvedValueOnce("lastOrganizer");
+
+    expect(await suspendMember(idle, idForm(organizer.id))).toEqual({
+      formError: "lastOrganizer",
+    });
+    expect(await userRow(organizer.id)).toMatchObject({ status: "active" });
+    expect(refresh).not.toHaveBeenCalled();
+  });
+
+  test.each(["suspend", "reinstate"] as const)(
+    "an unexpected %s failure is reported and returns the notice, no refresh",
+    async (change) => {
+      await actAs("organizer");
+      const status = change === "suspend" ? "active" : "suspended";
+      const action = change === "suspend" ? suspendMember : reinstateMember;
+      const target = await scope.createTestUser({ status });
+      const error = new Error("down");
+      if (change === "suspend") {
+        vi.mocked(suspendMemberAccount).mockRejectedValueOnce(error);
+      } else {
+        vi.mocked(reinstateMemberAccount).mockRejectedValueOnce(error);
+      }
+
+      expect(await action(idle, idForm(target.id))).toEqual({
+        formError: "unexpected",
+      });
+      expect(reportUnexpected).toHaveBeenCalledWith("changeStatus", error);
+      expect(await userRow(target.id)).toMatchObject({ status });
+      expect(refresh).not.toHaveBeenCalled();
+    },
+  );
+
+  test("the acting organizer is the viewer, never a form field", async () => {
+    const viewer = await actAs("organizer");
+    const member = await scope.createTestUser();
+    const data = idForm(member.id);
+    data.set("actorId", "someone-else");
+    data.set("status", "active");
+    data.set("today", "2020-01-01");
+
+    await suspendMember(idle, data);
+
+    expect(suspendMemberAccount).toHaveBeenCalledWith({
+      actorId: viewer.id,
+      memberId: member.id,
+      today: communityToday(),
+    });
+  });
+
+  test.each([suspendMember, reinstateMember])(
+    "a member gets not-found and nothing changes",
+    async (action) => {
+      await actAs("member");
+      const target = await scope.createTestUser();
+      const error = await thrownBy(action(idle, idForm(target.id)));
+      expect((error as { digest?: string }).digest).toBe(NOT_FOUND);
+      expect(suspendMemberAccount).not.toHaveBeenCalled();
+      expect(reinstateMemberAccount).not.toHaveBeenCalled();
+      expect(await userRow(target.id)).toMatchObject({ status: "active" });
+    },
+  );
+
+  test.each([suspendMember, reinstateMember])(
+    "a guest is sent to /login",
+    async (action) => {
+      mockNextRequest({ ip: scope.ip() });
+      expect(await redirectTarget(action(idle, idForm("x")))).toBe("/login");
+      expect(suspendMemberAccount).not.toHaveBeenCalled();
+      expect(reinstateMemberAccount).not.toHaveBeenCalled();
+    },
+  );
 });

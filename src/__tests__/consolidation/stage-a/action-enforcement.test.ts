@@ -91,6 +91,7 @@ describe("action enforcement — derivation", () => {
       "markLoanOut",
       "markLoanReturned",
       "promoteMember",
+      "reinstateMember",
       "renameCategory",
       "requestLoan",
       "resetPasswordWithGrant",
@@ -98,6 +99,7 @@ describe("action enforcement — derivation", () => {
       "revokeInvitation",
       "signIn",
       "signOut",
+      "suspendMember",
       "updateContactDetails",
       "updateItem",
       "updateProfile",
@@ -256,8 +258,10 @@ describe("wrong role", () => {
       "deleteCategory",
       "demoteMember",
       "promoteMember",
+      "reinstateMember",
       "renameCategory",
       "revokeInvitation",
+      "suspendMember",
     ]);
   });
 
