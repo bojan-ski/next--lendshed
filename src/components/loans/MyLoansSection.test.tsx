@@ -97,6 +97,28 @@ describe("MyLoansSection", () => {
     },
   );
 
+  // [borrowing count, lending count] → the tab a badge click lands on.
+  test.each<[number, number, "borrowing" | "lending"]>([
+    [0, 2, "lending"],
+    [1, 2, "borrowing"],
+    [1, 0, "borrowing"],
+  ])(
+    "no tab, borrowing %i and lending %i needing you → %s",
+    async (borrowing, lending, expected) => {
+      vi.mocked(getMyLoans).mockResolvedValue(EMPTY);
+      vi.mocked(countNeedsAction).mockImplementation(
+        async (_viewer, _today, side) =>
+          side === "lending" ? lending : borrowing,
+      );
+      await renderSection();
+
+      expect(getMyLoans).toHaveBeenCalledWith("u1", expected, TODAY);
+      expect(
+        within(tabsNav()).getByRole("link", { name: myLoans.tabs[expected] }),
+      ).toHaveAttribute("aria-current", "page");
+    },
+  );
+
   test("groups appear in order as h2s over h3 cards; an empty group is omitted", async () => {
     vi.mocked(getMyLoans).mockResolvedValue({
       needs_you: [

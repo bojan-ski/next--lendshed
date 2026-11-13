@@ -149,12 +149,13 @@ describe.each(STAGES)("CancelLoanControl (%s)", (stage, label) => {
     expect(confirm()).toBeInTheDocument();
   });
 
-  test("a reason error focuses the textarea and keeps what was typed", async () => {
+  // The echo differs from what was typed, so the box shows the server's copy.
+  test("a reason error focuses the textarea and shows the echoed reason", async () => {
     vi.mocked(cancelLoan).mockImplementation(async () => {
       (document.activeElement as HTMLElement).blur();
       return {
         fieldErrors: { reason: ["Too long"] },
-        values: { reason: "Typed" },
+        values: { reason: "Typed, as echoed" },
       };
     });
     await startCancel();
@@ -163,6 +164,6 @@ describe.each(STAGES)("CancelLoanControl (%s)", (stage, label) => {
 
     await screen.findByText("Too long");
     await vi.waitFor(() => expect(reasonBox()).toHaveFocus());
-    expect(reasonBox()).toHaveValue("Typed");
+    expect(reasonBox()).toHaveValue("Typed, as echoed");
   });
 });

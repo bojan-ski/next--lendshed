@@ -12,7 +12,7 @@ import StatusLabel from "@/components/ui/StatusLabel";
 import { getCategories } from "@/data/categories";
 import { getItemForEdit } from "@/data/items";
 import { requireViewer } from "@/lib/auth/guards";
-import { communityToday } from "@/lib/dates/dates";
+import { requestToday } from "@/lib/dates/request-today";
 import { itemStatus } from "@/lib/text/status";
 import { items } from "@/strings/items";
 import { photos } from "@/strings/photos";
@@ -77,7 +77,7 @@ export default async function ItemEditSection({
   const viewer = await requireViewer();
   const { id } = await params;
   const [item, categories] = await Promise.all([
-    getItemForEdit(viewer.id, id, communityToday()),
+    getItemForEdit(viewer.id, id, requestToday()),
     getCategories(),
   ]);
   if (!item) notFound();

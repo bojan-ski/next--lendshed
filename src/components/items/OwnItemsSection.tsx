@@ -4,7 +4,7 @@ import EmptyState from "@/components/ui/EmptyState";
 import { Icon } from "@/components/ui/icons";
 import { getOwnItems } from "@/data/items";
 import { requireViewer } from "@/lib/auth/guards";
-import { communityToday } from "@/lib/dates/dates";
+import { requestToday } from "@/lib/dates/request-today";
 import { t } from "@/lib/text/interpolate";
 import { items } from "@/strings/items";
 
@@ -22,7 +22,7 @@ export default async function OwnItemsSection() {
   const viewer = await requireViewer();
   const { rows, activeCount, cap } = await getOwnItems(
     viewer.id,
-    communityToday(),
+    requestToday(),
   );
 
   if (rows.length === 0) {

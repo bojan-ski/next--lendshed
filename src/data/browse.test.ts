@@ -2,7 +2,12 @@ import { assertMigrated, createTestScope } from "@/__tests__/support/test-db";
 import { db } from "@/db";
 import type { ItemStatus, LoanStatus } from "@/generated/prisma/enums";
 import type { BrowseQuery } from "@/lib/schemas/browse";
-import { getBrowseItems, getItemForViewer, getMemberProfile } from "./browse";
+import {
+  getBrowseItems,
+  getItemForViewer,
+  getMemberProfile,
+  isVisibleItem,
+} from "./browse";
 
 vi.setConfig({ testTimeout: 60_000, hookTimeout: 60_000 });
 
@@ -331,6 +336,28 @@ describe("getItemForViewer scope", () => {
     for (const id of [...ids, `${scope.tag}-missing`]) {
       expect(await getItemForViewer(as(viewerId), id, TODAY)).toBeNull();
     }
+  });
+
+  // The loan page's item link (toLoanDetailDTO's viewable) reads the row
+  // predicate; it must name exactly the items this page shows a non-owner.
+  test("isVisibleItem agrees with getItemForViewer on every state and owner", async () => {
+    const categoryId = await category("Agree");
+    const suspended = (await scope.createTestUser({ status: "suspended" })).id;
+    const cases = await Promise.all(
+      (["listed", "hidden", "retired"] as const).flatMap((status) =>
+        [ownerId, suspended, null].map(async (owner) => {
+          const id = await item(categoryId, { owner, status });
+          const row = await db.item.findUniqueOrThrow({
+            where: { id },
+            select: { status: true, owner: { select: { status: true } } },
+          });
+          const shown = await getItemForViewer(as(viewerId), id, TODAY);
+          return { visible: isVisibleItem(row), shown: shown !== null };
+        }),
+      ),
+    );
+    for (const { visible, shown } of cases) expect(visible).toBe(shown);
+    expect(cases.filter(({ shown }) => shown)).toHaveLength(1);
   });
 
   test("an organizer gets no extra visibility", async () => {

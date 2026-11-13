@@ -2,7 +2,7 @@ import InvitationsTable from "@/components/invitations/InvitationsTable";
 import EmptyState from "@/components/ui/EmptyState";
 import { getOpenInvitations } from "@/data/invitations";
 import { requireOrganizer } from "@/lib/auth/guards";
-import { communityToday } from "@/lib/dates/dates";
+import { requestToday } from "@/lib/dates/request-today";
 import { invitations } from "@/strings/invitations";
 
 // Guards itself: the admin layout doesn't re-run on a soft navigation.
@@ -18,5 +18,5 @@ export default async function InvitationsSection() {
       />
     );
   }
-  return <InvitationsTable rows={rows} today={communityToday()} />;
+  return <InvitationsTable rows={rows} today={requestToday()} />;
 }

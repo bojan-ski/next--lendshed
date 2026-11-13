@@ -454,6 +454,18 @@ describe("getLoanForViewer — hand over and return", () => {
     expect(dto?.handOverBlocked).toBe(false);
   });
 
+  test("an approval starting tomorrow isn't blocked yet, even with another loan out", async () => {
+    const held = await overdue();
+    const { id } = await loan({
+      itemId: held.itemId,
+      startDate: TOMORROW,
+      endDate: "2030-06-18",
+    });
+    const dto = await getLoanForViewer(as(ownerId), id, TODAY);
+    expect(dto?.actions).toEqual(["cancel"]);
+    expect(dto?.handOverBlocked).toBe(false);
+  });
+
   // Built here, not in the table: the ids exist only after beforeAll.
   test("an organizer who owns the item gets the owner's controls", async () => {
     const organizer = as(organizerId, "organizer");

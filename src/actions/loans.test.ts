@@ -171,6 +171,8 @@ describe("requestLoan — guard and shape", () => {
       expect(Object.keys(state.fieldErrors ?? {})).toEqual(keys);
       expect(state.values).toEqual(values(all));
       expect(insertLoanRequest).not.toHaveBeenCalled();
+      expect(readCookie(FLASH_COOKIE)).toBeUndefined();
+      expect(refresh).not.toHaveBeenCalled();
     },
   );
 
@@ -302,6 +304,8 @@ describe("requestLoan — refusals", () => {
       values: values(all),
     });
     expect(await ownRequests(viewer.id)).toEqual([]);
+    expect(readCookie(FLASH_COOKIE)).toBeUndefined();
+    expect(refresh).not.toHaveBeenCalled();
   });
 
   test("the viewer's own item → stale", async () => {

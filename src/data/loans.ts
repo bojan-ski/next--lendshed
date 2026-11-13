@@ -1,5 +1,6 @@
 import "server-only";
 import { db } from "@/db";
+import { isVisibleItem } from "@/data/browse";
 import { fromDbDate, toDbDate } from "@/data/db-dates";
 import { isDatesTaken } from "@/data/db-errors";
 import {
@@ -221,12 +222,10 @@ function toLoanDetailDTO(
       title: row.item.title,
       photo: toPhotoDTO(row.item),
       status: row.item.status,
-      viewable:
-        role === "owner" ||
-        (row.item.status === "listed" && owner?.status === "active"),
+      viewable: role === "owner" || isVisibleItem(row.item),
     },
-    owner: { id: row.item.ownerId, displayName: personName(owner) },
-    borrower: { id: row.borrowerId, displayName: personName(row.borrower) },
+    owner: { displayName: personName(owner) },
+    borrower: { displayName: personName(row.borrower) },
     viewerRole: role,
     requestMessage: row.requestMessage,
     statusReason: row.statusReason,
@@ -354,6 +353,8 @@ async function lockLoanForTransition(
   tx: Prisma.TransactionClient,
   loanId: string,
 ): Promise<LockedLoan | null> {
+  // Unlocked, which is safe only because nothing ever moves a loan to another
+  // item: the re-read below, under both locks, is what every check uses.
   const target = await tx.loan.findUnique({
     where: { id: loanId },
     select: { itemId: true },

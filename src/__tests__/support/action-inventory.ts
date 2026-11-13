@@ -6,7 +6,7 @@ import {
   sourceFiles,
 } from "@/__tests__/support/import-graph";
 
-export type InventoryRow = { name: string; auth: string };
+export type InventoryRow = { name: string; input: string; auth: string };
 
 // Every exported name of every "use server" module under src/actions/.
 export function serverActionExports(): { file: string; name: string }[] {
@@ -38,7 +38,7 @@ export function serverActionExports(): { file: string; name: string }[] {
 
 // The rows of the first table under "### Server Actions" in project-data.md. A
 // name cell may hold several actions ("`promoteMember` / `demoteMember`"):
-// each becomes its own row with the shared auth cell.
+// each becomes its own row with the shared input and auth cells.
 export function inventoryRows(): InventoryRow[] {
   const document = readSource("context/project-data.md");
   const section = document.split("### Server Actions")[1] ?? "";
@@ -48,7 +48,7 @@ export function inventoryRows(): InventoryRow[] {
     const cells = line.split("|").map((cell) => cell.trim());
     if (!/^`\w+`( \/ `\w+`)*$/.test(cells[1] ?? "")) continue;
     for (const [, name] of cells[1].matchAll(/`(\w+)`/g)) {
-      rows.push({ name, auth: cells[3] });
+      rows.push({ name, input: cells[2], auth: cells[3] });
     }
   }
   return rows;

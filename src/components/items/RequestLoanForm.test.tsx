@@ -146,4 +146,21 @@ describe("RequestLoanForm", () => {
     expect(to()).toHaveValue("2030-06-20");
     expect(message()).toHaveValue("Saturday?");
   });
+
+  // Nothing typed: the inputs can only hold what the action echoed.
+  test("after datesTaken the echoed dates and message come back to retry", async () => {
+    await submit({
+      formError: "datesTaken",
+      values: {
+        startDate: "2030-06-25",
+        endDate: "2030-06-27",
+        message: "Sunday instead?",
+      },
+    });
+
+    expect(await screen.findByText(requestForm.datesTaken)).toBeInTheDocument();
+    expect(from()).toHaveValue("2030-06-25");
+    expect(to()).toHaveValue("2030-06-27");
+    expect(message()).toHaveValue("Sunday instead?");
+  });
 });

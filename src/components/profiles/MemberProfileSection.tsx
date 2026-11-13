@@ -4,7 +4,7 @@ import Avatar from "@/components/ui/Avatar";
 import EmptyState from "@/components/ui/EmptyState";
 import { getMemberProfile } from "@/data/browse";
 import { requireViewer } from "@/lib/auth/guards";
-import { communityToday } from "@/lib/dates/dates";
+import { requestToday } from "@/lib/dates/request-today";
 import { initialsOf } from "@/lib/text/initials";
 import { profile } from "@/strings/profile";
 
@@ -14,7 +14,7 @@ export default async function MemberProfileSection({
   params,
 }: Pick<PageProps<"/members/[id]">, "params">) {
   await requireViewer();
-  const today = communityToday();
+  const today = requestToday();
   const { id } = await params;
   const member = await getMemberProfile(id, today);
   if (!member) notFound();

@@ -1,6 +1,6 @@
 import { isRedirectError } from "next/dist/client/components/redirect-error";
 import { createElement, type ReactNode } from "react";
-import { prerender } from "react-dom/static";
+import { html } from "@/__tests__/support/prerender-html";
 import BrowseSection from "@/components/browse/BrowseSection";
 import CategoriesSection from "@/components/categories/CategoriesSection";
 import ItemDetailSection from "@/components/items/ItemDetailSection";
@@ -20,6 +20,7 @@ import { getViewer } from "@/data/viewer";
 import { communityToday, formatDate, formatDateRange } from "@/lib/dates/dates";
 import { env } from "@/lib/env/server";
 import { t } from "@/lib/text/interpolate";
+import { loanStatus } from "@/lib/text/status";
 import { categories } from "@/strings/categories";
 import { home } from "@/strings/home";
 import { itemPage } from "@/strings/itemPage";
@@ -62,21 +63,6 @@ const member: ViewerDTO = {
   initials: "MK",
   role: "member",
 };
-
-const ENTITIES: Record<string, string> = {
-  "&amp;": "&",
-  "&lt;": "<",
-  "&gt;": ">",
-  "&quot;": '"',
-  "&#x27;": "'",
-};
-
-async function html(tree: unknown): Promise<string> {
-  const { prelude } = await prerender(tree as ReactNode);
-  return (await new Response(prelude).text())
-    .replace(/<!-- -->/g, "")
-    .replace(/&(?:amp|lt|gt|quot|#x27);/g, (entity) => ENTITIES[entity]);
-}
 
 function thrown(promise: Promise<unknown>): Promise<unknown> {
   return promise.then(
@@ -472,8 +458,8 @@ const loanDetail = (overrides: Partial<LoanDetailDTO> = {}): LoanDetailDTO => ({
     status: "listed",
     viewable: true,
   },
-  owner: { id: "owner-1", displayName: "Olga M." },
-  borrower: { id: "u1", displayName: "Ana P." },
+  owner: { displayName: "Olga M." },
+  borrower: { displayName: "Ana P." },
   viewerRole: "borrower",
   requestMessage: null,
   statusReason: null,
@@ -618,6 +604,42 @@ describe("LoanDetailSection", () => {
       { status: "declined", endedBy: "owner" },
       () => [t(loanPage.ended.declined, { actor: "Olga M." })],
     ],
+    [
+      "declined by the viewing owner",
+      { status: "declined", endedBy: "owner", viewerRole: "owner" },
+      () => [t(loanPage.ended.declined, { actor: loanPage.you })],
+    ],
+    [
+      "cancelled by the viewing owner",
+      { status: "cancelled", endedBy: "owner", viewerRole: "owner" },
+      () => [t(loanPage.ended.cancelled, { actor: loanPage.you })],
+    ],
+    [
+      "declined by the system when the item was hidden",
+      { status: "declined", endedBy: "system", systemReason: "item_hidden" },
+      () => [
+        t(loanPage.ended.declinedAuto, {
+          reason: loanPage.reasons.item_hidden,
+        }),
+      ],
+    ],
+    [
+      "cancelled by an organizer, with the system's reason below",
+      {
+        status: "cancelled",
+        endedBy: "organizer",
+        systemReason: "item_retired",
+      },
+      () => [
+        t(loanPage.ended.cancelled, { actor: loanPage.anOrganizer }),
+        loanPage.reasons.item_retired,
+      ],
+    ],
+    [
+      "returned with no return date",
+      { status: "returned" },
+      () => [loanStatus.returned.label],
+    ],
     ["expired", { status: "expired" }, () => [loanPage.ended.expired]],
     ["lapsed", { status: "lapsed" }, () => [loanPage.ended.lapsed]],
   ] as const)(
@@ -626,6 +648,30 @@ describe("LoanDetailSection", () => {
       const page = await loanPageOf(overrides as Partial<LoanDetailDTO>);
       for (const line of lines(communityToday())) expect(page).toContain(line);
       expect(page).not.toContain("<ol");
+    },
+  );
+
+  const openSteps = (
+    Object.keys(loanPage.steps) as (keyof typeof loanPage.steps)[]
+  ).flatMap((open) =>
+    (["owner", "borrower", "organizer"] as const).map(
+      (role) => [open, role] as const,
+    ),
+  );
+
+  test.each(openSteps)(
+    "%s as the %s: every step of that role, in order",
+    async (open, viewerRole) => {
+      const today = communityToday();
+      const end = formatDate("2030-06-22", today);
+      const page = await loanPageOf({ status: open, viewerRole });
+      const steps = loanPage.steps[open][viewerRole].map((step) =>
+        t(step, { ...names, end, due: end }),
+      );
+      const shown = [
+        ...page.matchAll(/<li[^>]*>.*?<\/span><span[^>]*>(.*?)<\/span><\/li>/g),
+      ].map((match) => match[1]);
+      expect(shown).toEqual(steps);
     },
   );
 });

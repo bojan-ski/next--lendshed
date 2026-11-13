@@ -6,6 +6,7 @@ import { db } from "@/db";
 import type { ItemStatus, LoanStatus } from "@/generated/prisma/enums";
 import { people } from "@/strings/people";
 import type { LoanDetailDTO } from "@/types/loan";
+import { getItemForViewer } from "./browse";
 import { getLoanForViewer, insertLoanRequest } from "./loans";
 
 vi.mock(
@@ -63,6 +64,84 @@ const request = (
   );
 
 const loanRow = (id: string) => db.loan.findUniqueOrThrow({ where: { id } });
+
+// The item page's request card (requestBlock) offers the form exactly when
+// insertLoanRequest would create the loan, and names the refusal it would give.
+describe("requestBlock ⇔ insertLoanRequest", () => {
+  const OUTCOME = {
+    null: "created",
+    contact_details: "needsContactDetails",
+    item_limit: "itemLimit",
+    overall_limit: "overallLimit",
+  } as const;
+
+  const openOn = (itemId: string, borrowerId: string, from = "2030-06-25") =>
+    scope.createLoan({
+      itemId,
+      borrowerId,
+      status: "requested",
+      startDate: from,
+      endDate: from,
+    });
+
+  const openElsewhere = async (me: string, count: number) => {
+    for (let index = 0; index < count; index += 1) {
+      await openOn(await listed(), me);
+    }
+  };
+
+  test.each<
+    [
+      string,
+      keyof typeof OUTCOME,
+      (me: string, itemId: string) => Promise<unknown>,
+    ]
+  >([
+    ["nothing in the way", "null", async () => {}],
+    [
+      "no contact details",
+      "contact_details",
+      (me) =>
+        db.user.update({ where: { id: me }, data: { contactDetails: null } }),
+    ],
+    [
+      "an open request on the item",
+      "item_limit",
+      (me, itemId) => openOn(itemId, me),
+    ],
+    [
+      "an expired request on the item",
+      "null",
+      (me, itemId) => openOn(itemId, me, "2030-06-14"),
+    ],
+    [
+      "five open requests elsewhere",
+      "overall_limit",
+      (me) => openElsewhere(me, 5),
+    ],
+    [
+      "four open and one expired elsewhere",
+      "null",
+      async (me) => {
+        await openElsewhere(me, 4);
+        await openOn(await listed(), me, "2030-06-14");
+      },
+    ],
+  ])(
+    "%s: the card shows %s and the insert agrees",
+    async (_, expected, arrange) => {
+      const me = await user({ contactDetails: "Call 555" });
+      const itemId = await listed();
+      await arrange(me, itemId);
+
+      const block = (await getItemForViewer(as(me), itemId, TODAY))
+        ?.requestBlock;
+      expect(String(block)).toBe(expected);
+      const { kind } = await request(me, itemId);
+      expect(kind).toBe(OUTCOME[expected]);
+    },
+  );
+});
 
 describe("insertLoanRequest — concurrency (held rows)", () => {
   test("a request holding the actor row → the concurrent clear is refused locked", async () => {
@@ -356,6 +435,11 @@ describe("getLoanForViewer — contact details", () => {
     const { id } = await fixture({ status: "out" });
     expect((await view(organizerId, id, "organizer"))?.contact).toBeNull();
   });
+
+  test("an organizer who is the borrower sees the owner's, as a party", async () => {
+    const { id } = await fixture({ status: "approved", borrower: organizerId });
+    expect((await view(organizerId, id, "organizer"))?.contact).toEqual(owners);
+  });
 });
 
 describe("getLoanForViewer — overlapping requests", () => {
@@ -396,15 +480,13 @@ describe("getLoanForViewer — item link and names", () => {
     }
   });
 
-  test("a deleted owner or borrower reads Former member with a null id", async () => {
+  test("a deleted owner or borrower reads Former member", async () => {
     const noOwner = await fixture({ owner: null });
     expect((await view(borrowerId, noOwner.id))?.owner).toEqual({
-      id: null,
       displayName: people.formerMember,
     });
     const noBorrower = await fixture({ borrower: null });
     expect((await view(ownerId, noBorrower.id))?.borrower).toEqual({
-      id: null,
       displayName: people.formerMember,
     });
   });
@@ -456,14 +538,17 @@ describe("getLoanForViewer — the wire", () => {
       endDate: "2030-06-22",
       lengthDays: 3,
       item: { id: itemId, status: "listed", viewable: true },
-      owner: { id: ownerId, displayName: "Olga M." },
-      borrower: { id: borrowerId, displayName: "Ana P." },
+      owner: { displayName: "Olga M." },
+      borrower: { displayName: "Ana P." },
       requestMessage: "Saturday morning?",
       actions: ["cancel"],
     });
     expect(Object.keys(loan.item).sort()).toEqual(
       ["id", "title", "photo", "status", "viewable"].sort(),
     );
+    // No party id: the page links neither party (spec 17a).
+    expect(Object.keys(loan.owner)).toEqual(["displayName"]);
+    expect(Object.keys(loan.borrower)).toEqual(["displayName"]);
     expect(JSON.stringify(loan)).not.toMatch(
       /email|SeenAt|changedAt|closedById|@test\.invalid/,
     );

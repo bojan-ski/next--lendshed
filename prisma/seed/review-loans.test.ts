@@ -31,10 +31,17 @@ const EXPECTED: Record<ReviewLoanKind, string> = {
   "out-today": "out",
   overdue: "overdue",
   returned: "returned",
+  expired: "expired",
+  lapsed: "lapsed",
 };
 
-// Every review loan on its own listed scope item; owners and borrowers rotate
-// through three scope members with contact details.
+const seedItemKey = ({ ownerEmail, title }: ReviewLoan) =>
+  `${ownerEmail}\n${title}`;
+const SEED_ITEM_COUNT = new Set(REVIEW_LOANS.map(seedItemKey)).size;
+
+// One listed scope item per seed item, so kinds that share one in the seed
+// share one here; owners and borrowers rotate through three scope members
+// with contact details. `itemIds[i]` is `entries[i]`'s item.
 async function copyOfTheCast(): Promise<{
   entries: ReviewLoan[];
   itemIds: string[];
@@ -45,22 +52,27 @@ async function copyOfTheCast(): Promise<{
       await scope.createTestUser({ name, contactDetails: `Phone of ${name}` }),
     );
   }
+  const items = new Map<string, { id: string; ownerIndex: number }>();
   const entries: ReviewLoan[] = [];
   const itemIds: string[] = [];
-  for (const [index, loan] of REVIEW_LOANS.entries()) {
-    const owner = people[index % people.length];
-    const borrower = people[(index + 1) % people.length];
-    const { id } = await scope.createItem({
-      ownerId: owner.id,
-      title: loan.title,
-      status: "listed",
-      photo: true,
-    });
-    itemIds.push(id);
+  for (const loan of REVIEW_LOANS) {
+    let item = items.get(seedItemKey(loan));
+    if (!item) {
+      const ownerIndex = items.size % people.length;
+      const { id } = await scope.createItem({
+        ownerId: people[ownerIndex].id,
+        title: loan.title,
+        status: "listed",
+        photo: true,
+      });
+      item = { id, ownerIndex };
+      items.set(seedItemKey(loan), item);
+    }
+    itemIds.push(item.id);
     entries.push({
       ...loan,
-      ownerEmail: owner.email,
-      borrowerEmail: borrower.email,
+      ownerEmail: people[item.ownerIndex].email,
+      borrowerEmail: people[(item.ownerIndex + 1) % people.length].email,
     });
   }
   return { entries, itemIds };
@@ -125,16 +137,18 @@ describe("ensureReviewLoans", () => {
     const { entries, itemIds } = await copyOfTheCast();
 
     expect(await ensureReviewLoans(db, entries, TODAY)).toEqual({
-      created: 7,
+      created: 9,
       updated: 0,
     });
     const first = await marked(itemIds);
     expectIntended(first, entries, TODAY);
-    expect(new Set(first.map(({ itemId }) => itemId)).size).toBe(7);
+    expect(new Set(first.map(({ itemId }) => itemId)).size).toBe(
+      SEED_ITEM_COUNT,
+    );
 
     expect(await ensureReviewLoans(db, entries, TODAY)).toEqual({
       created: 0,
-      updated: 7,
+      updated: 9,
     });
     expect(await marked(itemIds)).toEqual(first);
   });
@@ -257,11 +271,21 @@ describe("REVIEW_LOANS on the real cast", () => {
         ownerEmail === loan.ownerEmail && title === loan.title,
     );
 
-  test("one loan per kind, each on a different seed item", () => {
+  test("one loan per kind; no two approved/out ranges overlap on one seed item", () => {
     expect(REVIEW_LOANS.map(({ kind }) => kind).sort()).toEqual(
       Object.keys(EXPECTED).sort(),
     );
-    expect(new Set(REVIEW_LOANS.map(seedItem)).size).toBe(REVIEW_LOANS.length);
+    const holding = REVIEW_LOANS.filter(
+      ({ status }) => status === "approved" || status === "out",
+    );
+    for (const [index, a] of holding.entries()) {
+      for (const b of holding.slice(index + 1)) {
+        if (seedItem(a) !== seedItem(b)) continue;
+        const overlap =
+          a.startOffset <= b.endOffset && b.startOffset <= a.endOffset;
+        expect(overlap, `${a.kind} and ${b.kind}`).toBe(false);
+      }
+    }
   });
 
   test.each(REVIEW_LOANS)(

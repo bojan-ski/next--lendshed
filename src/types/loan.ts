@@ -1,3 +1,4 @@
+import type { z } from "zod";
 import type {
   ItemStatus,
   LoanActor,
@@ -5,6 +6,7 @@ import type {
   LoanSystemReason,
   ReturnedAsLent,
 } from "@/generated/prisma/enums";
+import type { cancelStageSchema } from "@/lib/schemas/loans";
 import type { FlashKey } from "@/strings";
 import type { PhotoDTO } from "@/types/item";
 
@@ -62,8 +64,8 @@ export type LoanDetailDTO = {
     status: ItemStatus;
     viewable: boolean;
   };
-  owner: { id: string | null; displayName: string };
-  borrower: { id: string | null; displayName: string };
+  owner: { displayName: string };
+  borrower: { displayName: string };
   viewerRole: LoanViewerRole;
   requestMessage: string | null;
   statusReason: string | null;
@@ -104,7 +106,7 @@ export type LoanDecisionState = {
 };
 
 // Which cancel the screen offered: a request, or an approved loan.
-export type CancelStage = "request" | "loan";
+export type CancelStage = z.infer<typeof cancelStageSchema>;
 
 export type HandOverState = {
   flash?: FlashKey;

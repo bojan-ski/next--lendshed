@@ -54,8 +54,6 @@ export const reasonSchema = z.object({
   reason: optionalText(LOAN_REASON_MAX, loanActions.reasonTooLong),
 });
 
-export type ReasonInput = z.infer<typeof reasonSchema>;
-
 // What the cancel form showed; a mismatch with the loan now is a stale screen.
 export const cancelStageSchema = z.enum(["request", "loan"]);
 

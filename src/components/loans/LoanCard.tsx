@@ -24,10 +24,10 @@ export default function LoanCard({
   nextStep,
   headingLevel: Heading = "h2",
 }: LoanCardProps) {
-  const party = t(loanCard.party[loan.side], {
-    name: loan.otherPartyName,
-    dateRange,
-  });
+  // The name may truncate (names never wrap); the dates never do, so on a
+  // narrow card they move to their own line instead of being cut.
+  const [lead, tail] = loanCard.party[loan.side].split("{dateRange}");
+  const party = t(lead, { name: loan.otherPartyName }).trimEnd();
 
   return (
     <Card className="flex gap-3 p-3">
@@ -53,8 +53,14 @@ export default function LoanCard({
           <StatusLabel status={loanStatus[loan.status]} />
         </div>
         <div className="flex flex-col items-start gap-2 sm:flex-row sm:items-center sm:justify-between">
-          <p className="max-w-full truncate whitespace-nowrap text-sm text-muted">
-            {party}
+          <p className="min-w-0 max-w-full text-sm text-muted">
+            <span className="inline-block max-w-full truncate align-bottom">
+              {party}
+            </span>{" "}
+            <span className="inline-block whitespace-nowrap">
+              {dateRange}
+              {tail}
+            </span>
           </p>
           <ButtonLink
             href={`/loans/${loan.id}`}

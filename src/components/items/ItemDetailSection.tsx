@@ -9,7 +9,7 @@ import PhotoPlaceholder from "@/components/ui/PhotoPlaceholder";
 import StatusLabel from "@/components/ui/StatusLabel";
 import { getItemForViewer } from "@/data/browse";
 import { requireViewer } from "@/lib/auth/guards";
-import { communityToday } from "@/lib/dates/dates";
+import { requestToday } from "@/lib/dates/request-today";
 import { initialsOf } from "@/lib/text/initials";
 import { t } from "@/lib/text/interpolate";
 import { itemStatus } from "@/lib/text/status";
@@ -80,7 +80,7 @@ export default async function ItemDetailSection({
   params,
 }: Pick<PageProps<"/items/[id]">, "params">) {
   const viewer = await requireViewer();
-  const today = communityToday();
+  const today = requestToday();
   const { id } = await params;
   const item = await getItemForViewer(viewer, id, today);
   if (!item) notFound();

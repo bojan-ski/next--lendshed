@@ -2,6 +2,7 @@ import path from "node:path";
 import ts from "typescript";
 import { calleeName, walk } from "@/__tests__/support/ast";
 import {
+  parseFile,
   REPO_ROOT,
   sourceFiles,
   toRepoPath,
@@ -323,6 +324,59 @@ export function map(row: { status: "out"; startDate: Date; endDate: Date }) {
       'endDate: lt: "2026-11-11"',
       "row.endDate",
     ]);
+  });
+});
+
+// A Server Component reads requestToday(): the header badge renders on every
+// (app) page, so a second read could land after midnight (rules/dates.md, 17a).
+const renderFiles = [
+  ...sourceFiles("src/components/**/*.{ts,tsx}"),
+  ...sourceFiles("src/app/**/*.{ts,tsx}"),
+].filter((file) => !/\.test\.tsx?$/.test(file));
+
+describe("effective-status discipline — src/components/ and src/app/", () => {
+  test("covers the sections that read today", () => {
+    expect(renderFiles).toContain("src/components/browse/BrowseSection.tsx");
+    expect(renderFiles).toContain("src/components/loans/NeedsActionBadge.tsx");
+    expect(renderFiles).toContain("src/app/(app)/layout.tsx");
+  });
+
+  // Without React's cache each call reads the clock again; Vitest can't run a
+  // request scope to prove the memoising, so the shape is pinned here.
+  test("requestToday is React's cache(...) over communityToday", () => {
+    const source = parseFile("src/lib/dates/request-today.ts");
+    const fromReact = source.statements.some(
+      (statement) =>
+        ts.isImportDeclaration(statement) &&
+        (statement.moduleSpecifier as ts.StringLiteral).text === "react" &&
+        statement.importClause?.namedBindings !== undefined &&
+        ts.isNamedImports(statement.importClause.namedBindings) &&
+        statement.importClause.namedBindings.elements.some(
+          (element) => element.name.text === "cache",
+        ),
+    );
+    let wrapped = false;
+    walk(source, (node) => {
+      if (
+        ts.isVariableDeclaration(node) &&
+        node.name.getText() === "requestToday" &&
+        node.initializer !== undefined &&
+        ts.isCallExpression(node.initializer) &&
+        calleeName(node.initializer) === "cache"
+      ) {
+        wrapped = true;
+      }
+    });
+    expect({ fromReact, wrapped }).toEqual({ fromReact: true, wrapped: true });
+  });
+
+  test("no zero-argument communityToday(): sections read requestToday()", () => {
+    const report: Report = {};
+    for (const file of renderFiles) {
+      const hits = zeroArgumentToday(parseFile(file));
+      if (hits.length > 0) report[file] = hits;
+    }
+    expect(report).toEqual({});
   });
 });
 

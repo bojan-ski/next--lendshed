@@ -9,7 +9,9 @@ export type ReviewLoanKind =
   | "out-later"
   | "out-today"
   | "overdue"
-  | "returned";
+  | "returned"
+  | "expired"
+  | "lapsed";
 
 export type ReviewLoan = {
   kind: ReviewLoanKind;
@@ -23,9 +25,9 @@ export type ReviewLoan = {
 
 const person = (local: string) => `${local}@${SEED_EMAIL_DOMAIN}`;
 
-// One loan-driven state per item for ui-reviewer until spec 13 can create
-// loans. Each sits on a different listed item, so no two approved/out ranges
-// share one and the exclusion constraint never fires.
+// The loan states ui-reviewer can't reach through the app in one day. No two
+// approved/out ranges overlap on one item, so the exclusion constraint never
+// fires: `lapsed` shares Extension ladder with `approved-later`, days apart.
 export const REVIEW_LOANS: readonly ReviewLoan[] = [
   {
     kind: "request",
@@ -89,6 +91,24 @@ export const REVIEW_LOANS: readonly ReviewLoan[] = [
     status: "returned",
     startOffset: -20,
     endOffset: -18,
+  },
+  {
+    kind: "expired",
+    ownerEmail: person("ruth"),
+    title: "Travel cot",
+    borrowerEmail: person("sara"),
+    status: "requested",
+    startOffset: -2,
+    endOffset: -1,
+  },
+  {
+    kind: "lapsed",
+    ownerEmail: person("ruth"),
+    title: "Extension ladder",
+    borrowerEmail: person("dev"),
+    status: "approved",
+    startOffset: -5,
+    endOffset: -2,
   },
 ];
 

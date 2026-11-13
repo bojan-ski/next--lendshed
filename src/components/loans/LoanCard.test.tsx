@@ -1,4 +1,5 @@
 import { fireEvent, render, screen } from "@testing-library/react";
+import { t } from "@/lib/text/interpolate";
 import { strings } from "@/strings";
 import type { LoanCardDTO } from "@/types/loan";
 import LoanCard from "./LoanCard";
@@ -24,13 +25,24 @@ const openLoan = () =>
 const accentButtons = (container: HTMLElement) =>
   container.querySelectorAll("a.bg-accent, button.bg-accent");
 
+// The party line is split into spans, so match the paragraph's whole text.
+const partyLine = (text: string) =>
+  screen.getByText(
+    (_, element) => element?.tagName === "P" && element.textContent === text,
+  );
+
 describe("LoanCard", () => {
   test("party line uses the side's phrasing and the preformatted date range", () => {
     const { rerender } = render(
       <LoanCard loan={loan} dateRange="Thu 12 – Sat 14 Nov" nextStep={null} />,
     );
     expect(
-      screen.getByText("from Ruth K. · Thu 12 – Sat 14 Nov"),
+      partyLine(
+        t(strings.loanCard.party.borrowing, {
+          name: "Ruth K.",
+          dateRange: "Thu 12 – Sat 14 Nov",
+        }),
+      ),
     ).toBeInTheDocument();
     rerender(
       <LoanCard
@@ -40,8 +52,25 @@ describe("LoanCard", () => {
       />,
     );
     expect(
-      screen.getByText("to Ruth K. · Thu 12 – Sat 14 Nov"),
+      partyLine(
+        t(strings.loanCard.party.lending, {
+          name: "Ruth K.",
+          dateRange: "Thu 12 – Sat 14 Nov",
+        }),
+      ),
     ).toBeInTheDocument();
+  });
+
+  // 360 px (17a ui-reviewer): a long name truncates, the dates are never cut.
+  test("only the name part can truncate; the date range never does", () => {
+    render(
+      <LoanCard loan={loan} dateRange="Thu 12 – Sat 14 Nov" nextStep={null} />,
+    );
+    const dates = screen.getByText("Thu 12 – Sat 14 Nov");
+    expect(dates).toHaveClass("whitespace-nowrap");
+    expect(dates).not.toHaveClass("truncate");
+    expect(dates.parentElement).not.toHaveClass("truncate");
+    expect(screen.getByText(/Ruth K\./)).toHaveClass("truncate");
   });
 
   test("shows the status label for the effective status", () => {

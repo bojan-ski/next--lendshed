@@ -8,7 +8,8 @@ import Avatar from "@/components/ui/Avatar";
 import StatusLabel from "@/components/ui/StatusLabel";
 import { getAdminMemberDetail } from "@/data/members";
 import { requireOrganizer } from "@/lib/auth/guards";
-import { communityToday, formatDate } from "@/lib/dates/dates";
+import { formatDate } from "@/lib/dates/dates";
+import { requestToday } from "@/lib/dates/request-today";
 import { t } from "@/lib/text/interpolate";
 import { memberStatus } from "@/lib/text/status";
 import { members } from "@/strings/members";
@@ -38,7 +39,7 @@ export default async function MemberDetailSection({
   const { id } = await params;
   const member = await getAdminMemberDetail(viewer.id, id);
   if (!member) notFound();
-  const today = communityToday();
+  const today = requestToday();
 
   return (
     <>

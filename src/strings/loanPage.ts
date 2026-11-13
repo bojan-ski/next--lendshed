@@ -11,32 +11,33 @@ export const loanPage = {
   },
   nextHeading: "What happens next",
   // Remaining steps per open status and viewer role; {end} and {due} are dates.
+  // A name can end in an initial ("Ruth K."), so no line ends with a name.
   steps: {
     requested: {
       borrower: [
         "{owner} says yes or no.",
-        "If yes, you arrange a pickup with {owner}.",
+        "If yes, you and {owner} arrange a pickup.",
         "You bring it back by {end}.",
       ],
       owner: [
-        "You say yes or no to {borrower}.",
+        "You say yes or no to {borrower}'s request.",
         "If yes, you arrange a pickup and hand it over.",
         "{borrower} brings it back by {end}, and you mark it as back.",
       ],
       organizer: [
-        "{owner} says yes or no to {borrower}.",
-        "If yes, {owner} hands it over to {borrower}.",
+        "{owner} says yes or no to {borrower}'s request.",
+        "If yes, {owner} and {borrower} arrange a pickup.",
         "{borrower} brings it back by {end}, and {owner} marks it as back.",
       ],
     },
     approved: {
       borrower: [
-        "Arrange a pickup with {owner}.",
+        "You and {owner} arrange a pickup.",
         "{owner} hands it over.",
         "You bring it back by {end}.",
       ],
       owner: [
-        "Arrange a pickup with {borrower}.",
+        "You and {borrower} arrange a pickup.",
         "You hand it over.",
         "{borrower} brings it back by {end}, and you mark it as back.",
       ],
@@ -64,18 +65,18 @@ export const loanPage = {
         "You mark it as back.",
       ],
       organizer: [
-        "It was due back on {due}. {borrower} brings it back to {owner}.",
+        "It was due back on {due}. {owner} is waiting for {borrower} to bring it back.",
         "{owner} marks it as back.",
       ],
     },
   },
-  // One line per ended status; {actor} is "you" or a name.
+  // One line per ended status; {actor} is "you", "an organizer" or a name.
   ended: {
     returned: "Back on {date}.",
     notAsLent: "It didn't come back as it was lent.",
-    closedBy: "Closed by {name}.",
-    declined: "Declined by {actor}.",
-    cancelled: "Cancelled by {actor}.",
+    closedBy: "{name} closed it.",
+    declined: "Declined: {actor} said no.",
+    cancelled: "Cancelled: {actor} called it off.",
     declinedAuto: "Declined automatically. {reason}",
     cancelledAuto: "Cancelled automatically. {reason}",
     expired: "The request expired: its start date passed without an answer.",

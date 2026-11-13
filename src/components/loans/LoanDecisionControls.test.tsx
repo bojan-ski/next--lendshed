@@ -186,14 +186,15 @@ describe("LoanDecisionControls", () => {
     expect(reasonBox()).toHaveValue("Away");
   });
 
-  test("a reason error focuses the textarea and keeps what was typed", async () => {
+  // The echo differs from what was typed, so the box shows the server's copy.
+  test("a reason error focuses the textarea and shows the echoed reason", async () => {
     const message = "Too long";
     vi.mocked(declineLoan).mockImplementation(async () => {
       // A browser drops focus when the pending button is disabled.
       (document.activeElement as HTMLElement).blur();
       return {
         fieldErrors: { reason: [message] },
-        values: { reason: "Typed" },
+        values: { reason: "Typed, as echoed" },
       };
     });
     await startDecline();
@@ -202,7 +203,7 @@ describe("LoanDecisionControls", () => {
 
     await screen.findByText(message);
     await vi.waitFor(() => expect(reasonBox()).toHaveFocus());
-    expect(reasonBox()).toHaveValue("Typed");
+    expect(reasonBox()).toHaveValue("Typed, as echoed");
     expect(reasonBox()).toHaveAttribute("aria-invalid", "true");
   });
 });

@@ -8,7 +8,7 @@ import { getBrowseItems } from "@/data/browse";
 import { getCategories } from "@/data/categories";
 import { requireViewer } from "@/lib/auth/guards";
 import { browseHref } from "@/lib/browse/href";
-import { communityToday } from "@/lib/dates/dates";
+import { requestToday } from "@/lib/dates/request-today";
 import { env } from "@/lib/env/server";
 import { browseQuerySchema, type BrowseQuery } from "@/lib/schemas/browse";
 import { t } from "@/lib/text/interpolate";
@@ -75,7 +75,7 @@ export default async function BrowseSection({
   searchParams,
 }: Pick<PageProps<"/">, "searchParams">) {
   const viewer = await requireViewer();
-  const today = communityToday();
+  const today = requestToday();
   const parsed = browseQuerySchema.parse(await searchParams);
   const categories = await getCategories();
   const category = categories.find(({ id }) => id === parsed.category);

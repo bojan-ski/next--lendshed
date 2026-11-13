@@ -9,6 +9,7 @@ import {
 import { personName, toPhotoDTO } from "@/data/mappers";
 import { containsText } from "@/data/text-search";
 import type { Prisma } from "@/generated/prisma/client";
+import type { ItemStatus, MemberStatus } from "@/generated/prisma/enums";
 import { effectiveStatus } from "@/lib/dates/effective-status";
 import { REQUEST_LIMITS } from "@/lib/loans/limits";
 import { BROWSE_PAGE_SIZE, type BrowseQuery } from "@/lib/schemas/browse";
@@ -25,6 +26,15 @@ import type { ViewerDTO } from "@/types/viewer";
 // Suspension never changes item states (OQ-23); this scope alone hides them.
 function visibleItemWhere(): Prisma.ItemWhereInput {
   return { status: "listed", owner: { is: { status: "active" } } };
+}
+
+// The same scope on one loaded row (the loan page's item link). Change both
+// together: browse.test.ts checks them against each other.
+export function isVisibleItem(item: {
+  status: ItemStatus;
+  owner: { status: MemberStatus } | null;
+}): boolean {
+  return item.status === "listed" && item.owner?.status === "active";
 }
 
 const newestFirst = [
