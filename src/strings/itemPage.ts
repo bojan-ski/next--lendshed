@@ -11,4 +11,15 @@ export const itemPage = {
   stillOut: "Still out, was due {date}",
   ownItem: "This is your item",
   edit: "Edit",
+  retireHeading: "Retire item",
+  retireLine:
+    "Retiring is for good: it can't be listed again, open requests are declined and approved loans are cancelled. It can't be retired while it's out. The owner sees your note.",
+  retireQuestion: "Retire “{title}”? This can't be undone.",
+  retireNoteLabel: "Note",
+  retireNoteHint: "The owner sees this.",
+  retireNoteRequired: "Write a note saying why you're retiring it.",
+  retireNoteTooLong: "Keep the note to {max} characters or fewer.",
+  retireStillOut:
+    "It's out on a loan right now, so it can't be retired yet. Reload to see where it stands.",
+  keep: "Keep it",
 } as const;

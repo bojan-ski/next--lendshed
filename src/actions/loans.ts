@@ -6,12 +6,13 @@ import { z } from "zod";
 import {
   approveLoanRequest,
   cancelLoanByParty,
+  closeLoanByOrganizer,
   declineLoanRequest,
   handOverLoan,
   insertLoanRequest,
   markLoanBack,
 } from "@/data/loans";
-import { requireViewer } from "@/lib/auth/guards";
+import { requireOrganizer, requireViewer } from "@/lib/auth/guards";
 import { addDays, communityToday } from "@/lib/dates/dates";
 import { setFlash } from "@/lib/feedback/flash";
 import { reportUnexpected } from "@/lib/feedback/report";
@@ -20,6 +21,7 @@ import {
   cancelStageSchema,
   loanIdSchema,
   markReturnedSchema,
+  organizerCloseSchema,
   reasonSchema,
   requestLoanSchema,
 } from "@/lib/schemas/loans";
@@ -31,6 +33,8 @@ import type {
   LoanDecisionState,
   MarkReturnedField,
   MarkReturnedState,
+  OrganizerCloseField,
+  OrganizerCloseState,
   RequestLoanField,
   RequestLoanState,
 } from "@/types/loan";
@@ -298,4 +302,68 @@ export async function markLoanReturned(
 
   refresh();
   return { flash: "loanReturned" };
+}
+
+const CLOSE_FIELDS = [
+  "returnedOn",
+  "asLent",
+  "note",
+] as const satisfies readonly OrganizerCloseField[];
+
+// A non-party organizer ends an out loan the owner can't mark back (OQ-22);
+// the transaction re-checks the actor and the loan.
+export async function closeLoanAsOrganizer(
+  _prev: OrganizerCloseState,
+  formData: FormData,
+): Promise<OrganizerCloseState> {
+  const viewer = await requireOrganizer();
+  const today = communityToday();
+
+  const values = {} as Record<OrganizerCloseField, string>;
+  for (const field of CLOSE_FIELDS) {
+    const value = formData.get(field);
+    values[field] = typeof value === "string" ? value : "";
+  }
+  const parsed = organizerCloseSchema.safeParse({
+    id: formData.get("id"),
+    returnedOn: values.returnedOn,
+    asLent: formData.get("asLent") ?? undefined,
+    note: formData.get("note") ?? undefined,
+  });
+  if (!parsed.success) {
+    const fieldErrors = z.flattenError(parsed.error).fieldErrors;
+    if (fieldErrors.id) return { formError: "stale" };
+    return {
+      fieldErrors: Object.fromEntries(
+        CLOSE_FIELDS.flatMap((field) =>
+          fieldErrors[field] ? [[field, fieldErrors[field]]] : [],
+        ),
+      ),
+      values,
+    };
+  }
+  if (parsed.data.returnedOn > today) {
+    return {
+      fieldErrors: { returnedOn: [loanActions.returnedOnAfterToday] },
+      values,
+    };
+  }
+
+  let outcome: Awaited<ReturnType<typeof closeLoanByOrganizer>>;
+  try {
+    outcome = await closeLoanByOrganizer(viewer.id, parsed.data, today);
+  } catch (error) {
+    reportUnexpected("closeLoanAsOrganizer", error);
+    return { formError: "unexpected", values };
+  }
+  if (outcome === "beforeStart") {
+    return {
+      fieldErrors: { returnedOn: [loanActions.returnedOnBeforeStart] },
+      values,
+    };
+  }
+  if (outcome !== "closed") return { formError: outcome };
+
+  refresh();
+  return { flash: "loanClosed" };
 }

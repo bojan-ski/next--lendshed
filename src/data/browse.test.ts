@@ -499,13 +499,20 @@ describe("viewerCanRequest", () => {
     expect(await blockOf(underLimit, id)).toBe(null);
   });
 
-  test("viewerCanRetireAsOrganizer is false for organizers too", async () => {
+  // Spec 19: the page offers the retire exactly where retireItemByOrganizer
+  // would accept it from this viewer (never their own item, OQ-19).
+  test("viewerCanRetireAsOrganizer: an organizer on another member's item only", async () => {
     const organizer = (await scope.createTestUser({ role: "organizer" })).id;
-    const id = await item(await category("Retire"));
-    expect(
-      (await getItemForViewer(as(organizer, "organizer"), id, TODAY))
-        ?.viewerCanRetireAsOrganizer,
-    ).toBe(false);
+    const categoryId = await category("Retire");
+    const others = await item(categoryId);
+    const own = await item(categoryId, { owner: organizer });
+    const flag = async (viewer: ReturnType<typeof as>, id: string) =>
+      (await getItemForViewer(viewer, id, TODAY))?.viewerCanRetireAsOrganizer;
+
+    expect(await flag(as(organizer, "organizer"), others)).toBe(true);
+    expect(await flag(as(organizer, "organizer"), own)).toBe(false);
+    expect(await flag(as(viewerId), others)).toBe(false);
+    expect(await flag(as(ownerId), others)).toBe(false);
   });
 });
 

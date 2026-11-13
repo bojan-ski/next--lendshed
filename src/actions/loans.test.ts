@@ -12,6 +12,7 @@ import { fromDbDate } from "@/data/db-dates";
 import {
   approveLoanRequest,
   cancelLoanByParty,
+  closeLoanByOrganizer,
   declineLoanRequest,
   insertLoanRequest,
 } from "@/data/loans";
@@ -24,8 +25,18 @@ import { LOAN_MESSAGE_MAX, LOAN_REASON_MAX } from "@/lib/schemas/loans";
 import { t } from "@/lib/text/interpolate";
 import { loanActions } from "@/strings/loanActions";
 import { requestForm } from "@/strings/requestForm";
-import type { LoanDecisionState, RequestLoanState } from "@/types/loan";
-import { approveLoan, cancelLoan, declineLoan, requestLoan } from "./loans";
+import type {
+  LoanDecisionState,
+  OrganizerCloseState,
+  RequestLoanState,
+} from "@/types/loan";
+import {
+  approveLoan,
+  cancelLoan,
+  closeLoanAsOrganizer,
+  declineLoan,
+  requestLoan,
+} from "./loans";
 
 vi.mock(
   "next/headers",
@@ -45,6 +56,7 @@ vi.mock("@/data/loans", async (importOriginal) => {
     approveLoanRequest: vi.fn(actual.approveLoanRequest),
     declineLoanRequest: vi.fn(actual.declineLoanRequest),
     cancelLoanByParty: vi.fn(actual.cancelLoanByParty),
+    closeLoanByOrganizer: vi.fn(actual.closeLoanByOrganizer),
   };
 });
 
@@ -782,6 +794,319 @@ describe("loan decisions — refusals", () => {
       expect(refresh).not.toHaveBeenCalled();
     },
   );
+});
+
+// --- closeLoanAsOrganizer (spec 19) -------------------------------------------
+
+const NOT_FOUND = "NEXT_HTTP_ERROR_FALLBACK;404";
+const unclosed: OrganizerCloseState = {};
+
+async function thrownBy(promise: Promise<unknown>): Promise<unknown> {
+  return promise.then(
+    () => {
+      throw new Error("expected a throw");
+    },
+    (error: unknown) => error,
+  );
+}
+
+// Signs a fresh organizer in and makes them the request's viewer.
+async function actAsOrganizer() {
+  const user = await scope.createTestUser({
+    name: "Iva O.",
+    role: "organizer",
+  });
+  const ip = scope.ip();
+  const cookie = await signInForCookie({ ...user, ip });
+  mockNextRequest({ ip, cookies: { [SESSION_COOKIE]: cookie } });
+  return user;
+}
+
+// `ownerId`'s item, borrowed by `otherId`, out since yesterday (or overdue).
+async function outLoan(overdue = false) {
+  const itemId = await item();
+  return overdue
+    ? loanOn(itemId, otherId, "out", day(-5), day(-2))
+    : loanOn(itemId, otherId, "out", day(-1), day(2));
+}
+
+const closeFields = (id: string, overrides: Record<string, string> = {}) => ({
+  id,
+  returnedOn: day(0),
+  asLent: "yes",
+  note: "The owner is away; Sara brought it to me.",
+  ...overrides,
+});
+
+describe("closeLoanAsOrganizer — guard and shape", () => {
+  test("signed out → /login, nothing written", async () => {
+    const { id } = await outLoan();
+    mockNextRequest({ ip: scope.ip() });
+
+    expect(
+      await redirectTarget(
+        closeLoanAsOrganizer(unclosed, form(closeFields(id))),
+      ),
+    ).toMatch(/^\/login/);
+    expect((await loanRow(id)).status).toBe("out");
+    expect(closeLoanByOrganizer).not.toHaveBeenCalled();
+  });
+
+  test("a member gets not-found, nothing written", async () => {
+    const { id } = await outLoan();
+    await actAs();
+
+    const error = await thrownBy(
+      closeLoanAsOrganizer(unclosed, form(closeFields(id))),
+    );
+    expect((error as { digest?: string }).digest).toBe(NOT_FOUND);
+    expect((await loanRow(id)).status).toBe("out");
+    expect(closeLoanByOrganizer).not.toHaveBeenCalled();
+  });
+
+  test("a missing or empty id → stale, no field error", async () => {
+    await actAsOrganizer();
+    const withoutId = { returnedOn: day(0), asLent: "yes", note: "Closed" };
+    expect(await closeLoanAsOrganizer(unclosed, form(withoutId))).toEqual({
+      formError: "stale",
+    });
+    expect(await closeLoanAsOrganizer(unclosed, form(closeFields("")))).toEqual(
+      { formError: "stale" },
+    );
+    expect(refresh).not.toHaveBeenCalled();
+  });
+
+  const tooLong = "x".repeat(150) + "\r\n" + "x".repeat(150);
+  test.each<
+    [string, Record<string, string>, OrganizerCloseState["fieldErrors"]]
+  >([
+    [
+      "tomorrow",
+      { returnedOn: day(1) },
+      { returnedOn: [loanActions.returnedOnAfterToday] },
+    ],
+    [
+      "the day before the start",
+      { returnedOn: day(-2) },
+      { returnedOn: [loanActions.returnedOnBeforeStart] },
+    ],
+    [
+      "a malformed date",
+      { returnedOn: "2030-02-30" },
+      { returnedOn: [loanActions.returnedOnInvalid] },
+    ],
+    [
+      "an answer outside the three",
+      { asLent: "maybe" },
+      { asLent: [loanActions.asLentRequiredClose] },
+    ],
+    ["an empty note", { note: "" }, { note: [loanActions.noteRequired] }],
+    [
+      "a whitespace-only note",
+      { note: " \r\n  " },
+      { note: [loanActions.noteRequired] },
+    ],
+    [
+      "a 301-character note once CRLF is one character",
+      { note: tooLong },
+      {
+        note: [t(loanActions.noteTooLong, { max: LOAN_REASON_MAX })],
+      },
+    ],
+  ])(
+    "%s → field errors, values echoed, nothing written",
+    async (_, overrides, fieldErrors) => {
+      const { id } = await outLoan();
+      await actAsOrganizer();
+      const fields = closeFields(id, overrides);
+
+      expect(await closeLoanAsOrganizer(unclosed, form(fields))).toEqual({
+        fieldErrors,
+        values: {
+          returnedOn: fields.returnedOn,
+          asLent: fields.asLent,
+          note: fields.note,
+        },
+      });
+      expect((await loanRow(id)).status).toBe("out");
+      expect(refresh).not.toHaveBeenCalled();
+    },
+  );
+
+  test("no answer and no note → both field errors, echoed as empty", async () => {
+    const { id } = await outLoan();
+    await actAsOrganizer();
+
+    expect(
+      await closeLoanAsOrganizer(unclosed, form({ id, returnedOn: day(0) })),
+    ).toEqual({
+      fieldErrors: {
+        asLent: [loanActions.asLentRequiredClose],
+        note: [loanActions.noteRequired],
+      },
+      values: { returnedOn: day(0), asLent: "", note: "" },
+    });
+    expect((await loanRow(id)).status).toBe("out");
+  });
+
+  test("300 characters once CRLF is one character are accepted, stored with LF", async () => {
+    const { id } = await outLoan();
+    await actAsOrganizer();
+    const note = "x".repeat(149) + "\r\n" + "x".repeat(150);
+
+    expect(
+      await closeLoanAsOrganizer(unclosed, form(closeFields(id, { note }))),
+    ).toEqual({ flash: "loanClosed" });
+    expect((await loanRow(id)).statusReason).toBe(
+      "x".repeat(149) + "\n" + "x".repeat(150),
+    );
+  });
+
+  test("server-controlled fields in the form are ignored", async () => {
+    const { id } = await outLoan();
+    const { ownerSeenAt } = await loanRow(id);
+    const organizer = await actAsOrganizer();
+
+    await closeLoanAsOrganizer(
+      unclosed,
+      form({
+        ...closeFields(id),
+        status: "cancelled",
+        endedBy: "organizer",
+        closedById: otherId,
+        ownerSeenAt: "2020-01-01T00:00:00Z",
+        borrowerId: ownerId,
+      }),
+    );
+    expect(await loanRow(id)).toMatchObject({
+      status: "returned",
+      endedBy: null,
+      closedById: organizer.id,
+      borrowerId: otherId,
+      ownerSeenAt,
+    });
+  });
+});
+
+describe("closeLoanAsOrganizer — success", () => {
+  test.each([
+    ["an out loan", false, "yes"],
+    ["an overdue loan", true, "no"],
+    ["an out loan, not known how it came back", false, "unknown"],
+  ] as const)(
+    "%s → returned with the note and the closer, refresh once, the flash returned",
+    async (_, overdue, asLent) => {
+      const { id } = await outLoan(overdue);
+      const before = await loanRow(id);
+      const organizer = await actAsOrganizer();
+
+      expect(
+        await closeLoanAsOrganizer(
+          unclosed,
+          form(closeFields(id, { asLent, note: "  Closed for Sara.  " })),
+        ),
+      ).toEqual({ flash: "loanClosed" });
+      const row = await loanRow(id);
+      expect(row).toMatchObject({
+        status: "returned",
+        returnedAsLent: asLent,
+        statusReason: "Closed for Sara.",
+        closedById: organizer.id,
+        endedBy: null,
+        systemReason: null,
+        ownerSeenAt: before.ownerSeenAt,
+        borrowerSeenAt: before.borrowerSeenAt,
+      });
+      expect(fromDbDate(row.returnedOn)).toBe(day(0));
+      expect(row.changedAt.getTime()).toBeGreaterThan(
+        before.changedAt.getTime(),
+      );
+      expect(refresh).toHaveBeenCalledTimes(1);
+      expect(updateTag).not.toHaveBeenCalled();
+      expect(readCookie(FLASH_COOKIE)).toBeUndefined();
+    },
+  );
+});
+
+describe("closeLoanAsOrganizer — refusals", () => {
+  test.each([
+    "requested",
+    "approved",
+    "returned",
+    "declined",
+    "cancelled",
+  ] as const)(
+    "a %s loan → stale, nothing written, no refresh",
+    async (status) => {
+      const { id } = await loanOn(
+        await item(),
+        otherId,
+        status,
+        day(2),
+        day(3),
+      );
+      await actAsOrganizer();
+
+      expect(
+        await closeLoanAsOrganizer(unclosed, form(closeFields(id))),
+      ).toEqual({ formError: "stale" });
+      expect((await loanRow(id)).status).toBe(status);
+      expect(refresh).not.toHaveBeenCalled();
+    },
+  );
+
+  test("an organizer who owns the item, or borrowed it → stale, nothing written", async () => {
+    const owner = await actAsOrganizer();
+    const own = await loanOn(
+      await item({ owner: owner.id }),
+      otherId,
+      "out",
+      day(-1),
+      day(2),
+    );
+    expect(
+      await closeLoanAsOrganizer(unclosed, form(closeFields(own.id))),
+    ).toEqual({ formError: "stale" });
+
+    const borrower = await actAsOrganizer();
+    const held = await loanOn(
+      await item(),
+      borrower.id,
+      "out",
+      day(-1),
+      day(2),
+    );
+    expect(
+      await closeLoanAsOrganizer(unclosed, form(closeFields(held.id))),
+    ).toEqual({ formError: "stale" });
+
+    expect((await loanRow(own.id)).status).toBe("out");
+    expect((await loanRow(held.id)).status).toBe("out");
+    expect(refresh).not.toHaveBeenCalled();
+  });
+
+  test("a data failure → reported, unexpected with the values, nothing written", async () => {
+    const { id } = await outLoan();
+    await actAsOrganizer();
+    const report = vi.spyOn(console, "error").mockImplementation(() => {});
+    vi.mocked(closeLoanByOrganizer).mockRejectedValueOnce(new Error("boom"));
+
+    expect(
+      await closeLoanAsOrganizer(
+        unclosed,
+        form(closeFields(id, { asLent: "unknown", note: "Typed" })),
+      ),
+    ).toEqual({
+      formError: "unexpected",
+      values: { returnedOn: day(0), asLent: "unknown", note: "Typed" },
+    });
+    expect(report).toHaveBeenCalledWith(
+      "closeLoanAsOrganizer: unexpected",
+      expect.objectContaining({ name: "Error", message: "boom" }),
+    );
+    expect((await loanRow(id)).status).toBe("out");
+    expect(refresh).not.toHaveBeenCalled();
+  });
 });
 
 // 00:30 in Belgrade on 15 June 2030 is 22:30Z on the 14th: approve and cancel

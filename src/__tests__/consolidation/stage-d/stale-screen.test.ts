@@ -55,7 +55,8 @@ afterAll(async () => {
   await scope.cleanup();
 });
 
-type Party = "owner" | "borrower";
+// The organizer is a non-party: the close is theirs alone (spec 19).
+type Party = "owner" | "borrower" | "organizer";
 
 const run = (
   party: Party,
@@ -96,6 +97,7 @@ const CONTROL: Record<Transition, string[]> = {
   cancelLoan: [loanActions.cancelRequest, loanActions.cancelLoan],
   markLoanOut: [loanActions.handOver],
   markLoanReturned: [loanActions.markBack],
+  closeLoanAsOrganizer: [loanActions.closeLoan],
 };
 
 async function expectCurrentState(
@@ -118,6 +120,8 @@ describe("the repeat: the same call again is stale", () => {
     ["cancelLoan", "borrower", "approved"],
     ["markLoanOut", "owner", "approved"],
     ["markLoanReturned", "owner", "out"],
+    ["closeLoanAsOrganizer", "organizer", "out"],
+    ["closeLoanAsOrganizer", "organizer", "overdue"],
   ])("%s by the %s from %s", async (transition, party, status) => {
     const { id } = await createLoanFixture(scope, parties, status, today);
     await succeed(party, transition, id, status);
@@ -189,6 +193,37 @@ describe("the competing change committed first", () => {
     await succeed("owner", "markLoanReturned", id, "out", { asLent: "no" });
     await expectRefused(
       () => run("owner", "markLoanReturned", id, "out"),
+      id,
+      parties.owner.id,
+    );
+    await expectCurrentState("owner", id, "markLoanReturned", "returned");
+  });
+
+  test("an organizer close after the owner's mark as back", async () => {
+    const { id } = await createLoanFixture(scope, parties, "out", today);
+    // Rendered while out, so its absence afterwards is real.
+    expect(await loanPage(parties.organizer, id)).toMatch(
+      button(loanActions.closeLoan),
+    );
+    await succeed("owner", "markLoanReturned", id, "out");
+    await expectRefused(
+      () => run("organizer", "closeLoanAsOrganizer", id, "out"),
+      id,
+      parties.owner.id,
+    );
+    await expectCurrentState(
+      "organizer",
+      id,
+      "closeLoanAsOrganizer",
+      "returned",
+    );
+  });
+
+  test("mark as back after an organizer close", async () => {
+    const { id } = await createLoanFixture(scope, parties, "overdue", today);
+    await succeed("organizer", "closeLoanAsOrganizer", id, "overdue");
+    await expectRefused(
+      () => run("owner", "markLoanReturned", id, "overdue"),
       id,
       parties.owner.id,
     );

@@ -41,6 +41,9 @@ function endedLines(loan: LoanDetailDTO, today: string): string[] {
             })
           : loanStatus.returned.label,
         ...(loan.returnedAsLent === "no" ? [loanPage.ended.notAsLent] : []),
+        ...(loan.returnedAsLent === "unknown"
+          ? [loanPage.ended.asLentUnknown]
+          : []),
         ...(loan.closedByName
           ? [t(loanPage.ended.closedBy, { name: loan.closedByName })]
           : []),

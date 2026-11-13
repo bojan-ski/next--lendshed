@@ -163,7 +163,7 @@ function toRequestBlock(
 }
 
 // A visible item, or any item the viewer owns; null otherwise. Organizers get
-// no extra visibility here (`role` is first read in spec 19).
+// no extra visibility here, only the retire on items that aren't theirs.
 export async function getItemForViewer(
   viewer: Pick<ViewerDTO, "id" | "role">,
   itemId: string,
@@ -211,7 +211,7 @@ export async function getItemForViewer(
     isOwn,
     requestBlock,
     viewerCanRequest: !isOwn && requestBlock === null,
-    viewerCanRetireAsOrganizer: false,
+    viewerCanRetireAsOrganizer: viewer.role === "organizer" && !isOwn,
   };
 }
 

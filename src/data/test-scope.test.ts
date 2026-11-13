@@ -1,5 +1,5 @@
 import { assertMigrated, createTestScope } from "@/__tests__/support/test-db";
-import { lockActiveOrganizerIds } from "@/data/members";
+import { lockActiveOrganizerIds } from "@/data/organizer-locks";
 import { db } from "@/db";
 import type { LoanStatus } from "@/generated/prisma/enums";
 import { fromDbDate } from "./db-dates";

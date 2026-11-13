@@ -12,6 +12,7 @@ import {
   hideOwnItem,
   insertItem,
   listOwnItem,
+  retireItemByOrganizer,
   retireItemByOwner,
   updateOwnItem,
 } from "@/data/items";
@@ -19,13 +20,17 @@ import { toDbDate } from "@/data/db-dates";
 import { db } from "@/db";
 import { addDays, communityToday } from "@/lib/dates/dates";
 import { FLASH_COOKIE } from "@/lib/feedback/toast";
+import { RETIRED_NOTE_MAX } from "@/lib/schemas/items";
+import { t } from "@/lib/text/interpolate";
+import { itemPage } from "@/strings/itemPage";
 import { items } from "@/strings/items";
-import type { ItemDetailsFormState } from "@/types/item";
+import type { ItemDetailsFormState, OrganizerRetireState } from "@/types/item";
 import {
   createItem,
   deleteItem,
   hideItem,
   listItem,
+  retireItemAsOrganizer,
   retireOwnItem,
   updateItem,
 } from "./items";
@@ -49,6 +54,7 @@ vi.mock("@/data/items", async (importOriginal) => {
     listOwnItem: vi.fn(actual.listOwnItem),
     hideOwnItem: vi.fn(actual.hideOwnItem),
     retireItemByOwner: vi.fn(actual.retireItemByOwner),
+    retireItemByOrganizer: vi.fn(actual.retireItemByOrganizer),
     deleteOwnItem: vi.fn(actual.deleteOwnItem),
   };
 });
@@ -454,6 +460,167 @@ describe("deleteItem", () => {
     });
     expect(await itemRow(loaned.id)).not.toBeNull();
     expect(await itemRow(others.id)).not.toBeNull();
+    expect(readCookie(FLASH_COOKIE)).toBeUndefined();
+  });
+});
+
+describe("retireItemAsOrganizer", () => {
+  const NOT_FOUND = "NEXT_HTTP_ERROR_FALLBACK;404";
+  const unretired: OrganizerRetireState = {};
+  const note = "Broken blade, unsafe to lend.";
+
+  async function thrownBy(promise: Promise<unknown>): Promise<unknown> {
+    return promise.then(
+      () => {
+        throw new Error("expected a throw");
+      },
+      (error: unknown) => error,
+    );
+  }
+
+  async function actAsOrganizer() {
+    const user = await scope.createTestUser({ role: "organizer" });
+    const ip = scope.ip();
+    const cookie = await signInForCookie({ ...user, ip });
+    mockNextRequest({ ip, cookies: { [SESSION_COOKIE]: cookie } });
+    return user;
+  }
+
+  // Another member's listed item.
+  const othersItem = async () =>
+    scope.createItem({
+      ownerId: (await scope.createTestUser()).id,
+      status: "listed",
+    });
+
+  test("retires another member's item: note, retirer, flash, redirect to Browse", async () => {
+    const { id } = await othersItem();
+    const organizer = await actAsOrganizer();
+
+    expect(
+      await redirectTarget(
+        retireItemAsOrganizer(unretired, form({ id, note: `  ${note}  ` })),
+      ),
+    ).toBe("/");
+    expect(readCookie(FLASH_COOKIE)).toBe("itemRetired");
+    expect(await itemRow(id)).toMatchObject({
+      status: "retired",
+      retiredNote: note,
+      retiredById: organizer.id,
+    });
+    expect(refresh).not.toHaveBeenCalled();
+    expect(updateTag).not.toHaveBeenCalled();
+  });
+
+  test("signed out → /login; a member → not-found; nothing written", async () => {
+    const { id } = await othersItem();
+    mockNextRequest({ ip: scope.ip() });
+    expect(
+      await redirectTarget(
+        retireItemAsOrganizer(unretired, form({ id, note })),
+      ),
+    ).toMatch(/^\/login/);
+
+    await actAs();
+    const error = await thrownBy(
+      retireItemAsOrganizer(unretired, form({ id, note })),
+    );
+    expect((error as { digest?: string }).digest).toBe(NOT_FOUND);
+
+    expect(retireItemByOrganizer).not.toHaveBeenCalled();
+    expect((await itemRow(id))?.status).toBe("listed");
+    expect(readCookie(FLASH_COOKIE)).toBeUndefined();
+  });
+
+  test("a missing or empty id → stale, no field error", async () => {
+    await actAsOrganizer();
+    expect(await retireItemAsOrganizer(unretired, form({ note }))).toEqual({
+      formError: "stale",
+    });
+    expect(
+      await retireItemAsOrganizer(unretired, form({ id: "", note })),
+    ).toEqual({ formError: "stale" });
+  });
+
+  test.each([
+    ["no note", undefined, itemPage.retireNoteRequired],
+    ["an empty note", "", itemPage.retireNoteRequired],
+    ["a whitespace-only note", " \r\n ", itemPage.retireNoteRequired],
+    [
+      "a 301-character note once CRLF is one character",
+      "x".repeat(150) + "\r\n" + "x".repeat(150),
+      t(itemPage.retireNoteTooLong, { max: RETIRED_NOTE_MAX }),
+    ],
+  ])(
+    "%s → fieldErrors.note, echoed, nothing written",
+    async (_, value, message) => {
+      const { id } = await othersItem();
+      await actAsOrganizer();
+      const fields: Record<string, string> =
+        value === undefined ? { id } : { id, note: value };
+
+      expect(await retireItemAsOrganizer(unretired, form(fields))).toEqual({
+        fieldErrors: { note: [message] },
+        values: { note: value ?? "" },
+      });
+      expect((await itemRow(id))?.status).toBe("listed");
+      expect(readCookie(FLASH_COOKIE)).toBeUndefined();
+    },
+  );
+
+  test("the organizer's own item, or a retired one → stale, nothing written", async () => {
+    const organizer = await actAsOrganizer();
+    const own = await scope.createItem({
+      ownerId: organizer.id,
+      status: "listed",
+    });
+    const retired = await scope.createItem({
+      ownerId: (await scope.createTestUser()).id,
+      status: "retired",
+    });
+
+    for (const id of [own.id, retired.id]) {
+      expect(
+        await retireItemAsOrganizer(unretired, form({ id, note })),
+      ).toEqual({ formError: "stale" });
+    }
+    expect((await itemRow(own.id))?.status).toBe("listed");
+    expect(readCookie(FLASH_COOKIE)).toBeUndefined();
+  });
+
+  test("an item with an out loan → stillOut, nothing written", async () => {
+    const { id } = await othersItem();
+    await scope.createLoan({
+      itemId: id,
+      borrowerId: (await scope.createTestUser()).id,
+      status: "out",
+      startDate: addDays(communityToday(), -5),
+      endDate: addDays(communityToday(), -2),
+    });
+    await actAsOrganizer();
+
+    expect(await retireItemAsOrganizer(unretired, form({ id, note }))).toEqual({
+      formError: "stillOut",
+    });
+    expect((await itemRow(id))?.status).toBe("listed");
+    expect(readCookie(FLASH_COOKIE)).toBeUndefined();
+  });
+
+  test("a data failure → reported, unexpected with the note, no flash", async () => {
+    const { id } = await othersItem();
+    await actAsOrganizer();
+    const report = vi.spyOn(console, "error").mockImplementation(() => {});
+    vi.mocked(retireItemByOrganizer).mockRejectedValueOnce(new Error("boom"));
+
+    expect(await retireItemAsOrganizer(unretired, form({ id, note }))).toEqual({
+      formError: "unexpected",
+      values: { note },
+    });
+    expect(report).toHaveBeenCalledWith(
+      "retireItemAsOrganizer: unexpected",
+      expect.objectContaining({ name: "Error", message: "boom" }),
+    );
+    expect((await itemRow(id))?.status).toBe("listed");
     expect(readCookie(FLASH_COOKIE)).toBeUndefined();
   });
 });

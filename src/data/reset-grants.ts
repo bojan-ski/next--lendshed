@@ -1,5 +1,5 @@
 import "server-only";
-import { lockActiveOrganizerIds } from "@/data/members";
+import { lockActiveOrganizerIds } from "@/data/organizer-locks";
 import { db } from "@/db";
 import { setCredentialPassword } from "@/db/credentials";
 import type { ResetOutcome } from "@/types/auth";

@@ -310,7 +310,12 @@ const appSources = sourceFiles("src/**/*.{ts,tsx}").filter(
 const importsFrom = (file: string, specifier: string) =>
   importSpecifiers(parseFile(file)).includes(specifier);
 
-// The variables a function binds to `await requireViewer()`.
+// The variables a function binds to `await requireViewer()` or
+// `await requireOrganizer()`: both return the session's own viewer, so the id
+// is still the caller's own. The organizer retire acts as the actor and finds
+// the item itself; it never passes an owner id it was given.
+const VIEWER_GUARDS = new Set(["requireViewer", "requireOrganizer"]);
+
 function viewerBindings(fn: ts.Node): Set<string> {
   const names = new Set<string>();
   walk(fn, (node) => {
@@ -320,7 +325,7 @@ function viewerBindings(fn: ts.Node): Set<string> {
       node.initializer &&
       ts.isAwaitExpression(node.initializer) &&
       ts.isCallExpression(node.initializer.expression) &&
-      calleeName(node.initializer.expression) === "requireViewer"
+      VIEWER_GUARDS.has(calleeName(node.initializer.expression) ?? "")
     ) {
       names.add(node.name.text);
     }
@@ -336,7 +341,7 @@ function enclosingFunction(node: ts.Node): ts.Node | undefined {
 }
 
 // Calls of an @/data/items function whose first argument is not `<v>.id`, with
-// `v` bound to the same function's requireViewer() result.
+// `v` bound to the same function's requireViewer() or requireOrganizer() result.
 function foreignOwnerCalls(file: string, source = parseFile(file)): string[] {
   const itemsFunctions = importedNames(
     source,
@@ -425,12 +430,14 @@ describe("the derived import rule", () => {
     );
   });
 
-  test("the matcher accepts the viewer's id and flags anything else", () => {
+  test("the matcher accepts the viewer's or organizer's own id and flags anything else", () => {
     const probe = ts.createSourceFile(
       "probe.tsx",
       `import { getOwnItems, getItemForEdit } from "@/data/items";
        export async function ok() { const viewer = await requireViewer(); return getOwnItems(viewer.id, "d"); }
        export async function other(id) { const viewer = await requireViewer(); return getItemForEdit(id, "x", "d"); }
+       export async function organizer() { const viewer = await requireOrganizer(); return getOwnItems(viewer.id, "d"); }
+       export async function unawaited() { const viewer = requireOrganizer(); return getOwnItems(viewer.id, "d"); }
        export async function unguarded(user) { return getOwnItems(user.id, "d"); }`,
       ts.ScriptTarget.Latest,
       true,
@@ -438,11 +445,12 @@ describe("the derived import rule", () => {
     );
     expect(foreignOwnerCalls("probe.tsx", probe)).toEqual([
       'probe.tsx: getItemForEdit(id, "x", "d")',
+      'probe.tsx: getOwnItems(viewer.id, "d")',
       'probe.tsx: getOwnItems(user.id, "d")',
     ]);
   });
 
-  test("every @/data/items call passes the caller's own requireViewer() id", () => {
+  test("every @/data/items call passes the caller's own guard-returned id", () => {
     const callers = appSources.filter((file) =>
       importsFrom(file, "@/data/items"),
     );

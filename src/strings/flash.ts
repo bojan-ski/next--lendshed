@@ -25,4 +25,5 @@ export const flash = {
   loanCancelled: "Cancelled.",
   loanHandedOver: "Marked as handed over.",
   loanReturned: "Marked as back.",
+  loanClosed: "Loan closed.",
 } as const satisfies Record<string, string>;

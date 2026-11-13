@@ -19,9 +19,11 @@ import {
   hideOwnItem,
   insertItem,
   listOwnItem,
+  retireItemByOrganizer,
   retireItemByOwner,
   updateOwnItem,
 } from "./items";
+import { approveLoanRequest, handOverLoan } from "./loans";
 
 // The disk driver, with a switch to make deletes fail.
 vi.mock(
@@ -906,5 +908,358 @@ describe("foreign-key errors under the pg adapter", () => {
 
     expect(isCategoryReferenced(error)).toBe(true);
     expect(isItemReferencedByLoan(error)).toBe(false);
+  });
+});
+
+// Spec 19: an organizer retires another member's item (OQ-21, OQ-35). Every
+// loan starts "seen and changed" long ago, so a write shows.
+describe("retireItemByOrganizer", () => {
+  const OLD = at("2030-01-01");
+  const NOTE = "Unsafe: the cord is frayed.";
+  let organizerId: string;
+
+  beforeAll(async () => {
+    organizerId = (
+      await scope.createTestUser({ name: "Ivo K.", role: "organizer" })
+    ).id;
+  });
+
+  const retire = (actorId: string, id: string, note = NOTE) =>
+    retireItemByOrganizer(actorId, { id, note }, TODAY);
+
+  const seenLoan = (
+    itemId: string,
+    status: LoanStatus,
+    startDate: string,
+    endDate: string,
+    borrower: string | null = borrowerId,
+  ) =>
+    scope.createLoan({
+      itemId,
+      borrowerId: borrower,
+      status,
+      startDate,
+      endDate,
+      changedAt: OLD,
+      ownerSeenAt: OLD,
+      borrowerSeenAt: OLD,
+    });
+
+  const queueRows = (storageKey: string) =>
+    db.pendingBlobDeletion.findMany({ where: { storageKey } });
+
+  test.each(["hidden", "listed"] as const)(
+    "another member's %s item: retired with the note and the retirer, photo gone",
+    async (status) => {
+      const ownerId = await owner();
+      const photo = await scope.createStoredPhoto();
+      const { id } = await scope.createItem({ ownerId, status, photo });
+      const before = Date.now();
+
+      expect(await retire(organizerId, id)).toBe("retired");
+
+      const row = await itemRow(id);
+      expect(row).toMatchObject({
+        ownerId,
+        status: "retired",
+        retiredNote: NOTE,
+        retiredById: organizerId,
+        photoKey: null,
+        photoUrl: null,
+        photoWidth: null,
+        photoHeight: null,
+        photoBytes: null,
+      });
+      expect(row?.retiredAt?.getTime()).toBeGreaterThanOrEqual(before - 1000);
+      expect(await storedFileSize(photo.photoKey)).toBeNull();
+      expect(await queueRows(photo.photoKey)).toEqual([]);
+    },
+  );
+
+  test("the photo is queued in the transaction: a failed after-commit delete leaves exactly one row", async () => {
+    const ownerId = await owner();
+    const photo = await scope.createStoredPhoto();
+    const { id } = await scope.createItem({ ownerId, status: "listed", photo });
+    storageControl.failDelete = new Error("storage down");
+
+    try {
+      expect(await retire(organizerId, id)).toBe("retired");
+    } finally {
+      storageControl.reset();
+    }
+
+    expect(await queueRows(photo.photoKey)).toEqual([
+      expect.objectContaining({ bytes: photo.photoBytes, attempts: 1 }),
+    ]);
+    expect(await storedFileSize(photo.photoKey)).toBe(photo.photoBytes);
+  });
+
+  test("cancels effective approvals as the organizer, declines effective requests as the system; no seen-at moves, nothing else changes", async () => {
+    const ownerId = await owner();
+    const { id } = await scope.createItem({ ownerId, status: "listed" });
+    const approved = await seenLoan(id, "approved", "2030-07-01", "2030-07-02");
+    const requests = await Promise.all([
+      seenLoan(id, "requested", "2030-06-20", "2030-06-21"),
+      seenLoan(id, "requested", TODAY, "2030-06-16"),
+    ]);
+    const untouched = await Promise.all([
+      seenLoan(id, "requested", "2030-06-10", "2030-06-11"),
+      seenLoan(id, "approved", "2030-06-05", "2030-06-08"),
+      seenLoan(id, "returned", "2030-05-01", "2030-05-02"),
+      seenLoan(id, "declined", "2030-05-03", "2030-05-04"),
+      seenLoan(id, "cancelled", "2030-05-05", "2030-05-06"),
+    ]);
+    const untouchedBefore = await Promise.all(
+      untouched.map((loan) => loanRow(loan.id)),
+    );
+    const before = Date.now();
+
+    expect(await retire(organizerId, id)).toBe("retired");
+
+    const swept = [
+      [approved.id, "cancelled", "organizer"],
+      ...requests.map(({ id }) => [id, "declined", "system"]),
+    ];
+    for (const [loanId, status, endedBy] of swept) {
+      const row = await loanRow(loanId);
+      expect(row).toMatchObject({
+        status,
+        endedBy,
+        systemReason: "item_retired",
+        statusReason: null,
+        ownerSeenAt: OLD,
+        borrowerSeenAt: OLD,
+      });
+      expect(row.changedAt.getTime()).toBeGreaterThanOrEqual(before - 1000);
+    }
+    for (const row of untouchedBefore) {
+      expect(await loanRow(row.id)).toEqual(row);
+    }
+  });
+
+  test("an organizer borrowing an approved loan on the item cancels their own approval as the organizer", async () => {
+    const ownerId = await owner();
+    const { id } = await scope.createItem({ ownerId, status: "listed" });
+    const own = await seenLoan(
+      id,
+      "approved",
+      "2030-07-01",
+      "2030-07-02",
+      organizerId,
+    );
+
+    expect(await retire(organizerId, id)).toBe("retired");
+    expect(await loanRow(own.id)).toMatchObject({
+      status: "cancelled",
+      endedBy: "organizer",
+      systemReason: "item_retired",
+    });
+  });
+
+  test.each([
+    ["an out loan", "2030-06-14", "2030-06-16"],
+    ["an overdue loan", "2030-06-01", "2030-06-10"],
+  ] as const)("%s → stillOut, nothing written", async (_label, start, end) => {
+    const ownerId = await owner();
+    const photo = await scope.createStoredPhoto();
+    const { id } = await scope.createItem({ ownerId, status: "listed", photo });
+    const loans = await Promise.all([
+      seenLoan(id, "out", start, end),
+      seenLoan(id, "approved", "2030-07-01", "2030-07-02"),
+      seenLoan(id, "requested", "2030-06-20", "2030-06-21"),
+    ]);
+    const itemBefore = await itemRow(id);
+    const loansBefore = await Promise.all(
+      loans.map((loan) => loanRow(loan.id)),
+    );
+
+    expect(await retire(organizerId, id)).toBe("stillOut");
+
+    expect(await itemRow(id)).toEqual(itemBefore);
+    for (const row of loansBefore) expect(await loanRow(row.id)).toEqual(row);
+    expect(await queueRows(photo.photoKey)).toEqual([]);
+    expect(await storedFileSize(photo.photoKey)).toBe(photo.photoBytes);
+  });
+
+  test("the organizer's own item, a retired, an ownerless or an unknown item → stale, nothing written", async () => {
+    const own = await scope.createItem({
+      ownerId: organizerId,
+      status: "listed",
+    });
+    const retired = await scope.createItem({
+      ownerId: await owner(),
+      status: "retired",
+    });
+    const ownerless = await scope.createItem({
+      ownerId: null,
+      status: "listed",
+    });
+    const open = await seenLoan(
+      own.id,
+      "requested",
+      "2030-06-20",
+      "2030-06-21",
+    );
+    const items = await Promise.all(
+      [own, retired, ownerless].map((item) => itemRow(item.id)),
+    );
+    const openBefore = await loanRow(open.id);
+
+    for (const id of [own.id, retired.id, ownerless.id, crypto.randomUUID()]) {
+      expect(await retire(organizerId, id)).toBe("stale");
+    }
+    for (const row of items) expect(await itemRow(row!.id)).toEqual(row);
+    expect(await loanRow(open.id)).toEqual(openBefore);
+  });
+
+  test("a member, a demoted or a suspended organizer → stale, nothing written", async () => {
+    const demoted = (await scope.createTestUser({ role: "organizer" })).id;
+    await db.user.update({ where: { id: demoted }, data: { role: "member" } });
+    const suspended = (
+      await scope.createTestUser({ role: "organizer", status: "suspended" })
+    ).id;
+    const { id } = await scope.createItem({
+      ownerId: await owner(),
+      status: "listed",
+    });
+    const open = await seenLoan(id, "requested", "2030-06-20", "2030-06-21");
+    const itemBefore = await itemRow(id);
+    const openBefore = await loanRow(open.id);
+
+    for (const actor of [borrowerId, demoted, suspended]) {
+      expect(await retire(actor, id)).toBe("stale");
+    }
+    expect(await itemRow(id)).toEqual(itemBefore);
+    expect(await loanRow(open.id)).toEqual(openBefore);
+  });
+
+  // A NUL byte is valid in JS but not in Postgres text: the item write, the
+  // last in the transaction, throws after the sweep and the queue row.
+  test("a thrown write rolls back the item, the loans and the queue row", async () => {
+    const ownerId = await owner();
+    const photo = await scope.createStoredPhoto();
+    const { id } = await scope.createItem({ ownerId, status: "listed", photo });
+    const loans = await Promise.all([
+      seenLoan(id, "approved", "2030-07-01", "2030-07-02"),
+      seenLoan(id, "requested", "2030-06-20", "2030-06-21"),
+    ]);
+    const itemBefore = await itemRow(id);
+    const loansBefore = await Promise.all(
+      loans.map((loan) => loanRow(loan.id)),
+    );
+
+    await expect(retire(organizerId, id, "bad\u0000note")).rejects.toThrow();
+
+    expect(await itemRow(id)).toEqual(itemBefore);
+    for (const row of loansBefore) expect(await loanRow(row.id)).toEqual(row);
+    expect(await queueRows(photo.photoKey)).toEqual([]);
+    expect(await storedFileSize(photo.photoKey)).toBe(photo.photoBytes);
+  });
+});
+
+// Every contender queues behind a held item row, so they really overlap.
+describe("retireItemByOrganizer — concurrency (held item row)", () => {
+  let organizerId: string;
+
+  beforeAll(async () => {
+    organizerId = (await scope.createTestUser({ role: "organizer" })).id;
+  });
+
+  const retire = (id: string) =>
+    retireItemByOrganizer(organizerId, { id, note: "Worn out." }, TODAY);
+
+  async function contend<A, B>(
+    itemId: string,
+    first: () => Promise<A>,
+    second: () => Promise<B>,
+  ): Promise<[A, B]> {
+    const hold = holdRow("item", itemId);
+    await hold.held;
+    const a = first();
+    await hold.queued(1);
+    const b = second();
+    await hold.queued(2);
+    hold.release();
+    const [ra, rb] = await Promise.all([a, b, hold.done]);
+    return [ra, rb];
+  }
+
+  const live = (itemId: string) =>
+    db.loan.count({
+      where: { itemId, status: { in: ["approved", "requested"] } },
+    });
+
+  test("an approval queued first → the retire cancels it", async () => {
+    const ownerId = await owner();
+    const { id } = await scope.createItem({ ownerId, status: "listed" });
+    const request = await loanOn(id, "requested", "2030-06-20", "2030-06-21");
+
+    const [approved, retired] = await contend(
+      id,
+      () => approveLoanRequest(ownerId, request.id, TODAY),
+      () => retire(id),
+    );
+
+    expect(approved).toBe("approved");
+    expect(retired).toBe("retired");
+    expect(await loanRow(request.id)).toMatchObject({
+      status: "cancelled",
+      endedBy: "organizer",
+      systemReason: "item_retired",
+    });
+    expect(await live(id)).toBe(0);
+  });
+
+  test("the retire queued first → the approval is stale", async () => {
+    const ownerId = await owner();
+    const { id } = await scope.createItem({ ownerId, status: "listed" });
+    const request = await loanOn(id, "requested", "2030-06-20", "2030-06-21");
+
+    const [retired, approved] = await contend(
+      id,
+      () => retire(id),
+      () => approveLoanRequest(ownerId, request.id, TODAY),
+    );
+
+    expect(retired).toBe("retired");
+    expect(approved).toBe("stale");
+    expect((await loanRow(request.id)).status).toBe("declined");
+    expect(await live(id)).toBe(0);
+  });
+
+  test("a handover queued first → stillOut; the loan stays out and the item listed", async () => {
+    const ownerId = await owner();
+    const { id } = await scope.createItem({ ownerId, status: "listed" });
+    const loan = await loanOn(id, "approved", TODAY, "2030-06-17");
+
+    const [handed, retired] = await contend(
+      id,
+      () => handOverLoan(ownerId, loan.id, TODAY),
+      () => retire(id),
+    );
+
+    expect(handed).toBe("handedOver");
+    expect(retired).toBe("stillOut");
+    expect((await loanRow(loan.id)).status).toBe("out");
+    expect((await itemRow(id))?.status).toBe("listed");
+  });
+
+  test("the retire queued first → the handover is stale; the approval was cancelled", async () => {
+    const ownerId = await owner();
+    const { id } = await scope.createItem({ ownerId, status: "listed" });
+    const loan = await loanOn(id, "approved", TODAY, "2030-06-17");
+
+    const [retired, handed] = await contend(
+      id,
+      () => retire(id),
+      () => handOverLoan(ownerId, loan.id, TODAY),
+    );
+
+    expect(retired).toBe("retired");
+    expect(handed).toBe("stale");
+    expect(await loanRow(loan.id)).toMatchObject({
+      status: "cancelled",
+      endedBy: "organizer",
+    });
   });
 });

@@ -3,9 +3,12 @@ import { calleeName, walk } from "@/__tests__/support/ast";
 import { parseFile, sourceFiles } from "@/__tests__/support/import-graph";
 
 // Every loan status change locks the item, then the loan, and no `user` row
-// (rules/data.md, spec 14): the five transitions through
-// lockLoanForTransition, the item sweeps under lockOwnItem. A false positive
-// is fixed in the matcher with its reason, never by an exemption list.
+// after them (rules/data.md, spec 14): the transitions through
+// lockLoanForTransition, the item sweeps under an item lock. A transition that
+// writes a `user` FK (19's close sets `closedById`) takes a key-share on that
+// row, so it calls lockActiveOrganizerIds before lockLoanForTransition (spec
+// 19). A false positive is fixed in the matcher with its reason, never by an
+// exemption list.
 
 const WRITES = new Set([
   "update",
@@ -88,6 +91,56 @@ function mayWriteStatus(
   return true;
 }
 
+// Loan columns that reference `user` (the schema's borrowerId and closedById;
+// an actor column is named `…ById`). Writing one takes a key-share lock on
+// that user row.
+const USER_FK = /^(borrowerId|\w+ById)$/;
+
+// Whether a `data` value can set a `user` FK, read the way mayWriteStatus reads
+// `status`: an unknown expression might, so it counts.
+function mayWriteUserFk(
+  expression: ts.Expression,
+  functions: Functions,
+): boolean {
+  if (ts.isParenthesizedExpression(expression)) {
+    return mayWriteUserFk(expression.expression, functions);
+  }
+  if (ts.isConditionalExpression(expression)) {
+    return (
+      mayWriteUserFk(expression.whenTrue, functions) ||
+      mayWriteUserFk(expression.whenFalse, functions)
+    );
+  }
+  if (ts.isObjectLiteralExpression(expression)) {
+    return expression.properties.some((property) =>
+      ts.isSpreadAssignment(property)
+        ? mayWriteUserFk(property.expression, functions)
+        : property.name !== undefined &&
+          USER_FK.test(property.name.getText()),
+    );
+  }
+  if (ts.isCallExpression(expression)) {
+    const fn = functions.get(calleeName(expression) ?? "");
+    if (fn) {
+      return returnedValues(fn).some((value) =>
+        mayWriteUserFk(value, functions),
+      );
+    }
+  }
+  return true;
+}
+
+function writesLoanUserFk(node: ts.Node, functions: Functions): boolean {
+  if (!delegateWrite(node, "loan")) return false;
+  const [args] = node.arguments;
+  if (!args || !ts.isObjectLiteralExpression(args)) return true;
+  const data = args.properties.find(
+    (property): property is ts.PropertyAssignment =>
+      ts.isPropertyAssignment(property) && property.name.getText() === "data",
+  );
+  return data !== undefined && mayWriteUserFk(data.initializer, functions);
+}
+
 // A change of status: update/updateMany. A create (insertLoanRequest) sets
 // the first status of a row nobody else can hold yet.
 function writesLoanStatus(
@@ -116,8 +169,11 @@ type Guarded = {
   unguardedSweeps: string[];
   // Functions whose raw SQL locks item rows FOR UPDATE.
   itemLockers: string[];
-  // Functions behind lockLoanForTransition that lock or write a `user` row.
+  // Functions that lock or write a `user` row after lockLoanForTransition.
   userLocks: string[];
+  // Transitions writing a `user` FK without the organizer locks taken before
+  // lockLoanForTransition.
+  unlockedFkWrites: string[];
   // The helper's raw SQL, in order.
   helperSql: string[];
 };
@@ -146,6 +202,7 @@ function analyse(files: { file: string; source: ts.SourceFile }[]): Guarded {
     unguardedSweeps: [],
     itemLockers: [],
     userLocks: [],
+    unlockedFkWrites: [],
     helperSql: [],
   };
   const writers = new Map<
@@ -243,20 +300,34 @@ function analyse(files: { file: string; source: ts.SourceFile }[]): Guarded {
     (fn) => fn === helper || firstCall(fn, "lockLoanForTransition") !== null,
   );
   for (const fn of transitionFns) {
+    // Inside the helper everything counts as behind the loan lock.
+    const loanLock =
+      fn === helper ? -1 : firstCall(fn, "lockLoanForTransition")!;
+    const organizerLock = firstCall(fn, "lockActiveOrganizerIds");
     walk(fn, (node) => {
       const userSql =
         ts.isTaggedTemplateExpression(node) &&
         /"user"/.test(node.template.getText()) &&
         /\bFOR\b/.test(node.template.getText());
-      const organizerLock =
+      const organizerLockCall =
         ts.isCallExpression(node) &&
         calleeName(node) === "lockActiveOrganizerIds";
-      if (userSql || organizerLock || delegateWrite(node, "user")) {
+      if (
+        (userSql || organizerLockCall || delegateWrite(node, "user")) &&
+        position(node) > loanLock
+      ) {
         result.userLocks.push(fn.name!.text);
+      }
+      if (
+        writesLoanUserFk(node, functions) &&
+        (organizerLock === null || organizerLock > loanLock)
+      ) {
+        result.unlockedFkWrites.push(fn.name!.text);
       }
     });
   }
   result.userLocks = [...new Set(result.userLocks)].sort();
+  result.unlockedFkWrites = [...new Set(result.unlockedFkWrites)].sort();
   return result;
 }
 
@@ -284,6 +355,23 @@ export async function lockedUser(tx) {
   await tx.$queryRaw\`SELECT id FROM "user" WHERE id = \${1} FOR SHARE\`;
   await tx.loan.updateMany({ where: {}, data: role ? { ownerSeenAt: now } : { status: "x" } });
 }
+export async function fkGuarded(tx) {
+  await lockActiveOrganizerIds(tx);
+  await lockLoanForTransition(tx);
+  await tx.loan.update({ where: { id: "x" }, data: { status: "returned", closedById: "a" } });
+}
+export async function fkUnguarded(tx) {
+  await lockLoanForTransition(tx);
+  await tx.loan.update({ where: { id: "x" }, data: { status: "returned", closedById: "a" } });
+}
+export async function fkLateLock(tx) {
+  await lockLoanForTransition(tx);
+  await lockActiveOrganizerIds(tx);
+  await tx.loan.update({ where: { id: "x" }, data: { status: "returned", ...closer("a") } });
+}
+function closer(id) {
+  return { closedById: id };
+}
 function seenAtFor(party, now) {
   return party === "owner" ? { ownerSeenAt: now } : { borrowerSeenAt: now };
 }
@@ -309,6 +397,9 @@ export const arrowWriter = async (tx) => {
   test("finds status writers through conditionals, spreads and arrows, never a seen-at-only write", () => {
     expect(report.writers).toEqual([
       "src/data/loans.ts#<no function declaration>",
+      "src/data/loans.ts#fkGuarded",
+      "src/data/loans.ts#fkLateLock",
+      "src/data/loans.ts#fkUnguarded",
       "src/data/loans.ts#guarded",
       "src/data/loans.ts#lockedUser",
       "src/data/loans.ts#writesFirst",
@@ -320,10 +411,14 @@ export const arrowWriter = async (tx) => {
       "src/data/loans.ts#<no function declaration>",
       "src/data/loans.ts#writesFirst",
     ]);
-    expect(report.userLocks).toEqual(["lockedUser"]);
+    expect(report.userLocks).toEqual(["fkLateLock", "lockedUser"]);
     expect(order(report.helperSql, "loan")).toBeLessThan(
       order(report.helperSql, "item"),
     );
+  });
+
+  test("flags a user-FK write unless the organizer locks come before the loan lock", () => {
+    expect(report.unlockedFkWrites).toEqual(["fkLateLock", "fkUnguarded"]);
   });
 });
 
@@ -333,12 +428,14 @@ describe("loan-lock-order — src/data/", () => {
     .map((file) => ({ file, source: parseFile(file) }));
   const report = analyse(files);
 
-  test("the loan-status writers: the five transitions, the item sweep and the member sweep", () => {
+  test("the loan-status writers: the six transitions, the two item sweeps and the member sweep", () => {
     expect(report.writers).toEqual(
       [
         "src/data/items.ts#declineOpenRequests",
+        "src/data/items.ts#sweepOrganizerRetiredLoans",
         "src/data/loans.ts#approveLoanRequest",
         "src/data/loans.ts#cancelLoanByParty",
+        "src/data/loans.ts#closeLoanByOrganizer",
         "src/data/loans.ts#declineLoanRequest",
         "src/data/loans.ts#handOverLoan",
         "src/data/loans.ts#markLoanBack",
@@ -353,13 +450,20 @@ describe("loan-lock-order — src/data/", () => {
 
   test("the item locks are found from their SQL", () => {
     expect(report.itemLockers).toEqual(
-      expect.arrayContaining(["lockMemberLoanItems", "lockOwnItem"]),
+      expect.arrayContaining([
+        "lockItemForOrganizer",
+        "lockMemberLoanItems",
+        "lockOwnItem",
+      ]),
     );
   });
 
   test("every sweep runs only after an item lock", () => {
     expect(report.sweepCallers).toEqual(
-      expect.arrayContaining(["src/data/members.ts#suspendMemberAccount"]),
+      expect.arrayContaining([
+        "src/data/items.ts#retireItemByOrganizer",
+        "src/data/members.ts#suspendMemberAccount",
+      ]),
     );
     expect(report.unguardedSweeps).toEqual([]);
   });
@@ -405,7 +509,38 @@ describe("loan-lock-order — src/data/", () => {
     expect(loan).toBeGreaterThan(item);
   });
 
-  test("nothing behind lockLoanForTransition locks or writes a user row", () => {
+  test("nothing locks or writes a user row after lockLoanForTransition", () => {
     expect(report.userLocks).toEqual([]);
+  });
+
+  test("a transition writing a user FK takes the organizer locks before the loan lock", () => {
+    expect(report.unlockedFkWrites).toEqual([]);
+  });
+
+  // Organizers → item → loan → the write (spec 19).
+  test("closeLoanByOrganizer locks in the documented order", () => {
+    const [source] = files
+      .filter(({ file }) => file === "src/data/loans.ts")
+      .map(({ source }) => source);
+    let fn: ts.FunctionDeclaration | undefined;
+    walk(source, (node) => {
+      if (
+        ts.isFunctionDeclaration(node) &&
+        node.name?.text === "closeLoanByOrganizer"
+      ) {
+        fn = node;
+      }
+    });
+    let write: number | null = null;
+    walk(fn!, (node) => {
+      if (write === null && delegateWrite(node, "loan")) write = position(node);
+    });
+    const steps = [
+      firstCall(fn!, "lockActiveOrganizerIds"),
+      firstCall(fn!, "lockLoanForTransition"),
+      write,
+    ];
+    expect(steps.every((at) => at !== null)).toBe(true);
+    expect([...steps].sort((a, b) => a! - b!)).toEqual(steps);
   });
 });

@@ -423,7 +423,7 @@ describe("getLoanForViewer — hand over and return", () => {
       "non-party organizer, out",
       () => as(organizerId, "organizer"),
       { status: "out" },
-      [],
+      ["organizer_close"],
     ],
   ])("%s → %j, not blocked", async (_, viewer, fixture, actions) => {
     const { id } = await loan(fixture);

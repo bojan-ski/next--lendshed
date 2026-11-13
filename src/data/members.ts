@@ -2,6 +2,10 @@ import "server-only";
 import { fromDbDate } from "@/data/db-dates";
 import { blockingLoanWhere, effectiveLoanWhere } from "@/data/loan-scopes";
 import { personName } from "@/data/mappers";
+import {
+  lockActiveOrganizerIds,
+  ROLE_TRANSACTION,
+} from "@/data/organizer-locks";
 import { containsText } from "@/data/text-search";
 import { db } from "@/db";
 import type {
@@ -21,9 +25,6 @@ import type {
   RoleChangeOutcome,
   SuspendOutcome,
 } from "@/types/members";
-
-// A waiting role change queues on the organizer locks inside its timeout.
-const ROLE_TRANSACTION = { maxWait: 15_000, timeout: 30_000 };
 
 const rowSelect = {
   id: true,
@@ -185,20 +186,6 @@ export async function getAdminMemberDetail(
         loans.map((loan) => toAdminMemberOpenLoan(loan, memberId, today)),
       )
     : null;
-}
-
-// Every organizer guard (demote here, suspend 18, delete 20) takes these locks
-// first and in id order, so concurrent organizer actions serialise and the
-// later one re-reads who is still an active organizer.
-export async function lockActiveOrganizerIds(
-  tx: Prisma.TransactionClient,
-): Promise<string[]> {
-  const rows = await tx.$queryRaw<{ id: string }[]>`
-    SELECT id FROM "user"
-    WHERE role = 'organizer' AND status = 'active'
-    ORDER BY id
-    FOR UPDATE`;
-  return rows.map(({ id }) => id);
 }
 
 export async function changeMemberRole(input: {

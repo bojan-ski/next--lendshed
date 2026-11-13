@@ -8,16 +8,18 @@ import {
   hideOwnItem,
   insertItem,
   listOwnItem,
+  retireItemByOrganizer,
   retireItemByOwner,
   updateOwnItem,
 } from "@/data/items";
-import { requireViewer } from "@/lib/auth/guards";
+import { requireOrganizer, requireViewer } from "@/lib/auth/guards";
 import { communityToday } from "@/lib/dates/dates";
 import { setFlash } from "@/lib/feedback/flash";
 import { reportUnexpected } from "@/lib/feedback/report";
 import {
   itemDetailsSchema,
   itemIdSchema,
+  retireItemSchema,
   updateItemSchema,
 } from "@/lib/schemas/items";
 import { items } from "@/strings/items";
@@ -26,6 +28,7 @@ import type {
   ItemDetailsField,
   ItemDetailsFormState,
   ItemVisibilityState,
+  OrganizerRetireState,
   RetireItemState,
 } from "@/types/item";
 
@@ -215,4 +218,41 @@ export async function deleteItem(
 
   await setFlash("itemDeleted");
   redirect("/my/items");
+}
+
+// Another member's item (OQ-21). The item is not-found to the organizer once
+// retired, so success lands on Browse.
+export async function retireItemAsOrganizer(
+  _prev: OrganizerRetireState,
+  formData: FormData,
+): Promise<OrganizerRetireState> {
+  const viewer = await requireOrganizer();
+
+  const note = formData.get("note");
+  const values = { note: typeof note === "string" ? note : "" };
+  const parsed = retireItemSchema.safeParse({
+    id: formData.get("id"),
+    note: note ?? undefined,
+  });
+  if (!parsed.success) {
+    const fieldErrors = z.flattenError(parsed.error).fieldErrors;
+    if (fieldErrors.id) return { formError: "stale" };
+    return { fieldErrors: { note: fieldErrors.note }, values };
+  }
+
+  let result: Awaited<ReturnType<typeof retireItemByOrganizer>>;
+  try {
+    result = await retireItemByOrganizer(
+      viewer.id,
+      parsed.data,
+      communityToday(),
+    );
+  } catch (error) {
+    reportUnexpected("retireItemAsOrganizer", error);
+    return { formError: "unexpected", values };
+  }
+  if (result !== "retired") return { formError: result };
+
+  await setFlash("itemRetired");
+  redirect("/");
 }

@@ -316,6 +316,125 @@ describe("lock-first: role and status writes take the organizer locks first", ()
   });
 });
 
+// Writes naming an organizer through an FK (spec 19): the close's closedById,
+// the retire's retiredById. The write takes a key-share on that organizer's
+// row, which a role change holds FOR UPDATE, so the writer locks the
+// organizers first (rules/data.md). Any delegate, any write method, or raw SQL.
+const ORGANIZER_FKS = /\b(closedById|retiredById)\b/;
+const FK_WRITE_CALLS = new Set([...WRITE_CALLS, "create", "createMany"]);
+
+function setsOrganizerFk(node: ts.Node | undefined): boolean {
+  if (!node || !ts.isObjectLiteralExpression(node)) return false;
+  return node.properties.some((property) => {
+    const name = property.name?.getText() ?? "";
+    if (ORGANIZER_FKS.test(name)) return true;
+    return (
+      (name === "data" || name === "create" || name === "update") &&
+      ts.isPropertyAssignment(property) &&
+      setsOrganizerFk(property.initializer)
+    );
+  });
+}
+
+function organizerFkWrites(source: ts.SourceFile): ts.Node[] {
+  const writes: ts.Node[] = [];
+  for (const call of callsIn(source)) {
+    const callee = call.expression;
+    if (
+      ts.isPropertyAccessExpression(callee) &&
+      FK_WRITE_CALLS.has(callee.name.text) &&
+      setsOrganizerFk(call.arguments[0])
+    ) {
+      writes.push(call);
+    }
+  }
+  walk(source, (node) => {
+    if (
+      ts.isTaggedTemplateExpression(node) &&
+      /\b(UPDATE|INSERT)\b/i.test(node.template.getText()) &&
+      ORGANIZER_FKS.test(node.template.getText())
+    ) {
+      writes.push(node);
+    }
+  });
+  return writes;
+}
+
+function unlockedFkWrites(source: ts.SourceFile): string[] {
+  const calls = callsIn(source);
+  return organizerFkWrites(source)
+    .filter(
+      (write) =>
+        !calls.some(
+          (call) =>
+            calleeName(call) === "lockActiveOrganizerIds" &&
+            enclosingFunction(call) === enclosingFunction(write) &&
+            call.getStart() < write.getStart(),
+        ),
+    )
+    .map((write) => write.getText().split("\n")[0]);
+}
+
+describe("lock-first: closedById and retiredById writes take the organizer locks first", () => {
+  test("finds the writers: closeLoanByOrganizer and retireItemByOrganizer", () => {
+    const declaredIn = (node: ts.Node) => {
+      let current: ts.Node | undefined = node.parent;
+      while (current && !ts.isFunctionDeclaration(current)) {
+        current = current.parent;
+      }
+      return current?.name?.text;
+    };
+    const writers = dataFiles.flatMap((file) =>
+      organizerFkWrites(parseFile(file)).map(
+        (write) => `${file}#${declaredIn(write)}`,
+      ),
+    );
+    expect(writers.sort()).toEqual([
+      "src/data/items.ts#retireItemByOrganizer",
+      "src/data/loans.ts#closeLoanByOrganizer",
+    ]);
+  });
+
+  test.each(dataFiles)(
+    "%s writes closedById or retiredById only after lockActiveOrganizerIds",
+    (file) => {
+      expect(unlockedFkWrites(parseFile(file))).toEqual([]);
+    },
+  );
+
+  test("the check catches a write without the lock, or with the lock after it", () => {
+    const probe = (code: string) =>
+      unlockedFkWrites(
+        ts.createSourceFile("probe.ts", code, ts.ScriptTarget.Latest, true),
+      );
+    expect(
+      probe(
+        `async function f(tx) { await tx.loan.update({ where: {}, data: { status: "returned", closedById: a } }); }`,
+      ),
+    ).toHaveLength(1);
+    expect(
+      probe(
+        `async function f(tx) { await tx.item.update({ data: { retiredById: a } }); await lockActiveOrganizerIds(tx); }`,
+      ),
+    ).toHaveLength(1);
+    expect(
+      probe(
+        'async function f(tx) { await tx.$executeRaw`UPDATE item SET "retiredById" = ${a}`; }',
+      ),
+    ).toHaveLength(1);
+    expect(
+      probe(
+        `async function f(tx) { await lockActiveOrganizerIds(tx); await tx.loan.update({ data: { closedById: a } }); }`,
+      ),
+    ).toEqual([]);
+    expect(
+      probe(
+        `async function f(tx) { await tx.item.update({ data: { retiredNote: "x" } }); }`,
+      ),
+    ).toEqual([]);
+  });
+});
+
 // The detail page's controls, rendered from a stubbed DTO.
 const otherMember: AdminMemberDetailDTO = {
   id: "member-2",

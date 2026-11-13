@@ -1,13 +1,20 @@
 import { holdRow } from "@/__tests__/support/hold-row";
 import { assertMigrated, createTestScope } from "@/__tests__/support/test-db";
 import { updateOwnContactDetails } from "@/data/account";
+import { fromDbDate } from "@/data/db-dates";
 import { hideOwnItem } from "@/data/items";
 import { db } from "@/db";
 import type { ItemStatus, LoanStatus } from "@/generated/prisma/enums";
+import type { OrganizerCloseInput } from "@/lib/schemas/loans";
 import { people } from "@/strings/people";
-import type { LoanDetailDTO } from "@/types/loan";
+import type { EffectiveLoanStatus, LoanDetailDTO } from "@/types/loan";
 import { getItemForViewer } from "./browse";
-import { getLoanForViewer, insertLoanRequest } from "./loans";
+import {
+  closeLoanByOrganizer,
+  getLoanForViewer,
+  insertLoanRequest,
+  markLoanBack,
+} from "./loans";
 
 vi.mock(
   "@/lib/storage/storage",
@@ -553,4 +560,216 @@ describe("getLoanForViewer — the wire", () => {
       /email|SeenAt|changedAt|closedById|@test\.invalid/,
     );
   });
+});
+
+// Spec 19: an organizer who isn't a party closes an out or overdue loan
+// (OQ-22). Every fixture starts "seen and changed" long ago, so a write shows.
+const OLD = new Date("2030-01-01T00:00:00Z");
+const SEEN = { changedAt: OLD, ownerSeenAt: OLD, borrowerSeenAt: OLD };
+const NOTE = "The owner can't be reached.";
+
+// TODAY is 2030-06-15.
+const DATES = {
+  requested: { status: "requested", startDate: "2030-06-20", endDate: "2030-06-22" },
+  approved: { status: "approved", startDate: "2030-06-20", endDate: "2030-06-22" },
+  out: { status: "out", startDate: "2030-06-12", endDate: "2030-06-17" },
+  overdue: { status: "out", startDate: "2030-06-10", endDate: "2030-06-12" },
+  returned: {
+    status: "returned",
+    startDate: "2030-06-01",
+    endDate: "2030-06-05",
+    returnedOn: "2030-06-05",
+  },
+  declined: { status: "declined", startDate: "2030-06-20", endDate: "2030-06-22" },
+  cancelled: { status: "cancelled", startDate: "2030-06-20", endDate: "2030-06-22" },
+  expired: { status: "requested", startDate: "2030-06-10", endDate: "2030-06-12" },
+  lapsed: { status: "approved", startDate: "2030-06-10", endDate: "2030-06-12" },
+} as const satisfies Record<EffectiveLoanStatus, Fixture>;
+
+const closeAs = (
+  actorId: string,
+  id: string,
+  input: Partial<Omit<OrganizerCloseInput, "id">> = {},
+) =>
+  closeLoanByOrganizer(
+    actorId,
+    { id, returnedOn: TODAY, asLent: "yes", note: NOTE, ...input },
+    TODAY,
+  );
+
+describe("closeLoanByOrganizer", () => {
+  test.each([
+    ["out", "yes"],
+    ["out", "no"],
+    ["out", "unknown"],
+    ["overdue", "yes"],
+    ["overdue", "no"],
+    ["overdue", "unknown"],
+  ] as const)(
+    "a non-party organizer on an %s loan, as lent %s → returned; no seen-at moves",
+    async (status, asLent) => {
+      const { id } = await fixture({ ...DATES[status], extra: SEEN });
+      const before = Date.now();
+
+      expect(
+        await closeAs(organizerId, id, { asLent, returnedOn: "2030-06-13" }),
+      ).toBe("closed");
+
+      const after = await loanRow(id);
+      expect(after).toMatchObject({
+        status: "returned",
+        returnedAsLent: asLent,
+        statusReason: NOTE,
+        closedById: organizerId,
+        endedBy: null,
+        systemReason: null,
+        ownerSeenAt: OLD,
+        borrowerSeenAt: OLD,
+      });
+      expect(fromDbDate(after.returnedOn)).toBe("2030-06-13");
+      expect(after.changedAt.getTime()).toBeGreaterThanOrEqual(before - 1000);
+    },
+  );
+
+  test("both parties see the change: the close reads Returned, closed by the organizer", async () => {
+    const { id } = await fixture({ ...DATES.overdue, extra: SEEN });
+    expect(await closeAs(organizerId, id, { asLent: "unknown" })).toBe(
+      "closed",
+    );
+    for (const party of [ownerId, borrowerId]) {
+      expect(await view(party, id)).toMatchObject({
+        status: "returned",
+        returnedOn: TODAY,
+        returnedAsLent: "unknown",
+        closedByName: "Ivo K.",
+        statusReason: NOTE,
+        endedBy: null,
+      });
+    }
+  });
+
+  test.each([
+    "requested",
+    "approved",
+    "returned",
+    "declined",
+    "cancelled",
+    "expired",
+    "lapsed",
+  ] as const)("a %s loan → stale, nothing written", async (status) => {
+    const { id } = await fixture({ ...DATES[status], extra: SEEN });
+    const before = await loanRow(id);
+    expect(await closeAs(organizerId, id, { returnedOn: "2030-06-10" })).toBe(
+      "stale",
+    );
+    expect(await loanRow(id)).toEqual(before);
+  });
+
+  test("the owner or the borrower closing as an organizer → stale, nothing written (OQ-19)", async () => {
+    const owned = await fixture({
+      ...DATES.out,
+      owner: organizerId,
+      extra: SEEN,
+    });
+    const borrowed = await fixture({
+      ...DATES.out,
+      borrower: organizerId,
+      extra: SEEN,
+    });
+    for (const { id } of [owned, borrowed]) {
+      const before = await loanRow(id);
+      expect(await closeAs(organizerId, id)).toBe("stale");
+      expect(await loanRow(id)).toEqual(before);
+    }
+  });
+
+  test("a member, a demoted or a suspended organizer → stale, nothing written", async () => {
+    const demoted = await user({ role: "organizer" });
+    await db.user.update({ where: { id: demoted }, data: { role: "member" } });
+    const suspended = await user({ role: "organizer", status: "suspended" });
+    const { id } = await fixture({ ...DATES.out, extra: SEEN });
+    const before = await loanRow(id);
+
+    for (const actor of [strangerId, demoted, suspended]) {
+      expect(await closeAs(actor, id)).toBe("stale");
+    }
+    expect(await loanRow(id)).toEqual(before);
+  });
+
+  test("an unknown id → stale", async () => {
+    expect(await closeAs(organizerId, crypto.randomUUID())).toBe("stale");
+  });
+
+  test("a return date the day before the start → beforeStart, nothing written; the start itself closes", async () => {
+    const { id } = await fixture({ ...DATES.overdue, extra: SEEN });
+    const before = await loanRow(id);
+
+    expect(await closeAs(organizerId, id, { returnedOn: "2030-06-09" })).toBe(
+      "beforeStart",
+    );
+    expect(await loanRow(id)).toEqual(before);
+    expect(await closeAs(organizerId, id, { returnedOn: "2030-06-10" })).toBe(
+      "closed",
+    );
+  });
+});
+
+describe("getLoanForViewer — the organizer close", () => {
+  test.each(Object.keys(DATES) as EffectiveLoanStatus[])(
+    "a non-party organizer on a %s loan gets exactly what the close accepts",
+    async (status) => {
+      const { id } = await fixture(DATES[status]);
+      const dto = await view(organizerId, id, "organizer");
+      expect(dto?.status).toBe(status);
+      expect(dto?.actions).toEqual(
+        status === "out" || status === "overdue" ? ["organizer_close"] : [],
+      );
+    },
+  );
+
+  test("an organizer who is a party keeps the party's controls, never the close", async () => {
+    for (const status of ["out", "overdue"] as const) {
+      const owned = await fixture({ ...DATES[status], owner: organizerId });
+      const borrowed = await fixture({
+        ...DATES[status],
+        borrower: organizerId,
+      });
+      expect((await view(organizerId, owned.id, "organizer"))?.actions).toEqual(
+        ["mark_returned"],
+      );
+      expect(
+        (await view(organizerId, borrowed.id, "organizer"))?.actions,
+      ).toEqual([]);
+    }
+  });
+});
+
+// Both contenders queue behind a held item row, so they really overlap.
+describe("closeLoanByOrganizer vs markLoanBack (held item row)", () => {
+  const giveBack = (id: string) =>
+    markLoanBack(ownerId, { id, returnedOn: TODAY, asLent: "yes" }, TODAY);
+
+  test.each(["the close", "the owner's return"] as const)(
+    "%s queued first wins; the other is stale",
+    async (first) => {
+      const { id, itemId } = await fixture({ ...DATES.overdue, extra: SEEN });
+      const hold = holdRow("item", itemId);
+      await hold.held;
+
+      const closeFirst = first === "the close";
+      const a = closeFirst ? closeAs(organizerId, id) : giveBack(id);
+      await hold.queued(1);
+      const b = closeFirst ? giveBack(id) : closeAs(organizerId, id);
+      await hold.queued(2);
+      hold.release();
+      const [won, lost] = await Promise.all([a, b, hold.done]);
+
+      expect(won).toBe(closeFirst ? "closed" : "returned");
+      expect(lost).toBe("stale");
+      const after = await loanRow(id);
+      expect(after.status).toBe("returned");
+      expect(after.closedById).toBe(closeFirst ? organizerId : null);
+      expect(after.statusReason).toBe(closeFirst ? NOTE : null);
+    },
+  );
 });

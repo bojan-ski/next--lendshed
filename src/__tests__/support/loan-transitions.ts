@@ -21,6 +21,11 @@ export const TRANSITIONS = {
     flash: "loanReturned",
     target: "returned",
   },
+  closeLoanAsOrganizer: {
+    entry: "organizer_close",
+    flash: "loanClosed",
+    target: "returned",
+  },
 } as const satisfies Record<
   string,
   { entry: LoanAction; flash: FlashKey; target: LoanStatus }
@@ -34,7 +39,8 @@ export type TransitionState = {
 };
 
 // The form the loan page posts for this loan in `status`: cancel carries the
-// stage the screen showed, a return is today and "as lent".
+// stage the screen showed, a return is today and "as lent", a close adds its
+// required note.
 export function transitionForm(
   transition: Transition,
   id: string,
@@ -46,10 +52,14 @@ export function transitionForm(
   if (transition === "cancelLoan") {
     fields.stage = status === "requested" ? "request" : "loan";
   }
-  if (transition === "markLoanReturned") {
+  if (
+    transition === "markLoanReturned" ||
+    transition === "closeLoanAsOrganizer"
+  ) {
     fields.returnedOn = today;
     fields.asLent = "yes";
   }
+  if (transition === "closeLoanAsOrganizer") fields.note = "Closed by test";
   const data = new FormData();
   for (const [name, value] of Object.entries({ ...fields, ...overrides })) {
     data.set(name, value);
@@ -79,6 +89,30 @@ export async function expectRefused(
   const state = await run();
   expect(state).toMatchObject(outcome);
   expect(state.flash).toBeUndefined();
+  expect(await loanRow(loanId)).toEqual(before);
+  expect(await ownerLoans(ownerId)).toEqual(scopeBefore);
+  expect(refresh).not.toHaveBeenCalled();
+  expect(setFlash).not.toHaveBeenCalled();
+}
+
+// An organizer-only action called by anyone else: requireOrganizer() throws
+// the not-found page before any read, and nothing is written.
+export async function expectNotFound(
+  run: () => Promise<TransitionState>,
+  loanId: string,
+  ownerId: string,
+): Promise<void> {
+  const before = await loanRow(loanId);
+  const scopeBefore = await ownerLoans(ownerId);
+  const error = await run().then(
+    () => {
+      throw new Error("expected not-found");
+    },
+    (thrown: unknown) => thrown,
+  );
+  expect((error as { digest?: string }).digest).toBe(
+    "NEXT_HTTP_ERROR_FALLBACK;404",
+  );
   expect(await loanRow(loanId)).toEqual(before);
   expect(await ownerLoans(ownerId)).toEqual(scopeBefore);
   expect(refresh).not.toHaveBeenCalled();

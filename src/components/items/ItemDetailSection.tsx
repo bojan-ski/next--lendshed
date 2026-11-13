@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import BookedRanges from "@/components/items/BookedRanges";
+import OrganizerRetireCard from "@/components/items/OrganizerRetireCard";
 import RequestCard from "@/components/items/RequestCard";
 import Avatar from "@/components/ui/Avatar";
 import ButtonLink from "@/components/ui/ButtonLink";
@@ -115,6 +116,9 @@ export default async function ItemDetailSection({
           </div>
         )}
       </div>
+      {item.viewerCanRetireAsOrganizer && (
+        <OrganizerRetireCard itemId={item.id} title={item.title} />
+      )}
     </div>
   );
 }

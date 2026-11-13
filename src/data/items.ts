@@ -5,17 +5,27 @@ import { fromDbDate } from "@/data/db-dates";
 import { isCategoryReferenced, isItemReferencedByLoan } from "@/data/db-errors";
 import {
   blockingLoanWhere,
+  effectiveLoanWhere,
   occupyingLoanWhere,
   openLoanWhere,
 } from "@/data/loan-scopes";
 import { personName, toPhotoDTO } from "@/data/mappers";
+import {
+  lockActiveOrganizerIds,
+  ROLE_TRANSACTION,
+} from "@/data/organizer-locks";
 import type { Prisma } from "@/generated/prisma/client";
 import type { ItemStatus, LoanSystemReason } from "@/generated/prisma/enums";
 import { effectiveStatus } from "@/lib/dates/effective-status";
-import { ITEM_CAP, type ItemDetailsInput } from "@/lib/schemas/items";
+import {
+  ITEM_CAP,
+  type ItemDetailsInput,
+  type RetireItemInput,
+} from "@/lib/schemas/items";
 import type {
   InsertItemOutcome,
   ItemEditDTO,
+  OrganizerRetireOutcome,
   OwnItemRowDTO,
   OwnItemRowsDTO,
 } from "@/types/item";
@@ -380,6 +390,91 @@ export async function retireItemByOwner(
     await declineOpenRequests(tx, itemId, today, "item_retired");
     return { result: "retired" as const, photoKey };
   });
+  if (outcome.result === "retired" && outcome.photoKey) {
+    await deletePendingBlobs([outcome.photoKey]);
+  }
+  return outcome.result;
+}
+
+// The item row FOR UPDATE, whoever owns it: the organizer retire's twin of
+// lockOwnItem, taken after the organizer locks.
+async function lockItemForOrganizer(
+  tx: Prisma.TransactionClient,
+  itemId: string,
+): Promise<(LockedItem & { ownerId: string | null }) | null> {
+  const [row] = await tx.$queryRaw<(LockedItem & { ownerId: string | null })[]>`
+    SELECT "ownerId", status, "photoUrl", "photoKey", "photoBytes"
+    FROM item WHERE id = ${itemId} FOR UPDATE`;
+  return row ?? null;
+}
+
+// Neither party acted, so no seen-at moves and both see the dot. Expired
+// requests, lapsed approvals and ended loans are left as they are.
+async function sweepOrganizerRetiredLoans(
+  tx: Prisma.TransactionClient,
+  itemId: string,
+  today: string,
+  now: Date,
+): Promise<void> {
+  await tx.loan.updateMany({
+    where: { AND: [{ itemId }, effectiveLoanWhere("approved", today)] },
+    data: {
+      status: "cancelled",
+      endedBy: "organizer",
+      systemReason: "item_retired",
+      changedAt: now,
+    },
+  });
+  await tx.loan.updateMany({
+    where: { AND: [{ itemId }, openLoanWhere(today)] },
+    data: {
+      status: "declined",
+      endedBy: "system",
+      systemReason: "item_retired",
+      changedAt: now,
+    },
+  });
+}
+
+// Another member's item (OQ-21), refused only while it is out (OQ-34, OQ-35).
+// `retiredById` takes a key-share on the actor's row: organizers lock first.
+export async function retireItemByOrganizer(
+  actorId: string,
+  input: RetireItemInput,
+  today: string,
+): Promise<OrganizerRetireOutcome> {
+  const outcome = await db.$transaction(async (tx) => {
+    const organizers = await lockActiveOrganizerIds(tx);
+    if (!organizers.includes(actorId)) return { result: "stale" as const };
+    const item = await lockItemForOrganizer(tx, input.id);
+    if (
+      !item ||
+      item.ownerId === null ||
+      item.ownerId === actorId ||
+      !isEditable(item)
+    ) {
+      return { result: "stale" as const };
+    }
+    const out = await tx.loan.count({
+      where: { AND: [{ itemId: input.id }, occupyingLoanWhere()] },
+      take: 1,
+    });
+    if (out > 0) return { result: "stillOut" as const };
+    const now = new Date();
+    await sweepOrganizerRetiredLoans(tx, input.id, today, now);
+    const photoKey = await queueItemPhoto(tx, item);
+    await tx.item.update({
+      where: { id: input.id },
+      data: {
+        status: "retired",
+        retiredAt: now,
+        retiredNote: input.note,
+        retiredById: actorId,
+        ...NO_PHOTO,
+      },
+    });
+    return { result: "retired" as const, photoKey };
+  }, ROLE_TRANSACTION);
   if (outcome.result === "retired" && outcome.photoKey) {
     await deletePendingBlobs([outcome.photoKey]);
   }

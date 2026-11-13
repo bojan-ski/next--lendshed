@@ -1,5 +1,8 @@
 import { refresh } from "next/cache";
-import { inventoryRows } from "@/__tests__/support/action-inventory";
+import {
+  inventoryRows,
+  leadingRole,
+} from "@/__tests__/support/action-inventory";
 import {
   createLoanFixture,
   createLoanParties,
@@ -9,6 +12,7 @@ import {
   loanRow,
 } from "@/__tests__/support/loan-fixtures";
 import {
+  expectNotFound as expectNotFoundRun,
   expectRefused as expectRefusedRun,
   runAs,
   type Transition,
@@ -74,8 +78,21 @@ function accepts({
       );
     case "markLoanReturned":
       return actor === "owner" && (status === "out" || status === "overdue");
+    // A non-party organizer only (OQ-19, OQ-22).
+    case "closeLoanAsOrganizer":
+      return (
+        actor === "organizer" && (status === "out" || status === "overdue")
+      );
   }
 }
+
+// The inventory's Auth column: an organizer-only action is not-found to every
+// other role, before it reads anything.
+const ORGANIZER_ONLY = new Set(
+  inventoryRows()
+    .filter(({ auth }) => leadingRole(auth) === "organizer")
+    .map(({ name }) => name),
+);
 
 const scope = createTestScope();
 let parties: LoanParties;
@@ -121,16 +138,22 @@ const expectRefused = (
   data: FormData,
   outcome?: object,
 ) =>
-  expectRefusedRun(
-    () => act(transition, actor, data),
-    loanId,
-    parties.owner.id,
-    outcome,
-  );
+  ORGANIZER_ONLY.has(transition) && parties[actor].role !== "organizer"
+    ? expectNotFoundRun(
+        () => act(transition, actor, data),
+        loanId,
+        parties.owner.id,
+      )
+    : expectRefusedRun(
+        () => act(transition, actor, data),
+        loanId,
+        parties.owner.id,
+        outcome,
+      );
 
 async function expectAccepted(
   transition: Transition,
-  actor: "owner" | "borrower",
+  actor: "owner" | "borrower" | "organizer",
   loanId: string,
   data: FormData,
 ) {
@@ -140,12 +163,20 @@ async function expectAccepted(
   expect(state).toEqual({ flash });
   expect(after.status).toBe(target);
   expect(after.changedAt.getTime()).toBeGreaterThan(FIXTURE_INSTANT.getTime());
-  const [own, other] =
-    actor === "owner"
-      ? [after.ownerSeenAt, after.borrowerSeenAt]
-      : [after.borrowerSeenAt, after.ownerSeenAt];
-  expect(own).toEqual(after.changedAt);
-  expect(other).toEqual(FIXTURE_INSTANT);
+  if (actor === "organizer") {
+    // Neither party acted, so both see the change dot (spec 19).
+    expect(after.ownerSeenAt).toEqual(FIXTURE_INSTANT);
+    expect(after.borrowerSeenAt).toEqual(FIXTURE_INSTANT);
+    expect(after.closedById).toBe(parties.organizer.id);
+    expect(after.endedBy).toBeNull();
+  } else {
+    const [own, other] =
+      actor === "owner"
+        ? [after.ownerSeenAt, after.borrowerSeenAt]
+        : [after.borrowerSeenAt, after.ownerSeenAt];
+    expect(own).toEqual(after.changedAt);
+    expect(other).toEqual(FIXTURE_INSTANT);
+  }
   expect(refresh).toHaveBeenCalledTimes(1);
   expect(setFlash).not.toHaveBeenCalled();
 }
@@ -223,7 +254,7 @@ describe.each(Object.keys(TRANSITIONS) as Transition[])("%s", (transition) => {
       const { id } = await fixture(status);
       await expectAccepted(
         transition,
-        actor as "owner" | "borrower",
+        actor as "owner" | "borrower" | "organizer",
         id,
         form(transition, id, status),
       );
@@ -274,19 +305,21 @@ describe("date edges", () => {
     );
   });
 
-  test.each([
-    ["the day before the start", -2],
-    ["tomorrow", 1],
+  test.each<[string, number, Transition, Actor]>([
+    ["the day before the start", -2, "markLoanReturned", "owner"],
+    ["tomorrow", 1, "markLoanReturned", "owner"],
+    ["the day before the start", -2, "closeLoanAsOrganizer", "organizer"],
+    ["tomorrow", 1, "closeLoanAsOrganizer", "organizer"],
   ])(
-    "returnedOn %s → fieldErrors.returnedOn, nothing written",
-    async (_, offset) => {
+    "returnedOn %s → fieldErrors.returnedOn, nothing written (%s)",
+    async (_, offset, transition, actor) => {
       // An out loan starting yesterday: start − 1 is two days ago.
       const { id } = await fixture("out");
       await expectRefused(
-        "markLoanReturned",
-        "owner",
+        transition,
+        actor,
         id,
-        form("markLoanReturned", id, "out", {
+        form(transition, id, "out", {
           returnedOn: addDays(today, offset),
         }),
         { fieldErrors: { returnedOn: expect.any(Array) } },
@@ -345,6 +378,43 @@ describe("an organizer who owns the item", () => {
       ),
     ).toEqual({ flash: "loanApproved" });
     expect((await loanRow(id)).status).toBe("approved");
+  });
+
+  // Never yourself (OQ-19): a party uses Mark as back, never the close.
+  test("is offered mark_returned, not the close, and the close is stale", async () => {
+    const asOwner = { ...parties, owner: parties.organizer };
+    const twin = await createLoanFixture(scope, asOwner, "out", today);
+    const actions = (await getLoanForViewer(parties.organizer, twin.id, today))
+      ?.actions;
+    expect(actions).toEqual(["mark_returned"]);
+
+    const { id } = await createLoanFixture(scope, asOwner, "out", today);
+    await expectRefusedRun(
+      () =>
+        runAs(
+          parties.organizer,
+          "closeLoanAsOrganizer",
+          form("closeLoanAsOrganizer", id, "out"),
+        ),
+      id,
+      parties.organizer.id,
+    );
+  });
+});
+
+describe("an organizer who borrowed the item", () => {
+  test("is offered nothing on the out loan, and the close is stale", async () => {
+    const options = { borrowerId: parties.organizer.id };
+    const twin = await fixture("out", options);
+    expect(await offered("organizer", twin.id)).toEqual([]);
+
+    const { id } = await fixture("out", options);
+    await expectRefused(
+      "closeLoanAsOrganizer",
+      "organizer",
+      id,
+      form("closeLoanAsOrganizer", id, "out"),
+    );
   });
 });
 

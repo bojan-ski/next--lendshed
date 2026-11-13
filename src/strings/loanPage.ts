@@ -74,6 +74,7 @@ export const loanPage = {
   ended: {
     returned: "Back on {date}.",
     notAsLent: "It didn't come back as it was lent.",
+    asLentUnknown: "Whether it came back as lent wasn't recorded.",
     closedBy: "{name} closed it.",
     declined: "Declined: {actor} said no.",
     cancelled: "Cancelled: {actor} called it off.",

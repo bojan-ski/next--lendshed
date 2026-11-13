@@ -9,6 +9,10 @@ import {
   openLoanWhere,
 } from "@/data/loan-scopes";
 import { personName, toPhotoDTO } from "@/data/mappers";
+import {
+  lockActiveOrganizerIds,
+  ROLE_TRANSACTION,
+} from "@/data/organizer-locks";
 import type { Prisma } from "@/generated/prisma/client";
 import type {
   ItemStatus,
@@ -18,7 +22,11 @@ import type {
 import { addDays, loanLengthDays } from "@/lib/dates/dates";
 import { effectiveStatus } from "@/lib/dates/effective-status";
 import { REQUEST_LIMITS } from "@/lib/loans/limits";
-import type { MarkReturnedInput, RequestLoanInput } from "@/lib/schemas/loans";
+import type {
+  MarkReturnedInput,
+  OrganizerCloseInput,
+  RequestLoanInput,
+} from "@/lib/schemas/loans";
 import type {
   ApproveOutcome,
   CancelOutcome,
@@ -31,6 +39,7 @@ import type {
   LoanDetailDTO,
   LoanViewerRole,
   MarkBackOutcome,
+  OrganizerCloseOutcome,
 } from "@/types/loan";
 import type { ViewerDTO } from "@/types/viewer";
 
@@ -248,14 +257,16 @@ function toLoanDetailDTO(
 }
 
 // Exactly what the transitions below would accept from this viewer; a
-// non-party organizer gets nothing here.
+// non-party organizer can only close a loan that is out.
 function actionsFor(
   row: DetailRow,
   role: LoanViewerRole,
   status: EffectiveLoanStatus,
   handOver: HandOverCheck,
 ): LoanAction[] {
-  if (role === "organizer") return [];
+  if (role === "organizer") {
+    return status === "out" || status === "overdue" ? ["organizer_close"] : [];
+  }
   if (status === "approved") {
     return handOver === "ready" ? ["hand_over", "cancel"] : ["cancel"];
   }
@@ -590,4 +601,41 @@ export async function markLoanBack(
     });
     return "returned";
   });
+}
+
+// An organizer who isn't a party ends a loan the owner can't mark back
+// (OQ-22). `closedById` takes a key-share on the actor's row, so the organizer
+// locks come first (rules/data.md). Neither party acted: no seen-at moves.
+export async function closeLoanByOrganizer(
+  actorId: string,
+  input: OrganizerCloseInput,
+  today: string,
+): Promise<OrganizerCloseOutcome> {
+  return db.$transaction(async (tx) => {
+    const organizers = await lockActiveOrganizerIds(tx);
+    if (!organizers.includes(actorId)) return "stale";
+    const loan = await lockLoanForTransition(tx, input.id);
+    const status = loan && effectiveStatus(loan, today);
+    if (
+      !loan ||
+      partyOf(loan, actorId) !== null ||
+      (status !== "out" && status !== "overdue")
+    ) {
+      return "stale";
+    }
+    if (input.returnedOn < loan.startDate) return "beforeStart";
+    await tx.loan.update({
+      where: { id: loan.id },
+      data: {
+        status: "returned",
+        returnedOn: toDbDate(input.returnedOn),
+        returnedAsLent: input.asLent,
+        statusReason: input.note,
+        closedById: actorId,
+        changedAt: new Date(),
+      },
+      select: { id: true },
+    });
+    return "closed";
+  }, ROLE_TRANSACTION);
 }

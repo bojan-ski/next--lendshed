@@ -14,6 +14,7 @@ import {
 } from "@/__tests__/support/test-db";
 import { db } from "@/db";
 import { auth } from "@/lib/auth/auth";
+import { communityToday } from "@/lib/dates/dates";
 
 vi.mock(
   "next/headers",
@@ -77,6 +78,7 @@ describe("action enforcement — derivation", () => {
       "approveLoan",
       "cancelLoan",
       "changePassword",
+      "closeLoanAsOrganizer",
       "createCategory",
       "createInvitation",
       "createItem",
@@ -95,6 +97,7 @@ describe("action enforcement — derivation", () => {
       "renameCategory",
       "requestLoan",
       "resetPasswordWithGrant",
+      "retireItemAsOrganizer",
       "retireOwnItem",
       "revokeInvitation",
       "signIn",
@@ -250,8 +253,9 @@ describe("wrong role", () => {
     ),
   );
 
-  test("the organizer-only actions in code are the invitation, member and category actions", () => {
+  test("the organizer-only actions in code are the invitation, member, category and intervention actions", () => {
     expect(organizerOnly.map(({ name }) => name).sort()).toEqual([
+      "closeLoanAsOrganizer",
       "createCategory",
       "createInvitation",
       "createResetLink",
@@ -260,13 +264,14 @@ describe("wrong role", () => {
       "promoteMember",
       "reinstateMember",
       "renameCategory",
+      "retireItemAsOrganizer",
       "revokeInvitation",
       "suspendMember",
     ]);
   });
 
   describe.each(organizerOnly)("$name called by a member", ({ file, name }) => {
-    test("gets not-found and writes or changes no invitation, role, grant or category", async () => {
+    test("gets not-found and writes or changes no invitation, role, grant, category, loan or item", async () => {
       const action = await loadAction(file, name);
       const member = await scope.createTestUser({ role: "member" });
       const ip = scope.ip();
@@ -275,6 +280,19 @@ describe("wrong role", () => {
       // An organizer target makes a demote meaningful, an active one the rest.
       const target = await scope.createTestUser({ role: "organizer" });
       const category = await scope.createCategory(`Wrong ${name.slice(0, 8)}`);
+      // An out loan on a listed item is what the close and the retire act on.
+      const { id: itemId } = await scope.createItem({
+        ownerId: target.id,
+        status: "listed",
+      });
+      const today = communityToday();
+      const { id: loanId } = await scope.createLoan({
+        itemId,
+        borrowerId: member.id,
+        status: "out",
+        startDate: today,
+        endDate: today,
+      });
       const before = {
         invitation: await db.invitation.findUniqueOrThrow({
           where: { id: invitationId },
@@ -283,6 +301,8 @@ describe("wrong role", () => {
         category: await db.category.findUniqueOrThrow({
           where: { id: category.id },
         }),
+        item: await db.item.findUniqueOrThrow({ where: { id: itemId } }),
+        loan: await db.loan.findUniqueOrThrow({ where: { id: loanId } }),
       };
       mockNextRequest({ ip, cookies: { [SESSION_COOKIE]: cookie } });
       const form = new FormData();
@@ -292,10 +312,16 @@ describe("wrong role", () => {
           ? target.id
           : file.endsWith("categories.ts")
             ? category.id
-            : invitationId,
+            : file.endsWith("loans.ts")
+              ? loanId
+              : file.endsWith("items.ts")
+                ? itemId
+                : invitationId,
       );
       form.set("note", "from a member");
       form.set("name", scope.categoryName("From member"));
+      form.set("returnedOn", today);
+      form.set("asLent", "yes");
 
       const error = await thrownBy(action({}, form));
 
@@ -325,6 +351,12 @@ describe("wrong role", () => {
           where: { name: scope.categoryName("From member") },
         }),
       ).toBe(0);
+      expect(
+        await db.item.findUniqueOrThrow({ where: { id: itemId } }),
+      ).toEqual(before.item);
+      expect(
+        await db.loan.findUniqueOrThrow({ where: { id: loanId } }),
+      ).toEqual(before.loan);
     });
   });
 });

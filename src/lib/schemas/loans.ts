@@ -70,6 +70,30 @@ export const markReturnedSchema = z.object({
 
 export type MarkReturnedInput = z.infer<typeof markReturnedSchema>;
 
+// An organizer may not know how it came back. The note is required: both
+// people on the loan read it (OQ-22, OQ-29 assumed).
+export const organizerCloseSchema = z.object({
+  id: loanIdSchema.shape.id,
+  returnedOn: markReturnedSchema.shape.returnedOn,
+  asLent: z.enum(["yes", "no", "unknown"], {
+    error: loanActions.asLentRequiredClose,
+  }),
+  note: z
+    .string({ error: loanActions.noteRequired })
+    .transform((text) => text.replace(/\r\n?/g, "\n"))
+    .pipe(
+      z
+        .string()
+        .trim()
+        .min(1, { error: loanActions.noteRequired })
+        .max(LOAN_REASON_MAX, {
+          error: t(loanActions.noteTooLong, { max: LOAN_REASON_MAX }),
+        }),
+    ),
+});
+
+export type OrganizerCloseInput = z.infer<typeof organizerCloseSchema>;
+
 // A missing or unknown tab is absent, never an error; the section picks one.
 export const myLoansQuerySchema = z.object({
   tab: z.enum(["borrowing", "lending"]).optional().catch(undefined),

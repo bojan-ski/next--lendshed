@@ -1,5 +1,7 @@
 import { z } from "zod";
 import type { ItemCondition } from "@/generated/prisma/enums";
+import { t } from "@/lib/text/interpolate";
+import { itemPage } from "@/strings/itemPage";
 import { items } from "@/strings/items";
 
 export const ITEM_TITLE_MIN = 3;
@@ -9,6 +11,8 @@ export const ITEM_PICKUP_NOTES_MAX = 300;
 export const ITEM_MAX_LOAN_DAYS = 30;
 export const ITEM_MAX_LOAN_DAYS_DEFAULT = 7;
 export const ITEM_CAP = 30;
+// OQ-29 (assumed).
+export const RETIRED_NOTE_MAX = 300;
 
 // A literal tuple, so this client-safe module imports no generated runtime.
 export const ITEM_CONDITIONS = [
@@ -55,6 +59,25 @@ export const itemIdSchema = z.object({
 });
 
 export const updateItemSchema = itemDetailsSchema.extend(itemIdSchema.shape);
+
+// An organizer's retire; the owner reads the note (OQ-21, OQ-29 assumed).
+export const retireItemSchema = z.object({
+  id: itemIdSchema.shape.id,
+  note: z
+    .string({ error: itemPage.retireNoteRequired })
+    .transform((text) => text.replace(/\r\n?/g, "\n"))
+    .pipe(
+      z
+        .string()
+        .trim()
+        .min(1, { error: itemPage.retireNoteRequired })
+        .max(RETIRED_NOTE_MAX, {
+          error: t(itemPage.retireNoteTooLong, { max: RETIRED_NOTE_MAX }),
+        }),
+    ),
+});
+
+export type RetireItemInput = z.infer<typeof retireItemSchema>;
 
 export type ItemDetailsInput = z.infer<typeof itemDetailsSchema>;
 export type UpdateItemInput = z.infer<typeof updateItemSchema>;

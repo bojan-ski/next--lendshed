@@ -2,7 +2,7 @@ import { randomBytes } from "node:crypto";
 import { parseSetCookieHeader } from "better-auth/cookies";
 import sharp from "sharp";
 import { db } from "@/db";
-import { lockActiveOrganizerIds } from "@/data/members";
+import { lockActiveOrganizerIds } from "@/data/organizer-locks";
 import { createCredentialUser } from "@/db/credentials";
 import { toDbDate } from "@/data/db-dates";
 import type {

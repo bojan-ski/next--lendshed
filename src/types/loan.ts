@@ -122,11 +122,21 @@ export type MarkReturnedState = {
   values?: Partial<Record<MarkReturnedField, string>>;
 };
 
+export type OrganizerCloseField = "returnedOn" | "asLent" | "note";
+
+export type OrganizerCloseState = {
+  flash?: FlashKey;
+  formError?: "stale" | "unexpected";
+  fieldErrors?: Partial<Record<OrganizerCloseField, string[]>>;
+  values?: Partial<Record<OrganizerCloseField, string>>;
+};
+
 export type ApproveOutcome = "approved" | "stale" | "datesTaken";
 export type DeclineOutcome = "declined" | "stale";
 export type CancelOutcome = "cancelled" | "stale";
 export type HandOverOutcome = "handedOver" | "stale" | "stillOut";
 export type MarkBackOutcome = "returned" | "stale" | "beforeStart";
+export type OrganizerCloseOutcome = "closed" | "stale" | "beforeStart";
 
 export type InsertLoanRequestOutcome =
   | { kind: "created"; id: string }

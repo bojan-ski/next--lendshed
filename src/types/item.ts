@@ -115,6 +115,15 @@ export type DeleteItemState = {
   formError?: "stale" | "hasLoans" | "unexpected";
 };
 
+// Success redirects, so there is no flash in the state.
+export type OrganizerRetireState = {
+  formError?: "stale" | "stillOut" | "unexpected";
+  fieldErrors?: { note?: string[] };
+  values?: { note?: string };
+};
+
+export type OrganizerRetireOutcome = "retired" | "stale" | "stillOut";
+
 export type InsertItemOutcome =
   | { kind: "created"; id: string }
   | { kind: "capReached" }

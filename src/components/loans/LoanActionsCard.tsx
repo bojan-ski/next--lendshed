@@ -2,6 +2,7 @@ import CancelLoanControl from "@/components/loans/CancelLoanControl";
 import HandOverControl from "@/components/loans/HandOverControl";
 import LoanDecisionControls from "@/components/loans/LoanDecisionControls";
 import MarkReturnedForm from "@/components/loans/MarkReturnedForm";
+import OrganizerCloseForm from "@/components/loans/OrganizerCloseForm";
 import Card from "@/components/ui/Card";
 import Notice from "@/components/ui/Notice";
 import { t } from "@/lib/text/interpolate";
@@ -9,6 +10,7 @@ import { loanActions } from "@/strings/loanActions";
 import type { LoanDetailDTO } from "@/types/loan";
 
 function headingFor(loan: LoanDetailDTO): string {
+  if (loan.actions.includes("organizer_close")) return loanActions.headingClose;
   if (loan.actions.includes("mark_returned")) return loanActions.headingReturn;
   if (loan.status === "approved") return loanActions.headingLoan;
   return loanActions.heading;
@@ -65,6 +67,16 @@ export default function LoanActionsCard({
           minDate={loan.startDate}
           maxDate={today}
         />
+      )}
+      {loan.actions.includes("organizer_close") && (
+        <>
+          <p className="text-sm text-muted">{loanActions.closeWhen}</p>
+          <OrganizerCloseForm
+            loanId={loan.id}
+            minDate={loan.startDate}
+            maxDate={today}
+          />
+        </>
       )}
     </Card>
   );
