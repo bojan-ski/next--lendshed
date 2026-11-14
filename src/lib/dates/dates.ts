@@ -181,6 +181,11 @@ export function formatDate(date: string, today: string): string {
   });
 }
 
+export function formatMonth(date: string): string {
+  const { year, month } = parse(date);
+  return t(dates.monthYear, { month: dates.months[month - 1], year });
+}
+
 export function formatDateRange(
   start: string,
   end: string,

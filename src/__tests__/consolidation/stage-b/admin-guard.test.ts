@@ -11,6 +11,7 @@ import { routeParams } from "@/__tests__/support/routeParams";
 import { getAdminCategories } from "@/data/categories";
 import { getOpenInvitations } from "@/data/invitations";
 import { getAdminMemberDetail, getAdminMembers } from "@/data/members";
+import { getUsage } from "@/data/photos";
 import { getViewer } from "@/data/viewer";
 import type { ViewerDTO } from "@/types/viewer";
 
@@ -37,6 +38,10 @@ vi.mock("@/data/members", async (importOriginal) => {
     getAdminMemberDetail: vi.fn(actual.getAdminMemberDetail),
   };
 });
+vi.mock("@/data/photos", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/data/photos")>();
+  return { ...actual, getUsage: vi.fn(actual.getUsage) };
+});
 
 vi.setConfig({ testTimeout: 30_000 });
 
@@ -48,6 +53,7 @@ const ADMIN_FILES = [
   "src/components/categories/**/*.{ts,tsx}",
   "src/components/invitations/**/*.{ts,tsx}",
   "src/components/members/**/*.{ts,tsx}",
+  "src/components/usage/**/*.{ts,tsx}",
 ]
   .flatMap((pattern) => sourceFiles(pattern))
   .filter((file) => !/\.test\.tsx?$/.test(file));
@@ -58,6 +64,7 @@ const ADMIN_READS = {
   getOpenInvitations,
   getAdminMembers,
   getAdminMemberDetail,
+  getUsage,
 };
 
 const isDataModule = (specifier: string) =>
@@ -107,6 +114,7 @@ describe("admin data sections — static", () => {
       "src/components/invitations/InvitationsSection.tsx",
       "src/components/members/MemberDetailSection.tsx",
       "src/components/members/MembersSection.tsx",
+      "src/components/usage/UsageSection.tsx",
     ]);
   });
 
@@ -117,7 +125,7 @@ describe("admin data sections — static", () => {
     },
   );
 
-  test("the four admin reads are imported and called only by those modules", () => {
+  test("the admin reads are imported and called only by those modules", () => {
     const sectionFiles = new Set(sections.map(({ file }) => file));
     const readNames = new Set(Object.keys(ADMIN_READS));
     const outside = sourceFiles("src/**/*.{ts,tsx}")
@@ -181,6 +189,7 @@ const SECTION_PROPS: Record<string, () => object> = {
   "src/components/members/MemberDetailSection.tsx": () => ({
     params: Promise.resolve(routeParams["/admin/members/[id]"]),
   }),
+  "src/components/usage/UsageSection.tsx": () => ({}),
 };
 
 const member: ViewerDTO = {

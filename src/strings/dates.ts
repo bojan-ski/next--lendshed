@@ -18,4 +18,5 @@ export const dates = {
   dateWithYear: "{weekday} {day} {month} {year}",
   rangeStart: "{weekday} {day}",
   range: "{start} – {end}",
+  monthYear: "{month} {year}",
 } as const;

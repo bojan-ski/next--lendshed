@@ -11,24 +11,35 @@ import NewItemSection from "@/components/items/NewItemSection";
 import OwnItemsSection from "@/components/items/OwnItemsSection";
 import MemberOpenLoans from "@/components/members/MemberOpenLoans";
 import MembersSection from "@/components/members/MembersSection";
+import UsageSection from "@/components/usage/UsageSection";
 import { getAccount } from "@/data/account";
 import { getCategories } from "@/data/categories";
 import { getOpenInvitations } from "@/data/invitations";
 import { countActiveOwnItems, getItemForEdit, getOwnItems } from "@/data/items";
 import { getAdminMembers } from "@/data/members";
+import { getUsage } from "@/data/photos";
 import { getViewer } from "@/data/viewer";
-import { communityToday, formatDate } from "@/lib/dates/dates";
+import { communityToday, formatDate, formatMonth } from "@/lib/dates/dates";
+import {
+  LISTED_ITEMS_WARN_AT,
+  UPLOAD_LIMITS,
+  USAGE_WARN_PERCENT,
+  VERCEL_USAGE_URL,
+} from "@/lib/photos/caps";
 import { ITEM_CAP } from "@/lib/schemas/items";
 import { t } from "@/lib/text/interpolate";
+import { formatCount, formatMegabytes } from "@/lib/text/numbers";
 import { loanStatus } from "@/lib/text/status";
 import { account } from "@/strings/account";
 import { invitations } from "@/strings/invitations";
 import { items } from "@/strings/items";
 import { members } from "@/strings/members";
+import { usage } from "@/strings/usage";
 import type { AccountDTO } from "@/types/account";
 import type { InvitationRowDTO } from "@/types/invitation";
 import type { ItemEditDTO, OwnItemRowDTO } from "@/types/item";
 import type { AdminMemberOpenLoan, AdminMemberRowDTO } from "@/types/members";
+import type { UsageDTO } from "@/types/usage";
 import type { ViewerDTO } from "@/types/viewer";
 
 vi.mock("@/data/viewer", () => ({ getViewer: vi.fn() }));
@@ -36,6 +47,7 @@ vi.mock("@/data/account", () => ({ getAccount: vi.fn() }));
 vi.mock("@/data/invitations", () => ({ getOpenInvitations: vi.fn() }));
 vi.mock("@/data/members", () => ({ getAdminMembers: vi.fn() }));
 vi.mock("@/data/categories", () => ({ getCategories: vi.fn() }));
+vi.mock("@/data/photos", () => ({ getUsage: vi.fn() }));
 vi.mock("@/data/items", () => ({
   getOwnItems: vi.fn(),
   countActiveOwnItems: vi.fn(),
@@ -243,6 +255,87 @@ describe("MemberOpenLoans", () => {
   test("a suspended member's open loans add the organizer-close line", async () => {
     const page = await html(MemberOpenLoans({ loans, suspended: true, today }));
     expect(page).toContain(members.awaitsOrganizerClose);
+  });
+});
+
+// Spec 21: guard first, then today, then the counts.
+describe("UsageSection", () => {
+  const meterRow = { used: 0, percent: 0, warn: false };
+  const zeroUsage: UsageDTO = {
+    monthLabel: formatMonth(communityToday()),
+    uploads: { ...meterRow, cap: UPLOAD_LIMITS.monthly },
+    storedBytes: { ...meterRow, cap: UPLOAD_LIMITS.storedBytes },
+    listedItems: { ...meterRow, warnAt: LISTED_ITEMS_WARN_AT },
+  };
+
+  test("a member gets not-found and the counts are never read", async () => {
+    vi.mocked(getViewer).mockResolvedValue(member);
+
+    const error = await thrown(UsageSection());
+
+    expect((error as { digest?: string }).digest).toBe(
+      "NEXT_HTTP_ERROR_FALLBACK;404",
+    );
+    expect(getUsage).not.toHaveBeenCalled();
+  });
+
+  test("zero usage: three rows at zero, no warning, the month and the Vercel link", async () => {
+    vi.mocked(getViewer).mockResolvedValue(organizer);
+    vi.mocked(getUsage).mockResolvedValue(zeroUsage);
+
+    const page = await html(await UsageSection());
+
+    expect(getUsage).toHaveBeenCalledWith(communityToday());
+    expect(page).toContain(zeroUsage.monthLabel);
+    expect(page).toContain(
+      t(usage.usedOf, { used: "0", limit: formatCount(UPLOAD_LIMITS.monthly) }),
+    );
+    expect(page).toContain(
+      t(usage.usedOf, {
+        used: t(usage.megabytes, { amount: "0" }),
+        limit: t(usage.megabytes, {
+          amount: formatMegabytes(UPLOAD_LIMITS.storedBytes),
+        }),
+      }),
+    );
+    expect(page).toContain(
+      t(usage.usedOf, { used: "0", limit: formatCount(LISTED_ITEMS_WARN_AT) }),
+    );
+    expect(page.match(/role="meter"/g)).toHaveLength(3);
+    expect(page).not.toContain(
+      t(usage.capWarning, { percent: USAGE_WARN_PERCENT }),
+    );
+    expect(page).toContain(usage.note);
+    expect(page).toContain(`href="${VERCEL_USAGE_URL}"`);
+    expect(page).not.toContain("target=");
+  });
+
+  test("warnings show their own lines: the cap line twice, the listed line once", async () => {
+    vi.mocked(getViewer).mockResolvedValue(organizer);
+    vi.mocked(getUsage).mockResolvedValue({
+      ...zeroUsage,
+      uploads: { ...zeroUsage.uploads, used: 1200, percent: 80, warn: true },
+      storedBytes: {
+        ...zeroUsage.storedBytes,
+        used: 640_000_000,
+        percent: 80,
+        warn: true,
+      },
+      listedItems: {
+        ...zeroUsage.listedItems,
+        used: 3000,
+        percent: 100,
+        warn: true,
+      },
+    });
+
+    const page = await html(await UsageSection());
+    const capLine = t(usage.capWarning, { percent: USAGE_WARN_PERCENT });
+
+    expect(page.split(capLine)).toHaveLength(3);
+    expect(page).toContain(
+      t(usage.listedWarning, { limit: formatCount(LISTED_ITEMS_WARN_AT) }),
+    );
   });
 });
 

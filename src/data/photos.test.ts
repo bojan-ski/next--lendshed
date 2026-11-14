@@ -3,10 +3,19 @@ import {
   storedFileSize,
 } from "@/__tests__/support/photo-storage";
 import { assertMigrated, createTestScope } from "@/__tests__/support/test-db";
+import { TEST_ZONES, useProcessTimeZone } from "@/__tests__/support/time-zone";
 import { db } from "@/db";
+import {
+  communityMidnight,
+  communityToday,
+  firstOfMonth,
+  formatMonth,
+} from "@/lib/dates/dates";
+import { LISTED_ITEMS_WARN_AT, UPLOAD_LIMITS } from "@/lib/photos/caps";
 import {
   attachItemPhoto,
   getUploadCounts,
+  getUsage,
   isOwnUploadTarget,
   reservePhotoUpload,
 } from "./photos";
@@ -187,6 +196,122 @@ describe("getUploadCounts", () => {
     });
 
     expect(after.storedBytes - before.storedBytes).toBe(9_000_000);
+  });
+});
+
+describe("getUsage", () => {
+  const today = communityToday();
+
+  test("uploads, photoBytes and queued bytes add exactly; empty sums are numbers", async () => {
+    const userId = await owner();
+    const ownerId = await owner();
+    const { id: categoryId } = await scope.createCategory("Usage");
+    const [stored, queued] = [
+      await scope.createStoredPhoto(),
+      await scope.createStoredPhoto(),
+    ];
+
+    const [before, after] = await inOneSnapshot(async () => {
+      const first = await getUsage(today);
+      await db.uploadLog.createMany({
+        data: Array.from({ length: 4 }, () => ({ userId, bytes: 5 })),
+      });
+      await scope.createItem({
+        ownerId,
+        categoryId,
+        photo: { ...stored, photoBytes: 3_000_000 },
+      });
+      await db.pendingBlobDeletion.create({
+        data: { storageKey: queued.photoKey, bytes: 2_000_000 },
+      });
+      return [first, await getUsage(today)];
+    });
+
+    expect(after.uploads.used - before.uploads.used).toBe(4);
+    expect(after.storedBytes.used - before.storedBytes.used).toBe(5_000_000);
+    expect(typeof before.storedBytes.used).toBe("number");
+    expect(Number.isNaN(before.storedBytes.used)).toBe(false);
+  });
+
+  test("listed counts stored listed items of any owner; hidden and retired add 0", async () => {
+    const active = await owner();
+    const suspended = (await scope.createTestUser({ status: "suspended" })).id;
+    const { id: categoryId } = await scope.createCategory("Listed");
+
+    const [before, after] = await inOneSnapshot(async () => {
+      const first = await getUsage(today);
+      await scope.createItem({ ownerId: active, categoryId, status: "listed" });
+      await scope.createItem({
+        ownerId: suspended,
+        categoryId,
+        status: "listed",
+      });
+      await scope.createItem({ ownerId: active, categoryId, status: "hidden" });
+      await scope.createItem({
+        ownerId: active,
+        categoryId,
+        status: "retired",
+      });
+      return [first, await getUsage(today)];
+    });
+
+    expect(after.listedItems.used - before.listedItems.used).toBe(2);
+  });
+
+  test("matches getUploadCounts' monthCount and storedBytes in one snapshot", async () => {
+    const userId = await owner();
+    const monthStart = communityMidnight(firstOfMonth(today));
+
+    const [usage, counts] = await inOneSnapshot(async () => [
+      await getUsage(today),
+      await getUploadCounts(userId, { monthStart, dayStart: monthStart }),
+    ]);
+
+    expect(usage.uploads.used).toBe(counts.monthCount);
+    expect(usage.storedBytes.used).toBe(counts.storedBytes);
+  });
+
+  test("the DTO carries only the contract's fields and the caps' numbers", async () => {
+    const usage = await inOneSnapshot(() => getUsage(today));
+
+    expect(Object.keys(usage).sort()).toEqual(
+      ["listedItems", "monthLabel", "storedBytes", "uploads"].sort(),
+    );
+    expect(Object.keys(usage.uploads).sort()).toEqual(
+      ["cap", "percent", "used", "warn"].sort(),
+    );
+    expect(usage.uploads.cap).toBe(UPLOAD_LIMITS.monthly);
+    expect(usage.storedBytes.cap).toBe(UPLOAD_LIMITS.storedBytes);
+    expect(Object.keys(usage.listedItems).sort()).toEqual(
+      ["percent", "used", "warn", "warnAt"].sort(),
+    );
+    expect(usage.listedItems.warnAt).toBe(LISTED_ITEMS_WARN_AT);
+  });
+
+  // A far-future month holds only this test's rows; the boundary is the
+  // community midnight whatever zone the process runs in.
+  describe.each(TEST_ZONES)("month window in process zone %s", (zone) => {
+    useProcessTimeZone(zone);
+
+    test("the first-of-month community midnight is in; 1 ms before is out", async () => {
+      const userId = await owner();
+      const futureToday = "2101-03-15";
+      const start = communityMidnight(firstOfMonth(futureToday));
+
+      const [before, after] = await inOneSnapshot(async () => {
+        const first = await getUsage(futureToday);
+        await db.uploadLog.createMany({
+          data: [
+            { userId, bytes: 1, createdAt: start },
+            { userId, bytes: 1, createdAt: new Date(start.getTime() - 1) },
+          ],
+        });
+        return [first, await getUsage(futureToday)];
+      });
+
+      expect(after.uploads.used - before.uploads.used).toBe(1);
+      expect(after.monthLabel).toBe(formatMonth(futureToday));
+    });
   });
 });
 

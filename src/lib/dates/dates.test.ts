@@ -9,6 +9,7 @@ import {
   firstOfNextMonth,
   formatDate,
   formatDateRange,
+  formatMonth,
   isIsoDate,
   loanLengthDays,
 } from "./dates";
@@ -188,6 +189,23 @@ describe.each(TEST_ZONES)("dates with process TZ=%s", (zone) => {
           `${weekdays[(instant.getUTCDay() + 6) % 7]} ${instant.getUTCDate()} ${months[instant.getUTCMonth()]}`,
         );
       }
+    });
+  });
+
+  describe("formatMonth", () => {
+    test.each([
+      ["2026-11-14", "Nov 2026"],
+      ["2027-01-01", "Jan 2027"],
+      ["2026-12-31", "Dec 2026"],
+    ])("formatMonth(%s) is %j", (date, expected) => {
+      expect(formatMonth(date)).toBe(expected);
+    });
+
+    test("names every month from the dates strings block, always with the year", () => {
+      strings.dates.months.forEach((month, index) => {
+        const date = `2030-${String(index + 1).padStart(2, "0")}-15`;
+        expect(formatMonth(date)).toBe(`${month} 2030`);
+      });
     });
   });
 

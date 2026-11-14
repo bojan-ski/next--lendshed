@@ -2,6 +2,7 @@ import type { IconName } from "@/components/ui/icons";
 import { categories } from "@/strings/categories";
 import { invitations } from "@/strings/invitations";
 import { members } from "@/strings/members";
+import { usage } from "@/strings/usage";
 
 // The organizer areas that exist; the landing and the left menu both list these.
 export const ADMIN_AREAS: readonly {
@@ -30,5 +31,11 @@ export const ADMIN_AREAS: readonly {
     description: categories.description,
     icon: "tag",
     activePrefixes: ["/admin/categories"],
+  },
+  {
+    href: "/admin/usage",
+    label: usage.title,
+    description: usage.description,
+    icon: "gauge",
   },
 ];

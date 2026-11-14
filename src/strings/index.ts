@@ -32,6 +32,7 @@ import { requestForm } from "./requestForm";
 import { resetPassword } from "./resetPassword";
 import { status } from "./status";
 import { toast } from "./toast";
+import { usage } from "./usage";
 
 // Client components import block files directly, never this object.
 export const strings = {
@@ -69,6 +70,7 @@ export const strings = {
   loanPage,
   loanActions,
   myLoans,
+  usage,
 } as const;
 
 export type FlashKey = keyof typeof strings.flash;

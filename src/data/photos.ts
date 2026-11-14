@@ -2,7 +2,10 @@ import "server-only";
 import { db } from "@/db";
 import { deletePendingBlobs, queueBlobDeletion } from "@/data/blob-deletions";
 import { isEditable, lockOwnItem } from "@/data/items";
+import { toUsageDTO } from "@/data/mappers";
+import { communityMidnight, firstOfMonth } from "@/lib/dates/dates";
 import type { StoredPhoto, UploadCounts } from "@/types/photo";
+import type { UsageDTO } from "@/types/usage";
 
 // The action's pre-check; `attachItemPhoto` re-checks under the item lock.
 export async function isOwnUploadTarget(
@@ -15,24 +18,43 @@ export async function isOwnUploadTarget(
   return count > 0;
 }
 
-// Uncached. Stored bytes count reserved and queued files until they are gone.
+// The upload guard and the usage panel share these two, so they never disagree.
+function countUploadsSince(since: Date): Promise<number> {
+  return db.uploadLog.count({ where: { createdAt: { gte: since } } });
+}
+
+// Reserved and queued files count until they are gone.
+async function sumStoredBytes(): Promise<number> {
+  const [items, pending] = await Promise.all([
+    db.item.aggregate({ _sum: { photoBytes: true } }),
+    db.pendingBlobDeletion.aggregate({ _sum: { bytes: true } }),
+  ]);
+  return (items._sum.photoBytes ?? 0) + (pending._sum.bytes ?? 0);
+}
+
+// Uncached.
 export async function getUploadCounts(
   userId: string,
   since: { monthStart: Date; dayStart: Date },
 ): Promise<UploadCounts> {
-  const [monthCount, dayCount, items, pending] = await Promise.all([
-    db.uploadLog.count({ where: { createdAt: { gte: since.monthStart } } }),
+  const [monthCount, dayCount, storedBytes] = await Promise.all([
+    countUploadsSince(since.monthStart),
     db.uploadLog.count({
       where: { userId, createdAt: { gte: since.dayStart } },
     }),
-    db.item.aggregate({ _sum: { photoBytes: true } }),
-    db.pendingBlobDeletion.aggregate({ _sum: { bytes: true } }),
+    sumStoredBytes(),
   ]);
-  return {
-    monthCount,
-    dayCount,
-    storedBytes: (items._sum.photoBytes ?? 0) + (pending._sum.bytes ?? 0),
-  };
+  return { monthCount, dayCount, storedBytes };
+}
+
+// Uncached; the month window is the upload action's. Listed counts every owner.
+export async function getUsage(today: string): Promise<UsageDTO> {
+  const [monthCount, storedBytes, listedCount] = await Promise.all([
+    countUploadsSince(communityMidnight(firstOfMonth(today))),
+    sumStoredBytes(),
+    db.item.count({ where: { status: "listed" } }),
+  ]);
+  return toUsageDTO({ monthCount, storedBytes, listedCount }, today);
 }
 
 // Before storing: the log row counts the upload, and the reservation means a

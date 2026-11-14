@@ -7,10 +7,18 @@ export const UPLOAD_LIMITS = {
   storedBytes: 800_000_000,
 } as const;
 
+// The image-transformation budget (OQ-13): warns at the number itself.
+export const LISTED_ITEMS_WARN_AT = 3000;
+export const USAGE_WARN_PERCENT = 80;
+// Re-checked on the live account at the release checklist (OQ-08).
+export const VERCEL_USAGE_URL = "https://vercel.com/dashboard";
+
 export type UploadCapRefusal = "storageFull" | "monthlyCap" | "dailyCap";
 
 // Storage first: it has no reopen date, so it outranks the other two.
-export function uploadCapRefusal(counts: UploadCounts): UploadCapRefusal | null {
+export function uploadCapRefusal(
+  counts: UploadCounts,
+): UploadCapRefusal | null {
   if (counts.storedBytes >= UPLOAD_LIMITS.storedBytes) return "storageFull";
   if (counts.monthCount >= UPLOAD_LIMITS.monthly) return "monthlyCap";
   if (counts.dayCount >= UPLOAD_LIMITS.dailyPerMember) return "dailyCap";
