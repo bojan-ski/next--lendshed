@@ -255,10 +255,13 @@ describe("toAdminMemberDetailDTO", () => {
       role: "member" as const,
       status: "suspended" as const,
     };
-    const open = (status: "approved" | "out" | "overdue") => ({
-      id: `loan-${status}`,
+    const open = (
+      status: "approved" | "out" | "overdue",
+      side: "lent" | "borrowed" = "lent",
+    ) => ({
+      id: `loan-${status}-${side}`,
       itemTitle: "Ladder",
-      side: "lent" as const,
+      side,
       otherPartyName: people.formerMember,
       status,
       endDate: "2026-11-20",
@@ -273,6 +276,14 @@ describe("toAdminMemberDetailDTO", () => {
     expect(canDelete(suspended, "u2", [open("approved")])).toBe(true);
     expect(canDelete(suspended, "u2", [open("out")])).toBe(false);
     expect(canDelete(suspended, "u2", [open("overdue")])).toBe(false);
+    // Holding someone else's item refuses the deletion too (holdingItem).
+    expect(canDelete(suspended, "u2", [open("approved", "borrowed")])).toBe(
+      true,
+    );
+    expect(canDelete(suspended, "u2", [open("out", "borrowed")])).toBe(false);
+    expect(canDelete(suspended, "u2", [open("overdue", "borrowed")])).toBe(
+      false,
+    );
     expect(canDelete(suspended, "u1", [])).toBe(false);
     expect(canDelete({ ...row, role: "member" }, "u2", [])).toBe(false);
   });
@@ -885,6 +896,55 @@ describe("suspension under concurrency (held rows, either order, no 40P01)", () 
         expect(loan).toMatchObject({
           status: "cancelled",
           systemReason: "borrower_suspended",
+        });
+      }
+    },
+  );
+
+  // An owned item with no loan rows is locked too: unheld, the suspension
+  // never queues on it and a request lands after the sweep.
+  test.each(["request first", "suspend first"] as const)(
+    "suspend vs another member's request on a never-lent item, %s: no open request remains",
+    async (order) => {
+      const actor = await scope.createTestUser({ role: "organizer" });
+      const member = await scope.createTestUser();
+      const requester = await scope.createTestUser({
+        contactDetails: "07700 900123",
+      });
+      const { id: itemId } = await scope.createItem({
+        ownerId: member.id,
+        status: "listed",
+      });
+      const request = () =>
+        insertLoanRequest(
+          requester.id,
+          {
+            itemId,
+            startDate: addDays(TODAY, 2),
+            endDate: addDays(TODAY, 3),
+            message: null,
+          },
+          TODAY,
+        );
+      const suspendIt = () => suspend(actor.id, member.id);
+
+      const held = holdRow("item", itemId);
+      if (order === "request first") {
+        const [created, suspended] = await inOrder(held, request, suspendIt);
+        expect(created.kind).toBe("created");
+        expect(suspended).toBe("suspended");
+      } else {
+        expect(await inOrder(held, suspendIt, request)).toEqual([
+          "suspended",
+          { kind: "stale" },
+        ]);
+      }
+      const loans = await db.loan.findMany({ where: { itemId } });
+      expect(loans).toHaveLength(order === "request first" ? 1 : 0);
+      for (const loan of loans) {
+        expect(loan).toMatchObject({
+          status: "declined",
+          systemReason: "owner_suspended",
         });
       }
     },
@@ -1555,6 +1615,57 @@ describe("deletion under concurrency (held rows, either order, no 40P01)", () =>
           borrowerId: null,
         });
       }
+    },
+  );
+
+  // A never-lent item is locked with the rest: unheld, a request lands between
+  // the sweep and the delete, and the delete hits the loan's foreign key.
+  test.each(["request first", "delete first"] as const)(
+    "self-delete vs another member's request on a never-lent item, %s: deleted, no open request",
+    async (order) => {
+      const member = await scope.createTestUser();
+      const requester = await scope.createTestUser({
+        contactDetails: "07700 900123",
+      });
+      const { id: itemId } = await scope.createItem({
+        ownerId: member.id,
+        status: "listed",
+      });
+      const request = () =>
+        insertLoanRequest(
+          requester.id,
+          {
+            itemId,
+            startDate: addDays(TODAY, 2),
+            endDate: addDays(TODAY, 3),
+            message: null,
+          },
+          TODAY,
+        );
+      const deleteIt = () => deleteOwnUser(member.id, TODAY);
+
+      const held = holdRow("item", itemId);
+      if (order === "request first") {
+        const [created, deleted] = await inOrder(held, request, deleteIt);
+        expect(created.kind).toBe("created");
+        expect(deleted).toBe("deleted");
+        const [loan] = await db.loan.findMany({ where: { itemId } });
+        expect(loan).toMatchObject({
+          status: "declined",
+          systemReason: "account_deleted",
+        });
+        expect(await itemRow(itemId)).toMatchObject({
+          status: "retired",
+          ownerId: null,
+        });
+      } else {
+        expect(await inOrder(held, deleteIt, request)).toEqual([
+          "deleted",
+          { kind: "stale" },
+        ]);
+        expect(await db.item.findUnique({ where: { id: itemId } })).toBeNull();
+      }
+      expect(await userGone(member.id)).toBe(true);
     },
   );
 

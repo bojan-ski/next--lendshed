@@ -200,4 +200,22 @@ describe("MemberStatusControl — reinstate", () => {
     expect(screen.queryByRole("button")).toBeNull();
     expect(getActiveToast()).toBeNull();
   });
+
+  test("an unexpected failure keeps Reinstate for a retry, no toast", async () => {
+    vi.mocked(reinstateMember).mockResolvedValue({ formError: "unexpected" });
+    render(<AccessCard start="reinstate" />);
+
+    await userEvent.click(
+      screen.getByRole("button", { name: members.reinstate }),
+    );
+
+    const notice = await screen.findByText(errors.actionFailed);
+    await vi.waitFor(() =>
+      expect(notice.closest("[tabindex='-1']")).toHaveFocus(),
+    );
+    expect(
+      screen.getByRole("button", { name: members.reinstate }),
+    ).toBeVisible();
+    expect(getActiveToast()).toBeNull();
+  });
 });

@@ -58,13 +58,17 @@ describe("/api/cron/daily", () => {
     ["a wrong value", "Bearer wrong", SECRET],
     ["one character short", `Bearer ${SECRET.slice(0, -1)}`, SECRET],
   ])(
-    "refuses %s: 401, empty body, the job never runs",
+    "refuses %s: 401, empty body, the job never runs, nothing logged",
     async (_case, header, secret) => {
+      const logs = (["info", "error", "warn", "log"] as const).map((level) =>
+        vi.spyOn(console, level).mockImplementation(() => {}),
+      );
       cronEnv.CRON_SECRET = secret;
       const response = await call(header);
       expect(response.status).toBe(401);
       expect(await response.text()).toBe("");
       expect(runDailyJob).not.toHaveBeenCalled();
+      for (const log of logs) expect(log).not.toHaveBeenCalled();
     },
   );
 

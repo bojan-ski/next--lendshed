@@ -1,7 +1,7 @@
 import { assertMigrated, createTestScope } from "@/__tests__/support/test-db";
 import { db } from "@/db";
 import type { ItemStatus, LoanStatus } from "@/generated/prisma/enums";
-import { communityToday } from "@/lib/dates/dates";
+import { addDays, communityToday } from "@/lib/dates/dates";
 import {
   getAccount,
   updateOwnContactDetails,
@@ -61,6 +61,102 @@ describe("getAccount", () => {
 
   test("a missing user throws (the page's error surface)", async () => {
     await expect(getAccount("no-such-user", today)).rejects.toThrow();
+  });
+});
+
+describe("getAccount deletion hint (the deletion's refusal order)", () => {
+  type Side = "owned" | "borrowed";
+  type Kind = "approved" | "out" | "overdue";
+  const DATES: Record<Kind, [LoanStatus, string, string]> = {
+    approved: ["approved", addDays(today, 1), addDays(today, 2)],
+    out: ["out", addDays(today, -1), addDays(today, 2)],
+    overdue: ["out", addDays(today, -4), addDays(today, -2)],
+  };
+
+  async function withLoans(loans: [Side, Kind][]) {
+    const user = await scope.createTestUser();
+    const other = await scope.createTestUser();
+    for (const [side, kind] of loans) {
+      const [status, startDate, endDate] = DATES[kind];
+      const owner = side === "owned" ? user : other;
+      const { id: itemId } = await scope.createItem({ ownerId: owner.id });
+      await scope.createLoan({
+        itemId,
+        borrowerId: side === "owned" ? other.id : user.id,
+        status,
+        startDate,
+        endDate,
+      });
+    }
+    return (await getAccount(user.id, today)).deletion;
+  }
+
+  test.each([
+    [[["owned", "out"]], "item_out"],
+    [[["owned", "overdue"]], "item_out"],
+    [[["borrowed", "out"]], "holding_item"],
+    [[["borrowed", "overdue"]], "holding_item"],
+    [
+      [
+        ["borrowed", "out"],
+        ["owned", "out"],
+      ],
+      "item_out",
+    ],
+  ] as [[Side, Kind][], "item_out" | "holding_item"][])(
+    "%j → %s",
+    async (loans, reason) => {
+      expect(await withLoans(loans)).toEqual({ allowed: false, reason });
+    },
+  );
+
+  test("approved loans on either side don't block", async () => {
+    expect(
+      await withLoans([
+        ["owned", "approved"],
+        ["borrowed", "approved"],
+      ]),
+    ).toEqual({ allowed: true, reason: null });
+  });
+
+  // The shared database keeps two active organizers, so "the last one" is the
+  // organizer count stubbed for one read.
+  test("the last active organizer: last_organizer; an item out still comes first", async () => {
+    const organizer = await scope.createTestUser({ role: "organizer" });
+    vi.spyOn(db.user, "count").mockResolvedValueOnce(1);
+    expect((await getAccount(organizer.id, today)).deletion).toEqual({
+      allowed: false,
+      reason: "last_organizer",
+    });
+
+    const { id: itemId } = await scope.createItem({ ownerId: organizer.id });
+    const other = await scope.createTestUser();
+    await scope.createLoan({
+      itemId,
+      borrowerId: other.id,
+      status: "out",
+      startDate: addDays(today, -1),
+      endDate: addDays(today, 2),
+    });
+    vi.spyOn(db.user, "count").mockResolvedValueOnce(1);
+    expect((await getAccount(organizer.id, today)).deletion.reason).toBe(
+      "item_out",
+    );
+  });
+
+  test("a member, or a suspended organizer, is never the last organizer", async () => {
+    const member = await scope.createTestUser();
+    const suspended = await scope.createTestUser({
+      role: "organizer",
+      status: "suspended",
+    });
+    for (const { id } of [member, suspended]) {
+      vi.spyOn(db.user, "count").mockResolvedValueOnce(1);
+      expect((await getAccount(id, today)).deletion).toEqual({
+        allowed: true,
+        reason: null,
+      });
+    }
   });
 });
 
