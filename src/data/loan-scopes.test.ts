@@ -17,6 +17,8 @@ import {
   occupyingLoanWhere,
   openLoanWhere,
   ownerNeedsActionLoanWhere,
+  storedExpiringLoanWhere,
+  storedLapsingLoanWhere,
 } from "./loan-scopes";
 
 vi.setConfig({ testTimeout: 60_000, hookTimeout: 120_000 });
@@ -91,6 +93,55 @@ const idsWhere = (keep: (row: Row) => boolean) =>
     .sort();
 
 const effective = (row: Row, today = TODAY) => effectiveStatus(row, today);
+
+// The daily job's tidy set: stored status still the old one, effective status
+// already the new one. Never out (overdue included), never a final status.
+describe("the stored… fragments agree with effectiveStatus", () => {
+  test.each([
+    [
+      "storedExpiringLoanWhere",
+      storedExpiringLoanWhere,
+      "requested",
+      "expired",
+    ],
+    ["storedLapsingLoanWhere", storedLapsingLoanWhere, "approved", "lapsed"],
+  ] as const)(
+    "%s matches exactly the stored %s rows that are effectively %s",
+    async (_name, fragment, stored, target) => {
+      const expected = idsWhere(
+        (row) => row.status === stored && effective(row) === target,
+      );
+      expect(expected.length).toBeGreaterThan(0);
+      expect(await idsMatching(fragment(TODAY))).toEqual(expected);
+    },
+  );
+
+  test.each([
+    ["storedExpiringLoanWhere", storedExpiringLoanWhere, "expired"],
+    ["storedLapsingLoanWhere", storedLapsingLoanWhere, "lapsed"],
+  ] as const)(
+    "%s is a subset of effectiveLoanWhere(%s) and holds no other stored status",
+    async (_name, fragment, target) => {
+      const matched = await idsMatching(fragment(TODAY));
+      const effectiveIds = await idsMatching(effectiveLoanWhere(target, TODAY));
+      expect(matched.every((id) => effectiveIds.includes(id))).toBe(true);
+      const statuses = new Set(
+        rows.filter((row) => matched.includes(row.id)).map((row) => row.status),
+      );
+      expect(statuses.size).toBe(1);
+      for (const status of [
+        "out",
+        "returned",
+        "declined",
+        "cancelled",
+        "expired",
+        "lapsed",
+      ] as const) {
+        expect(statuses.has(status)).toBe(false);
+      }
+    },
+  );
+});
 
 describe("effectiveLoanWhere agrees with effectiveStatus", () => {
   test("the fixture covers 48 rows", () => {

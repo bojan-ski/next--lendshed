@@ -140,6 +140,41 @@ function writesLoanUserFk(node: ts.Node, functions: Functions): boolean {
   return data !== undefined && mayWriteUserFk(data.initializer, functions);
 }
 
+// The daily job's tidy (spec 22) writes without any lock, by design: a
+// `stored…LoanWhere(today)` fragment (loan-scopes.ts) selects rows whose
+// effective status already is the status written, and only `status` is
+// written. The tidy is monotone and never changes a row's effective status,
+// so a transition holding the item → loan locks refuses the row as stale
+// whichever status is stored. Any other column, or any other `where`, falls
+// back to the lock-first rule.
+const STORED_FRAGMENT = /^stored\w+LoanWhere$/;
+
+function isStatusOnlyTidy(node: ts.Node): boolean {
+  if (!delegateWrite(node, "loan")) return false;
+  const method = (node.expression as ts.PropertyAccessExpression).name.text;
+  const [args] = node.arguments;
+  if (method !== "updateMany" || !args || !ts.isObjectLiteralExpression(args)) {
+    return false;
+  }
+  const property = (name: string) =>
+    args.properties.find(
+      (p): p is ts.PropertyAssignment =>
+        ts.isPropertyAssignment(p) && p.name.getText() === name,
+    );
+  const where = property("where")?.initializer;
+  const data = property("data")?.initializer;
+  return (
+    where !== undefined &&
+    ts.isCallExpression(where) &&
+    STORED_FRAGMENT.test(calleeName(where) ?? "") &&
+    data !== undefined &&
+    ts.isObjectLiteralExpression(data) &&
+    data.properties.length === 1 &&
+    ts.isPropertyAssignment(data.properties[0]) &&
+    data.properties[0].name.getText() === "status"
+  );
+}
+
 // A change of status: update/updateMany. A create (insertLoanRequest) sets
 // the first status of a row nobody else can hold yet.
 function writesLoanStatus(
@@ -253,6 +288,11 @@ function analyse(files: { file: string; source: ts.SourceFile }[]): Guarded {
       continue;
     }
     if (file.endsWith("/loans.ts")) {
+      const loanWrites: ts.Node[] = [];
+      walk(fn, (node) => {
+        if (delegateWrite(node, "loan")) loanWrites.push(node);
+      });
+      if (loanWrites.every(isStatusOnlyTidy)) continue;
       const lock = firstCall(fn, "lockLoanForTransition");
       let firstWrite: number | null = null;
       walk(fn, (node) => {
@@ -384,6 +424,15 @@ export async function seenOnly(db) {
 export const arrowWriter = async (tx) => {
   await tx.loan.updateMany({ where: {}, data: { ...statusOf("x") } });
 };
+export async function tidy(today) {
+  await db.loan.updateMany({ where: storedExpiringLoanWhere(today), data: { status: "expired" } });
+}
+export async function tidyExtraField(today) {
+  await db.loan.updateMany({ where: storedLapsingLoanWhere(today), data: { status: "lapsed", changedAt: now } });
+}
+export async function tidyOtherWhere(today) {
+  await db.loan.updateMany({ where: openLoanWhere(today), data: { status: "expired" } });
+}
 `;
   const source = ts.createSourceFile(
     "src/data/loans.ts",
@@ -401,6 +450,9 @@ export const arrowWriter = async (tx) => {
       "src/data/loans.ts#fkUnguarded",
       "src/data/loans.ts#guarded",
       "src/data/loans.ts#lockedUser",
+      "src/data/loans.ts#tidy",
+      "src/data/loans.ts#tidyExtraField",
+      "src/data/loans.ts#tidyOtherWhere",
       "src/data/loans.ts#writesFirst",
     ]);
   });
@@ -408,6 +460,8 @@ export const arrowWriter = async (tx) => {
   test("flags the write before the lock, the user lock and the loan-first SQL", () => {
     expect(report.unlockedFirst).toEqual([
       "src/data/loans.ts#<no function declaration>",
+      "src/data/loans.ts#tidyExtraField",
+      "src/data/loans.ts#tidyOtherWhere",
       "src/data/loans.ts#writesFirst",
     ]);
     expect(report.userLocks).toEqual(["fkLateLock", "lockedUser"]);
@@ -427,7 +481,7 @@ describe("loan-lock-order — src/data/", () => {
     .map((file) => ({ file, source: parseFile(file) }));
   const report = analyse(files);
 
-  test("the loan-status writers: the six transitions, the two item sweeps and the member sweep", () => {
+  test("the loan-status writers: the six transitions, the two item sweeps, the member sweep and the daily tidy", () => {
     expect(report.writers).toEqual(
       [
         "src/data/items.ts#declineOpenRequests",
@@ -438,6 +492,8 @@ describe("loan-lock-order — src/data/", () => {
         "src/data/loans.ts#declineLoanRequest",
         "src/data/loans.ts#handOverLoan",
         "src/data/loans.ts#markLoanBack",
+        "src/data/loans.ts#storeExpiredLoans",
+        "src/data/loans.ts#storeLapsedLoans",
         "src/data/members.ts#sweepMemberLoans",
       ].sort(),
     );

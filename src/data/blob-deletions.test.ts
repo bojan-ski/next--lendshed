@@ -2,14 +2,26 @@ import {
   storageControl,
   storedFileSize,
 } from "@/__tests__/support/photo-storage";
+import { inOneSnapshot } from "@/__tests__/support/snapshot";
 import { assertMigrated, createTestScope } from "@/__tests__/support/test-db";
 import { db } from "@/db";
-import { deletePendingBlobs, queueBlobDeletion } from "./blob-deletions";
+import {
+  BLOB_RETRY_MIN_AGE_MS,
+  deletePendingBlobs,
+  queueBlobDeletion,
+  retryPendingBlobDeletions,
+} from "./blob-deletions";
 
 vi.mock(
   "@/lib/storage/storage",
   async () =>
     (await import("@/__tests__/support/photo-storage")).photoStorageModule,
+);
+
+vi.mock("@/db", async (importOriginal) =>
+  (await import("@/__tests__/support/snapshot")).snapshotDbModule(
+    await importOriginal<typeof import("@/db")>(),
+  ),
 );
 
 vi.setConfig({ testTimeout: 60_000, hookTimeout: 60_000 });
@@ -125,5 +137,81 @@ describe("deletePendingBlobs", () => {
     await deletePendingBlobs([photo.photoKey]);
 
     expect(await storedFileSize(photo.photoKey)).toBeNull();
+  });
+});
+
+// The daily job's retry reads the queue app-wide, so it runs in one rolled-back
+// snapshot with a 2001 clock: only this test's rows (dated inside it) are old
+// enough to be picked.
+describe("retryPendingBlobDeletions", () => {
+  const NOW = new Date("2001-03-10T12:00:00.000Z");
+  const MINUTE = 60 * 1000;
+  const agedBy = (ms: number) => new Date(NOW.getTime() - ms);
+
+  async function queuedAt(createdAt: Date) {
+    const photo = await scope.createStoredPhoto();
+    await db.pendingBlobDeletion.create({
+      data: {
+        storageKey: photo.photoKey,
+        bytes: photo.photoBytes,
+        createdAt,
+      },
+    });
+    return photo;
+  }
+
+  test("an hour-old row loses its file and its row; a 59-minute-old one is untouched", async () => {
+    const result = await inOneSnapshot(async () => {
+      const old = await queuedAt(agedBy(BLOB_RETRY_MIN_AGE_MS + MINUTE));
+      const young = await queuedAt(agedBy(59 * MINUTE));
+      const attempted = await retryPendingBlobDeletions(NOW);
+      return {
+        attempted,
+        oldRow: await queueRow(old.photoKey),
+        oldFile: await storedFileSize(old.photoKey),
+        youngRow: await queueRow(young.photoKey),
+        youngFile: await storedFileSize(young.photoKey),
+        youngBytes: young.photoBytes,
+      };
+    });
+    expect(result.attempted).toBe(1);
+    expect(result.oldRow).toBeNull();
+    expect(result.oldFile).toBeNull();
+    expect(result.youngRow).toMatchObject({ attempts: 0, lastError: null });
+    expect(result.youngFile).toBe(result.youngBytes);
+  });
+
+  test("a failing key stays queued with attempts + 1 and a lastError", async () => {
+    const row = await inOneSnapshot(async () => {
+      const photo = await queuedAt(agedBy(2 * BLOB_RETRY_MIN_AGE_MS));
+      storageControl.failDelete = new Error("storage down");
+      storageControl.failDeleteKeys = new Set([photo.photoKey]);
+      expect(await retryPendingBlobDeletions(NOW)).toBe(1);
+      return queueRow(photo.photoKey);
+    });
+    expect(row).toMatchObject({
+      attempts: 1,
+      lastError: "Error: storage down",
+    });
+  });
+
+  test("past the limit, exactly `limit` keys are attempted, oldest first", async () => {
+    const result = await inOneSnapshot(async () => {
+      const oldest = await queuedAt(agedBy(5 * BLOB_RETRY_MIN_AGE_MS));
+      const middle = await queuedAt(agedBy(4 * BLOB_RETRY_MIN_AGE_MS));
+      const newest = await queuedAt(agedBy(3 * BLOB_RETRY_MIN_AGE_MS));
+      const attempted = await retryPendingBlobDeletions(NOW, 2);
+      return {
+        attempted,
+        gone: [
+          await queueRow(oldest.photoKey),
+          await queueRow(middle.photoKey),
+        ],
+        kept: await queueRow(newest.photoKey),
+      };
+    });
+    expect(result.attempted).toBe(2);
+    expect(result.gone).toEqual([null, null]);
+    expect(result.kept).toMatchObject({ attempts: 0 });
   });
 });

@@ -24,9 +24,18 @@ export const serverEnvSchema = z
     BLOB_PUBLIC_HOST: optional(
       z.string().regex(/^[a-z0-9-]+\.public\.blob\.vercel-storage\.com$/),
     ),
+    CRON_SECRET: optional(z.string().min(32)),
     VERCEL: z.string().optional(),
   })
   .superRefine((value, ctx) => {
+    // A deployment never runs an unguarded daily job.
+    if (value.VERCEL === "1" && value.CRON_SECRET === undefined) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["CRON_SECRET"],
+        message: "required on Vercel",
+      });
+    }
     if (value.STORAGE_DRIVER === "disk") {
       // A deployment's disk is neither shared nor kept: files would vanish.
       if (value.VERCEL === "1") {

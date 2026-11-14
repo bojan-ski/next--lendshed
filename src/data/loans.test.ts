@@ -1,10 +1,12 @@
 import { holdRow } from "@/__tests__/support/hold-row";
+import { inOneSnapshot } from "@/__tests__/support/snapshot";
 import { assertMigrated, createTestScope } from "@/__tests__/support/test-db";
 import { updateOwnContactDetails } from "@/data/account";
 import { fromDbDate } from "@/data/db-dates";
 import { hideOwnItem } from "@/data/items";
 import { db } from "@/db";
 import type { ItemStatus, LoanStatus } from "@/generated/prisma/enums";
+import { effectiveStatus } from "@/lib/dates/effective-status";
 import type { OrganizerCloseInput } from "@/lib/schemas/loans";
 import { people } from "@/strings/people";
 import type { EffectiveLoanStatus, LoanDetailDTO } from "@/types/loan";
@@ -14,12 +16,20 @@ import {
   getLoanForViewer,
   insertLoanRequest,
   markLoanBack,
+  storeExpiredLoans,
+  storeLapsedLoans,
 } from "./loans";
 
 vi.mock(
   "@/lib/storage/storage",
   async () =>
     (await import("@/__tests__/support/photo-storage")).photoStorageModule,
+);
+
+vi.mock("@/db", async (importOriginal) =>
+  (await import("@/__tests__/support/snapshot")).snapshotDbModule(
+    await importOriginal<typeof import("@/db")>(),
+  ),
 );
 
 vi.setConfig({ testTimeout: 60_000, hookTimeout: 60_000 });
@@ -570,8 +580,16 @@ const NOTE = "The owner can't be reached.";
 
 // TODAY is 2030-06-15.
 const DATES = {
-  requested: { status: "requested", startDate: "2030-06-20", endDate: "2030-06-22" },
-  approved: { status: "approved", startDate: "2030-06-20", endDate: "2030-06-22" },
+  requested: {
+    status: "requested",
+    startDate: "2030-06-20",
+    endDate: "2030-06-22",
+  },
+  approved: {
+    status: "approved",
+    startDate: "2030-06-20",
+    endDate: "2030-06-22",
+  },
   out: { status: "out", startDate: "2030-06-12", endDate: "2030-06-17" },
   overdue: { status: "out", startDate: "2030-06-10", endDate: "2030-06-12" },
   returned: {
@@ -580,10 +598,26 @@ const DATES = {
     endDate: "2030-06-05",
     returnedOn: "2030-06-05",
   },
-  declined: { status: "declined", startDate: "2030-06-20", endDate: "2030-06-22" },
-  cancelled: { status: "cancelled", startDate: "2030-06-20", endDate: "2030-06-22" },
-  expired: { status: "requested", startDate: "2030-06-10", endDate: "2030-06-12" },
-  lapsed: { status: "approved", startDate: "2030-06-10", endDate: "2030-06-12" },
+  declined: {
+    status: "declined",
+    startDate: "2030-06-20",
+    endDate: "2030-06-22",
+  },
+  cancelled: {
+    status: "cancelled",
+    startDate: "2030-06-20",
+    endDate: "2030-06-22",
+  },
+  expired: {
+    status: "requested",
+    startDate: "2030-06-10",
+    endDate: "2030-06-12",
+  },
+  lapsed: {
+    status: "approved",
+    startDate: "2030-06-10",
+    endDate: "2030-06-12",
+  },
 } as const satisfies Record<EffectiveLoanStatus, Fixture>;
 
 const closeAs = (
@@ -772,4 +806,129 @@ describe("closeLoanByOrganizer vs markLoanBack (held item row)", () => {
       expect(after.statusReason).toBe(closeFirst ? NOTE : null);
     },
   );
+});
+
+// The daily job's tidy (spec 22) writes app-wide, so it runs in one rolled-back
+// snapshot on a 2001 `today`: only this test's rows are that old, and they are
+// created inside the snapshot.
+describe("storeExpiredLoans / storeLapsedLoans", () => {
+  const JOB_TODAY = "2001-03-10";
+  const SEEN = new Date("2001-03-01T08:00:00.000Z");
+  const CHANGED = new Date("2001-03-02T08:00:00.000Z");
+  const columns = {
+    id: true,
+    status: true,
+    startDate: true,
+    endDate: true,
+    changedAt: true,
+    ownerSeenAt: true,
+    borrowerSeenAt: true,
+    endedBy: true,
+    systemReason: true,
+    statusReason: true,
+    returnedOn: true,
+    itemId: true,
+    borrowerId: true,
+  } as const;
+
+  // Items (and the scope's lazily created category) are committed outside the
+  // snapshot: one created inside would vanish with its rollback.
+  const items: string[] = [];
+  beforeAll(async () => {
+    items.push(...(await Promise.all([1, 2, 3, 4, 5].map(() => listed()))));
+  });
+
+  let next = 0;
+  async function loan(status: LoanStatus, startDate: string, endDate: string) {
+    const { id } = await scope.createLoan({
+      itemId: items[next++ % items.length],
+      borrowerId,
+      status,
+      startDate,
+      endDate,
+      changedAt: CHANGED,
+      ownerSeenAt: SEEN,
+      borrowerSeenAt: SEEN,
+      statusReason: "a note",
+    });
+    return id;
+  }
+
+  const read = (ids: string[]) =>
+    db.loan.findMany({
+      where: { id: { in: ids } },
+      orderBy: { id: "asc" },
+      select: columns,
+    });
+
+  const effectiveOf = (row: {
+    status: LoanStatus;
+    startDate: Date;
+    endDate: Date;
+  }) =>
+    effectiveStatus(
+      {
+        status: row.status,
+        startDate: fromDbDate(row.startDate),
+        endDate: fromDbDate(row.endDate),
+      },
+      JOB_TODAY,
+    );
+
+  test("stores expired / lapsed on past rows only, writing status alone", async () => {
+    const outcome = await inOneSnapshot(async () => {
+      const ids = {
+        startedRequest: await loan("requested", "2001-03-09", "2001-03-12"),
+        todayRequest: await loan("requested", JOB_TODAY, "2001-03-12"),
+        endedApproval: await loan("approved", "2001-03-05", "2001-03-09"),
+        todayApproval: await loan("approved", "2001-03-05", JOB_TODAY),
+        overdue: await loan("out", "2001-03-01", "2001-03-05"),
+      };
+      const all = Object.values(ids);
+      const before = await read(all);
+      const expired = await storeExpiredLoans(JOB_TODAY);
+      const lapsed = await storeLapsedLoans(JOB_TODAY);
+      const after = await read(all);
+      return { ids, before, after, expired, lapsed };
+    });
+
+    expect(outcome.expired).toBe(1);
+    expect(outcome.lapsed).toBe(1);
+    const statusOf = (id: string) =>
+      outcome.after.find((row) => row.id === id)!.status;
+    expect(statusOf(outcome.ids.startedRequest)).toBe("expired");
+    expect(statusOf(outcome.ids.todayRequest)).toBe("requested");
+    expect(statusOf(outcome.ids.endedApproval)).toBe("lapsed");
+    expect(statusOf(outcome.ids.todayApproval)).toBe("approved");
+    expect(statusOf(outcome.ids.overdue)).toBe("out");
+
+    // Every other column byte-identical; no row's effective status moves.
+    const withoutStatus = (row: object) =>
+      Object.fromEntries(
+        Object.entries(row).filter(([column]) => column !== "status"),
+      );
+    expect(outcome.after.map(withoutStatus)).toEqual(
+      outcome.before.map(withoutStatus),
+    );
+    expect(outcome.after.map(effectiveOf)).toEqual(
+      outcome.before.map(effectiveOf),
+    );
+  });
+
+  test("a second tidy for the same today finds nothing", async () => {
+    const counts = await inOneSnapshot(async () => {
+      await loan("requested", "2001-03-01", "2001-03-03");
+      await loan("approved", "2001-03-01", "2001-03-03");
+      const first = [
+        await storeExpiredLoans(JOB_TODAY),
+        await storeLapsedLoans(JOB_TODAY),
+      ];
+      const second = [
+        await storeExpiredLoans(JOB_TODAY),
+        await storeLapsedLoans(JOB_TODAY),
+      ];
+      return { first, second };
+    });
+    expect(counts).toEqual({ first: [1, 1], second: [0, 0] });
+  });
 });

@@ -2,6 +2,7 @@ import {
   storageControl,
   storedFileSize,
 } from "@/__tests__/support/photo-storage";
+import { inOneSnapshot } from "@/__tests__/support/snapshot";
 import { assertMigrated, createTestScope } from "@/__tests__/support/test-db";
 import { TEST_ZONES, useProcessTimeZone } from "@/__tests__/support/time-zone";
 import { db } from "@/db";
@@ -26,21 +27,11 @@ vi.mock(
     (await import("@/__tests__/support/photo-storage")).photoStorageModule,
 );
 
-// While a snapshot is open, `db` (in this file, the scope and photos.ts) is
-// that transaction's client.
-const snapshot = vi.hoisted(() => ({ tx: null as object | null }));
-vi.mock("@/db", async (importOriginal) => {
-  const { db } = await importOriginal<typeof import("@/db")>();
-  return {
-    db: new Proxy(db, {
-      get(target, key) {
-        const source = (snapshot.tx ?? target) as Record<PropertyKey, unknown>;
-        const value = source[key];
-        return typeof value === "function" ? value.bind(source) : value;
-      },
-    }),
-  };
-});
+vi.mock("@/db", async (importOriginal) =>
+  (await import("@/__tests__/support/snapshot")).snapshotDbModule(
+    await importOriginal<typeof import("@/db")>(),
+  ),
+);
 
 vi.setConfig({ testTimeout: 60_000, hookTimeout: 60_000 });
 
@@ -55,29 +46,7 @@ const queueRow = (storageKey: string) =>
   db.pendingBlobDeletion.findUnique({ where: { storageKey } });
 
 // The month and storage sums are app-wide, and other files write those tables
-// meanwhile. One REPEATABLE READ snapshot sees only this test's writes, so a
-// before/after difference is exact; it is rolled back, leaving no rows.
-const ROLLBACK = Symbol("rollback");
-async function inOneSnapshot<T>(run: () => Promise<T>): Promise<T> {
-  let result: T | undefined;
-  try {
-    await db.$transaction(
-      async (tx) => {
-        snapshot.tx = tx;
-        try {
-          result = await run();
-        } finally {
-          snapshot.tx = null;
-        }
-        throw ROLLBACK;
-      },
-      { isolationLevel: "RepeatableRead", maxWait: 15_000, timeout: 30_000 },
-    );
-  } catch (error) {
-    if (error !== ROLLBACK) throw error;
-  }
-  return result as T;
-}
+// meanwhile: their before/after reads run in one rolled-back snapshot.
 
 // A stored, reserved file, as the action leaves it just before attaching.
 async function reservedPhoto(userId: string) {

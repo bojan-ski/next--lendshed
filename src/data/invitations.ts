@@ -83,6 +83,15 @@ export async function revokeOpenInvitation(
   return count === 1 ? "revoked" : "notOpen";
 }
 
+// The daily job: a used invitation stays as the join record; an unexpired one
+// stays whether open or revoked.
+export async function purgeExpiredInvitations(now: Date): Promise<number> {
+  const { count } = await db.invitation.deleteMany({
+    where: { usedAt: null, expiresAt: { lt: now } },
+  });
+  return count;
+}
+
 // The claim is a conditional update, so two joins on one link serialise on the
 // row lock and the second matches nothing. A refused claim hashes nothing.
 export async function joinThroughInvitation(input: {

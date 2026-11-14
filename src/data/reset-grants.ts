@@ -46,6 +46,15 @@ export async function insertResetGrant(input: {
   }, LOCKING_TRANSACTION);
 }
 
+// The daily job: every grant lives an hour, so this covers used, voided and
+// unused grants alike.
+export async function purgeExpiredResetGrants(now: Date): Promise<number> {
+  const { count } = await db.passwordResetGrant.deleteMany({
+    where: { expiresAt: { lt: now } },
+  });
+  return count;
+}
+
 // The claim is a conditional update, so two resets on one link serialise on
 // the row lock and the second matches nothing. A refused claim hashes nothing;
 // any later failure rolls the claim back and leaves the link usable.

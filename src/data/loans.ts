@@ -7,6 +7,8 @@ import {
   blockingLoanWhere,
   occupyingLoanWhere,
   openLoanWhere,
+  storedExpiringLoanWhere,
+  storedLapsingLoanWhere,
 } from "@/data/loan-scopes";
 import { personName, toPhotoDTO } from "@/data/mappers";
 import {
@@ -638,4 +640,22 @@ export async function closeLoanByOrganizer(
     });
     return "closed";
   }, ROLE_TRANSACTION);
+}
+
+// The daily job's tidy: stores what effectiveStatus already derives, so no
+// screen changes. Status only: no changedAt or seen-at, so no dot lights.
+export async function storeExpiredLoans(today: string): Promise<number> {
+  const { count } = await db.loan.updateMany({
+    where: storedExpiringLoanWhere(today),
+    data: { status: "expired" },
+  });
+  return count;
+}
+
+export async function storeLapsedLoans(today: string): Promise<number> {
+  const { count } = await db.loan.updateMany({
+    where: storedLapsingLoanWhere(today),
+    data: { status: "lapsed" },
+  });
+  return count;
 }

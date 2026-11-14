@@ -45,6 +45,16 @@ export function effectiveLoanWhere(
   }
 }
 
+// The daily job's tidy (spec 22): the stored rows whose effective status
+// already says expired / lapsed. Each is a subset of effectiveLoanWhere's.
+export function storedExpiringLoanWhere(today: string): Prisma.LoanWhereInput {
+  return { status: "requested", startDate: { lt: toDbDate(today) } };
+}
+
+export function storedLapsingLoanWhere(today: string): Prisma.LoanWhereInput {
+  return { status: "approved", endDate: { lt: toDbDate(today) } };
+}
+
 export function openLoanWhere(today: string): Prisma.LoanWhereInput {
   return effectiveLoanWhere("requested", today);
 }

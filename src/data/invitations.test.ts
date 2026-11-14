@@ -1,4 +1,5 @@
 import { holdRow } from "@/__tests__/support/hold-row";
+import { inOneSnapshot } from "@/__tests__/support/snapshot";
 import {
   assertMigrated,
   createTestScope,
@@ -15,8 +16,15 @@ import {
   getOpenInvitations,
   insertInvitation,
   joinThroughInvitation,
+  purgeExpiredInvitations,
   revokeOpenInvitation,
 } from "./invitations";
+
+vi.mock("@/db", async (importOriginal) =>
+  (await import("@/__tests__/support/snapshot")).snapshotDbModule(
+    await importOriginal<typeof import("@/db")>(),
+  ),
+);
 
 // Spied, not replaced: every call still creates the real user unless a test
 // overrides one call.
@@ -373,5 +381,45 @@ describe("getOpenInvitations", () => {
       note: null,
       createdByName: people.formerMember,
     });
+  });
+});
+
+// The daily job's purge is app-wide: a rolled-back snapshot with a 2001 clock,
+// on invitations created inside it (7-day lifetime from `createdAt`).
+describe("purgeExpiredInvitations", () => {
+  const NOW = new Date("2001-03-10T12:00:00.000Z");
+  const EXPIRED = new Date(NOW.getTime() - 8 * DAY_MS);
+  const UNEXPIRED = new Date(NOW.getTime() - 6 * DAY_MS);
+
+  test("removes unused expired invitations, revoked or open, and keeps the rest", async () => {
+    const result = await inOneSnapshot(async () => {
+      const ids = {
+        usedExpired: (
+          await scope.createInvitation({ state: "used", createdAt: EXPIRED })
+        ).id,
+        revokedUnexpired: (
+          await scope.createInvitation({
+            state: "revoked",
+            createdAt: UNEXPIRED,
+          })
+        ).id,
+        revokedExpired: (
+          await scope.createInvitation({ state: "revoked", createdAt: EXPIRED })
+        ).id,
+        openExpired: (
+          await scope.createInvitation({ state: "open", createdAt: EXPIRED })
+        ).id,
+      };
+      const count = await purgeExpiredInvitations(NOW);
+      const left = await db.invitation.findMany({
+        where: { id: { in: Object.values(ids) } },
+        select: { id: true },
+      });
+      return { ids, count, left: left.map(({ id }) => id).sort() };
+    });
+    expect(result.count).toBe(2);
+    expect(result.left).toEqual(
+      [result.ids.usedExpired, result.ids.revokedUnexpired].sort(),
+    );
   });
 });

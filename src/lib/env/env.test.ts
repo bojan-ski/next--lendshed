@@ -8,8 +8,11 @@ const VALID_SERVER = {
   STORAGE_DRIVER: "disk",
   BLOB_READ_WRITE_TOKEN: "",
   BLOB_PUBLIC_HOST: "",
+  CRON_SECRET: undefined as string | undefined,
   VERCEL: undefined as string | undefined,
 };
+
+const CRON_SECRET = "cron-secret-0123456789abcdefghijk";
 
 const BLOB = {
   STORAGE_DRIVER: "blob",
@@ -96,7 +99,7 @@ describe("server env — photo storage", () => {
   });
 
   test("blob with a token and a public host parses", async () => {
-    stubServerEnv({ ...BLOB, VERCEL: "1" });
+    stubServerEnv({ ...BLOB, VERCEL: "1", CRON_SECRET });
     const { env } = await import("./server");
     expect(env.STORAGE_DRIVER).toBe("blob");
     expect(env.BLOB_PUBLIC_HOST).toBe(BLOB.BLOB_PUBLIC_HOST);
@@ -136,6 +139,46 @@ describe("server env — photo storage", () => {
       await expect(failure).rejects.toThrow(name);
       const message = await failure.catch((error: Error) => error.message);
       expect(message).not.toContain("secret-token");
+    },
+  );
+});
+
+describe("server env — CRON_SECRET", () => {
+  test.each([
+    ["absent", undefined],
+    ["empty, as in .env.example", ""],
+  ])("%s passes off Vercel", async (_case, value) => {
+    stubServerEnv({ CRON_SECRET: value });
+    const { env } = await import("./server");
+    expect(env.CRON_SECRET).toBeUndefined();
+  });
+
+  test("a 32-character secret is accepted", async () => {
+    const exact = CRON_SECRET.slice(0, 32);
+    expect(exact).toHaveLength(32);
+    stubServerEnv({ CRON_SECRET: exact });
+    const { env } = await import("./server");
+    expect(env.CRON_SECRET).toBe(exact);
+  });
+
+  test("a 31-character secret is refused by name, without its value", async () => {
+    stubServerEnv({ CRON_SECRET: CRON_SECRET.slice(0, 31) });
+    const failure = import("./server");
+    await expect(failure).rejects.toThrow("CRON_SECRET");
+    const message = await failure.catch((error: Error) => error.message);
+    expect(message).not.toContain("cron-secret");
+  });
+
+  test.each([
+    ["blob", { ...BLOB, VERCEL: "1" }],
+    ["disk", { VERCEL: "1" }],
+  ])(
+    "on Vercel it is required with the %s driver",
+    async (_case, overrides) => {
+      stubServerEnv(overrides);
+      const failure = import("./server");
+      const message = await failure.catch((error: Error) => error.message);
+      expect(message).toContain("CRON_SECRET");
     },
   );
 });

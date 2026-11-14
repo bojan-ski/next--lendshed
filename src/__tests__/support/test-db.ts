@@ -119,6 +119,7 @@ type TestResetGrantOptions = {
   userId: string;
   state?: ResetGrantState;
   createdById?: string | null;
+  createdAt?: Date;
 };
 
 const HOUR_MS = 60 * 60 * 1000;
@@ -315,10 +316,12 @@ export function createTestScope() {
       userId,
       state = "open",
       createdById = null,
+      createdAt,
     }: TestResetGrantOptions): Promise<{ id: string; token: string }> {
       const { token, tokenHash } = createLinkToken();
       const now = Date.now();
-      const created = new Date(state === "expired" ? now - 2 * HOUR_MS : now);
+      const created =
+        createdAt ?? new Date(state === "expired" ? now - 2 * HOUR_MS : now);
       const { id } = await db.passwordResetGrant.create({
         data: {
           userId,

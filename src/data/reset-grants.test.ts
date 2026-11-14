@@ -8,7 +8,18 @@ import { db } from "@/db";
 import { setCredentialPassword } from "@/db/credentials";
 import { changeMemberRole } from "@/data/members";
 import { createLinkToken, hashLinkToken } from "@/lib/auth/link-tokens";
-import { insertResetGrant, resetPasswordThroughGrant } from "./reset-grants";
+import { inOneSnapshot } from "@/__tests__/support/snapshot";
+import {
+  insertResetGrant,
+  purgeExpiredResetGrants,
+  resetPasswordThroughGrant,
+} from "./reset-grants";
+
+vi.mock("@/db", async (importOriginal) =>
+  (await import("@/__tests__/support/snapshot")).snapshotDbModule(
+    await importOriginal<typeof import("@/db")>(),
+  ),
+);
 
 // Spied, not replaced: every call still sets the real password unless a test
 // overrides one call.
@@ -344,5 +355,35 @@ describe("resetPasswordThroughGrant", () => {
       password: NEW_PASSWORD,
     });
     expect(retry.kind).toBe("reset");
+  });
+});
+
+// The daily job's purge is app-wide: a rolled-back snapshot with a 2001 clock,
+// on grants created inside it (one-hour lifetime from `createdAt`).
+describe("purgeExpiredResetGrants", () => {
+  const NOW = new Date("2001-03-10T12:00:00.000Z");
+  const EXPIRED = new Date(NOW.getTime() - 2 * HOUR_MS);
+  const UNEXPIRED = new Date(NOW.getTime() - HOUR_MS / 2);
+
+  test("removes every expired grant, used, superseded or open, and keeps an unexpired one", async () => {
+    const userId = (await scope.createTestUser()).id;
+    const result = await inOneSnapshot(async () => {
+      const grant = async (state: ResetGrantState, createdAt: Date) =>
+        (await scope.createResetGrant({ userId, state, createdAt })).id;
+      const gone = [
+        await grant("used", EXPIRED),
+        await grant("superseded", EXPIRED),
+        await grant("open", EXPIRED),
+      ];
+      const kept = await grant("open", UNEXPIRED);
+      const count = await purgeExpiredResetGrants(NOW);
+      const left = await db.passwordResetGrant.findMany({
+        where: { id: { in: [...gone, kept] } },
+        select: { id: true },
+      });
+      return { count, kept, left: left.map(({ id }) => id) };
+    });
+    expect(result.count).toBe(3);
+    expect(result.left).toEqual([result.kept]);
   });
 });
