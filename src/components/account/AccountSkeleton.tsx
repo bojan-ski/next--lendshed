@@ -1,8 +1,9 @@
 import Card from "@/components/ui/Card";
 import { cn } from "@/lib/text/cn";
 
-// Fields per card: profile, contact details, change password, sign out.
-const CARDS = [2, 1, 2, 0];
+// Fields per card: profile, contact details, change password, sign out,
+// delete account.
+const CARDS = [2, 1, 2, 0, 0];
 
 export default function AccountSkeleton() {
   return (

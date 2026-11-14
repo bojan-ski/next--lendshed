@@ -9,6 +9,8 @@ export const flash = {
   memberDemoted: "Organizer role removed.",
   memberSuspended: "Account suspended.",
   memberReinstated: "Account reinstated.",
+  memberDeleted: "Account deleted.",
+  accountDeleted: "Your account has been deleted.",
   passwordReset: "Password saved. Sign in with your new password.",
   categoryAdded: "Category added.",
   categoryRenamed: "Category renamed.",

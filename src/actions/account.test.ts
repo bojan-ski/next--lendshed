@@ -11,18 +11,32 @@ import {
   SESSION_COOKIE,
   signInForCookie,
 } from "@/__tests__/support/test-db";
+import { redirect } from "next/navigation";
 import { updateOwnContactDetails, updateOwnProfile } from "@/data/account";
+import { deleteOwnUser } from "@/data/members";
 import { getViewer } from "@/data/viewer";
 import { db } from "@/db";
 import { auth } from "@/lib/auth/auth";
+import { copySetCookies } from "@/lib/auth/sign-in";
+import { addDays, communityToday } from "@/lib/dates/dates";
 import { env } from "@/lib/env/server";
+import { setFlash } from "@/lib/feedback/flash";
+import { reportUnexpected } from "@/lib/feedback/report";
+import { FLASH_COOKIE } from "@/lib/feedback/toast";
 import { account } from "@/strings/account";
 import type {
   ChangePasswordState,
   ContactDetailsFormState,
+  DeleteAccountOutcome,
+  DeleteAccountState,
   ProfileFormState,
 } from "@/types/account";
-import { changePassword, updateContactDetails, updateProfile } from "./account";
+import {
+  changePassword,
+  deleteOwnAccount,
+  updateContactDetails,
+  updateProfile,
+} from "./account";
 
 vi.mock(
   "next/headers",
@@ -39,6 +53,24 @@ vi.mock("@/data/account", async (importOriginal) => {
     updateOwnContactDetails: vi.fn(actual.updateOwnContactDetails),
   };
 });
+vi.mock("@/data/members", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/data/members")>();
+  return { ...actual, deleteOwnUser: vi.fn(actual.deleteOwnUser) };
+});
+// The deletion's success seams, spied so their order can be asserted.
+vi.mock("@/lib/auth/sign-in", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/auth/sign-in")>();
+  return { ...actual, copySetCookies: vi.fn(actual.copySetCookies) };
+});
+vi.mock("@/lib/feedback/flash", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/feedback/flash")>();
+  return { setFlash: vi.fn(actual.setFlash) };
+});
+vi.mock("next/navigation", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("next/navigation")>();
+  return { ...actual, redirect: vi.fn(actual.redirect) };
+});
+vi.mock("@/lib/feedback/report", () => ({ reportUnexpected: vi.fn() }));
 
 vi.setConfig({ testTimeout: 60_000, hookTimeout: 60_000 });
 
@@ -480,5 +512,208 @@ describe("changePassword", () => {
     ).toBe("/login");
     expect(handler).not.toHaveBeenCalled();
     expect(await passwordHash(viewer.id)).toBe(hashBefore);
+  });
+});
+
+describe("deleteOwnAccount", () => {
+  const idleDelete: DeleteAccountState = {};
+  const confirmed = () => form({ confirm: "true" });
+  const userExists = async (id: string) =>
+    (await db.user.count({ where: { id } })) === 1;
+
+  test("deletes the account, signs this browser out, flashes and redirects to /login", async () => {
+    const viewer = await actAs();
+    // A second device, signed in separately: its session goes with the user.
+    await signInForCookie({ ...viewer, ip: scope.ip() });
+    const { id: itemId } = await scope.createItem({ ownerId: viewer.id });
+
+    expect(
+      await redirectTarget(deleteOwnAccount(idleDelete, confirmed())),
+    ).toBe("/login");
+
+    expect(await userExists(viewer.id)).toBe(false);
+    expect(await scope.sessionsOf(viewer.id)).toEqual([]);
+    expect(await db.item.count({ where: { id: itemId } })).toBe(0);
+    expect(readCookie(SESSION_COOKIE)).toBeUndefined();
+    expect(readCookieOptions(SESSION_COOKIE)).toMatchObject({
+      maxAge: 0,
+      path: "/",
+    });
+    expect(readCookie(FLASH_COOKIE)).toBe("accountDeleted");
+    expect(await getViewer()).toBeNull();
+    expect(refresh).not.toHaveBeenCalled();
+    expect(reportUnexpected).not.toHaveBeenCalled();
+  });
+
+  test("signs out, copies the cookies, flashes, then redirects, in that order", async () => {
+    await actAs();
+    const librarySignOut = vi.spyOn(auth.api, "signOut");
+
+    await redirectTarget(deleteOwnAccount(idleDelete, confirmed()));
+
+    expect(librarySignOut).toHaveBeenCalledTimes(1);
+    const [options] = librarySignOut.mock.calls[0];
+    expect(options).toMatchObject({ returnHeaders: true });
+    expect(options?.headers).toBeInstanceOf(Headers);
+    const order = [
+      librarySignOut,
+      vi.mocked(copySetCookies),
+      vi.mocked(setFlash),
+      vi.mocked(redirect),
+    ].map((spy) => spy.mock.invocationCallOrder[0]);
+    expect(order).toEqual([...order].sort((a, b) => a - b));
+    expect(setFlash).toHaveBeenCalledWith("accountDeleted");
+    expect(redirect).toHaveBeenCalledWith("/login");
+  });
+
+  // 23:30Z on 11 Nov is already the 12th in Belgrade: the community date, not UTC's.
+  test("passes the viewer and one community today to the data call", async () => {
+    const viewer = await actAs();
+    vi.useFakeTimers({
+      toFake: ["Date"],
+      now: new Date("2026-11-11T23:30:00Z"),
+    });
+    try {
+      await redirectTarget(deleteOwnAccount(idleDelete, confirmed()));
+    } finally {
+      vi.useRealTimers();
+    }
+
+    expect(deleteOwnUser).toHaveBeenCalledTimes(1);
+    expect(deleteOwnUser).toHaveBeenCalledWith(viewer.id, "2026-11-12");
+  });
+
+  test("a sign-out failure after the commit is reported and still flashes and redirects", async () => {
+    const viewer = await actAs();
+    const error = new Error("library down");
+    vi.spyOn(auth.api, "signOut").mockRejectedValueOnce(error);
+
+    expect(
+      await redirectTarget(deleteOwnAccount(idleDelete, confirmed())),
+    ).toBe("/login");
+
+    expect(reportUnexpected).toHaveBeenCalledWith("deleteOwnAccount", error);
+    expect(await userExists(viewer.id)).toBe(false);
+    expect(readCookie(FLASH_COOKIE)).toBe("accountDeleted");
+  });
+
+  test.each([
+    ["no confirm field", {}],
+    ["an empty confirm", { confirm: "" }],
+    ["a confirm other than true", { confirm: "yes" }],
+  ])("%s is stale: nothing read or written", async (_label, fields) => {
+    const viewer = await actAs();
+
+    expect(await deleteOwnAccount(idleDelete, form(fields))).toEqual({
+      formError: "stale",
+    });
+    expect(deleteOwnUser).not.toHaveBeenCalled();
+    expect(await userExists(viewer.id)).toBe(true);
+    expect(setFlash).not.toHaveBeenCalled();
+  });
+
+  test.each<Exclude<DeleteAccountOutcome, "deleted">>([
+    "stale",
+    "itemOut",
+    "holdingItem",
+    "lastOrganizer",
+  ])(
+    "a %s refusal is returned in place: no sign-out, flash, redirect or refresh",
+    async (outcome) => {
+      const viewer = await actAs();
+      const librarySignOut = vi.spyOn(auth.api, "signOut");
+      vi.mocked(deleteOwnUser).mockResolvedValueOnce(outcome);
+
+      expect(await deleteOwnAccount(idleDelete, confirmed())).toEqual({
+        formError: outcome,
+      });
+      expect(librarySignOut).not.toHaveBeenCalled();
+      expect(setFlash).not.toHaveBeenCalled();
+      expect(redirect).not.toHaveBeenCalled();
+      expect(refresh).not.toHaveBeenCalled();
+      expect(await userExists(viewer.id)).toBe(true);
+      expect(await scope.sessionsOf(viewer.id)).toHaveLength(1);
+    },
+  );
+
+  test("a real item out on loan is refused as itemOut and writes nothing", async () => {
+    const viewer = await actAs();
+    const borrower = await scope.createTestUser();
+    const { id: itemId } = await scope.createItem({
+      ownerId: viewer.id,
+      status: "listed",
+    });
+    const today = communityToday();
+    await scope.createLoan({
+      itemId,
+      borrowerId: borrower.id,
+      status: "out",
+      startDate: addDays(today, -2),
+      endDate: addDays(today, 2),
+    });
+
+    expect(await deleteOwnAccount(idleDelete, confirmed())).toEqual({
+      formError: "itemOut",
+    });
+    expect(await userExists(viewer.id)).toBe(true);
+    expect(
+      await db.item.findUniqueOrThrow({ where: { id: itemId } }),
+    ).toMatchObject({ status: "listed", ownerId: viewer.id });
+  });
+
+  test("an unexpected failure is reported and returns the notice", async () => {
+    const viewer = await actAs();
+    const error = new Error("down");
+    vi.mocked(deleteOwnUser).mockRejectedValueOnce(error);
+
+    expect(await deleteOwnAccount(idleDelete, confirmed())).toEqual({
+      formError: "unexpected",
+    });
+    expect(reportUnexpected).toHaveBeenCalledWith("deleteOwnAccount", error);
+    expect(setFlash).not.toHaveBeenCalled();
+    expect(await userExists(viewer.id)).toBe(true);
+  });
+
+  test("a guest or a forged cookie is sent to /login before anything is read", async () => {
+    const user = await scope.createTestUser();
+    const librarySignOut = vi.spyOn(auth.api, "signOut");
+    const forged: Record<string, string>[] = [
+      {},
+      { [SESSION_COOKIE]: "forged.signature" },
+    ];
+    for (const cookies of forged) {
+      mockNextRequest({ ip: scope.ip(), cookies });
+      expect(
+        await redirectTarget(deleteOwnAccount(idleDelete, confirmed())),
+      ).toBe("/login");
+    }
+
+    expect(deleteOwnUser).not.toHaveBeenCalled();
+    expect(librarySignOut).not.toHaveBeenCalled();
+    expect(setFlash).not.toHaveBeenCalled();
+    expect(await userExists(user.id)).toBe(true);
+  });
+
+  test("a suspended member is sent to /login and keeps their account", async () => {
+    const viewer = await actAsSuspended();
+
+    expect(
+      await redirectTarget(deleteOwnAccount(idleDelete, confirmed())),
+    ).toBe("/login");
+    expect(deleteOwnUser).not.toHaveBeenCalled();
+    expect(await userExists(viewer.id)).toBe(true);
+  });
+
+  test("the account deleted is always the viewer's, never a form field", async () => {
+    const viewer = await actAs();
+    const other = await scope.createTestUser();
+    const data = confirmed();
+    data.set("id", other.id);
+    data.set("userId", other.id);
+
+    await redirectTarget(deleteOwnAccount(idleDelete, data));
+
+    expect(deleteOwnUser).toHaveBeenCalledWith(viewer.id, expect.any(String));
+    expect(await userExists(other.id)).toBe(true);
   });
 });

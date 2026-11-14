@@ -1,7 +1,9 @@
 import { isRedirectError } from "next/dist/client/components/redirect-error";
 import { createElement, isValidElement, type ReactNode } from "react";
 import { prerender } from "react-dom/static";
+import AccountCard from "@/components/account/AccountCard";
 import AccountSections from "@/components/account/AccountSections";
+import DeleteAccountButton from "@/components/account/DeleteAccountButton";
 import InvitationsSection from "@/components/invitations/InvitationsSection";
 import ItemDetailsForm from "@/components/items/ItemDetailsForm";
 import ItemEditSection from "@/components/items/ItemEditSection";
@@ -19,6 +21,7 @@ import { communityToday, formatDate } from "@/lib/dates/dates";
 import { ITEM_CAP } from "@/lib/schemas/items";
 import { t } from "@/lib/text/interpolate";
 import { loanStatus } from "@/lib/text/status";
+import { account } from "@/strings/account";
 import { invitations } from "@/strings/invitations";
 import { items } from "@/strings/items";
 import { members } from "@/strings/members";
@@ -269,6 +272,7 @@ describe("AccountSections", () => {
       contactDetails: null,
       email: "mira@example.test",
       contactDetailsLocked: false,
+      deletion: { allowed: true, reason: null },
     };
     vi.mocked(getAccount).mockResolvedValue(details);
 
@@ -277,6 +281,66 @@ describe("AccountSections", () => {
     expect(getAccount).toHaveBeenCalledTimes(1);
     expect(getAccount).toHaveBeenCalledWith(member.id, communityToday());
   });
+
+  // Spec 20: the fifth card, after Sign out.
+  const accountWith = (deletion: AccountDTO["deletion"]): AccountDTO => ({
+    displayName: "Mira K.",
+    area: null,
+    contactDetails: null,
+    email: "mira@example.test",
+    contactDetailsLocked: false,
+    deletion,
+  });
+  const paragraphs = (tree: unknown) =>
+    elementsOf(tree, "p").map(({ props }) => props.children as unknown);
+
+  test.each([
+    [member, false],
+    [organizer, true],
+  ] as const)(
+    "deletion allowed: the muted line and the confirm control (%o → isOrganizer %s)",
+    async (viewer, isOrganizer) => {
+      vi.mocked(getViewer).mockResolvedValue(viewer);
+      vi.mocked(getAccount).mockResolvedValue(
+        accountWith({ allowed: true, reason: null }),
+      );
+
+      const tree = await AccountSections();
+
+      const cards = elementsOf(tree, AccountCard);
+      expect(cards.map(({ props }) => props.id)).toEqual([
+        "profile",
+        "contact",
+        "password",
+        "sign-out",
+        "delete-account",
+      ]);
+      expect(cards.at(-1)?.props.heading).toBe(account.deleteHeading);
+      const buttons = elementsOf(tree, DeleteAccountButton);
+      expect(buttons.map(({ props }) => props)).toEqual([{ isOrganizer }]);
+      expect(paragraphs(tree)).toContain(account.deleteBody);
+    },
+  );
+
+  test.each([
+    ["item_out", account.deleteBlockedItemOut],
+    ["holding_item", account.deleteBlockedHolding],
+    ["last_organizer", account.deleteBlockedLastOrganizer],
+  ] as const)(
+    "deletion refused for %s: the reason line and no control",
+    async (reason, text) => {
+      vi.mocked(getViewer).mockResolvedValue(organizer);
+      vi.mocked(getAccount).mockResolvedValue(
+        accountWith({ allowed: false, reason }),
+      );
+
+      const tree = await AccountSections();
+
+      expect(elementsOf(tree, DeleteAccountButton)).toEqual([]);
+      expect(paragraphs(tree)).toContain(text);
+      expect(paragraphs(tree)).not.toContain(account.deleteBody);
+    },
+  );
 });
 
 // Spec 10: the three /my/items sections guard themselves the same way.

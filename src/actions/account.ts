@@ -1,14 +1,20 @@
 "use server";
 
 import { refresh } from "next/cache";
+import { headers } from "next/headers";
+import { redirect } from "next/navigation";
 import { z } from "zod";
 import { updateOwnContactDetails, updateOwnProfile } from "@/data/account";
+import { deleteOwnUser } from "@/data/members";
+import { auth } from "@/lib/auth/auth";
 import { requireViewer } from "@/lib/auth/guards";
-import { forwardChangePassword } from "@/lib/auth/sign-in";
+import { copySetCookies, forwardChangePassword } from "@/lib/auth/sign-in";
 import { communityToday } from "@/lib/dates/dates";
+import { setFlash } from "@/lib/feedback/flash";
 import { reportUnexpected } from "@/lib/feedback/report";
 import {
   changePasswordSchema,
+  confirmDeleteSchema,
   contactDetailsSchema,
   profileSchema,
 } from "@/lib/schemas/account";
@@ -16,6 +22,8 @@ import { account } from "@/strings/account";
 import type {
   ChangePasswordState,
   ContactDetailsFormState,
+  DeleteAccountOutcome,
+  DeleteAccountState,
   ProfileFormState,
 } from "@/types/account";
 
@@ -116,4 +124,40 @@ export async function changePassword(
   }
   if (failure) return { formError: failure };
   return { flash: "passwordChanged" };
+}
+
+// A refusal stays in place without refresh(): the page was out of date, and
+// its notice replaces the control until a reload.
+export async function deleteOwnAccount(
+  _prev: DeleteAccountState,
+  formData: FormData,
+): Promise<DeleteAccountState> {
+  const viewer = await requireViewer();
+  const parsed = confirmDeleteSchema.safeParse({
+    confirm: formData.get("confirm"),
+  });
+  if (!parsed.success) return { formError: "stale" };
+
+  let outcome: DeleteAccountOutcome;
+  try {
+    outcome = await deleteOwnUser(viewer.id, communityToday());
+  } catch (error) {
+    reportUnexpected("deleteOwnAccount", error);
+    return { formError: "unexpected" };
+  }
+  if (outcome !== "deleted") return { formError: outcome };
+
+  // The session row is gone with the user; this clears this browser's cookie.
+  // A failure here still redirects: the cookie no longer resolves.
+  try {
+    const { headers: responseHeaders } = await auth.api.signOut({
+      headers: await headers(),
+      returnHeaders: true,
+    });
+    await copySetCookies(responseHeaders);
+  } catch (error) {
+    reportUnexpected("deleteOwnAccount", error);
+  }
+  await setFlash("accountDeleted");
+  redirect("/login");
 }

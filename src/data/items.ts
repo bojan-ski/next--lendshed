@@ -508,3 +508,44 @@ export async function deleteOwnItem(
   }
   return outcome.result;
 }
+
+// Account deletion (spec 20): never-lent items go, the rest retire. The caller
+// holds every owned item's lock and deletes the owner after, which nulls
+// `ownerId`. A hidden or listed item never carries a retire note or retirer,
+// so neither is written. Returns the queued keys for after commit.
+export async function retireOrDeleteOwnerItems(
+  tx: Prisma.TransactionClient,
+  ownerId: string,
+  now: Date,
+): Promise<string[]> {
+  const owned = await tx.item.findMany({
+    where: { ownerId, status: { in: ["hidden", "listed"] } },
+    select: {
+      id: true,
+      status: true,
+      photoUrl: true,
+      photoKey: true,
+      photoBytes: true,
+      _count: { select: { loans: true } },
+    },
+  });
+  const keys: string[] = [];
+  for (const item of owned) {
+    const key = await queueItemPhoto(tx, item);
+    if (key) keys.push(key);
+  }
+  const lent = owned.filter((item) => item._count.loans > 0);
+  const neverLent = owned.filter((item) => item._count.loans === 0);
+  if (neverLent.length > 0) {
+    await tx.item.deleteMany({
+      where: { id: { in: neverLent.map(({ id }) => id) } },
+    });
+  }
+  if (lent.length > 0) {
+    await tx.item.updateMany({
+      where: { id: { in: lent.map(({ id }) => id) } },
+      data: { status: "retired", retiredAt: now, ...NO_PHOTO },
+    });
+  }
+  return keys;
+}

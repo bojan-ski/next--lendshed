@@ -31,4 +31,25 @@ export const account = {
   changePassword: "Change password",
   signOutHeading: "Sign out",
   signOut: "Sign out",
+  deleteHeading: "Delete account",
+  deleteBody: "Deleting your account can't be undone.",
+  deleteAccount: "Delete account",
+  deleteConfirm: "Delete your account? This will:",
+  deleteSignOut: "sign you out everywhere",
+  deleteLoans:
+    "cancel or decline your open requests and approved loans, on both sides",
+  deleteItems:
+    "delete items you've never lent and retire the rest, so they leave every listing",
+  deletePhotos: "remove your item photos",
+  deleteHistory: "show you as “Former member” on past loans",
+  deleteInvitations: "stop your open invitations working",
+  deleteFinal: "this can't be undone",
+  deleteConfirmButton: "Delete my account",
+  keepAccount: "Keep my account",
+  deleteBlockedItemOut:
+    "You can't delete your account while one of your items is out. Mark it as back first.",
+  deleteBlockedHolding:
+    "You can't delete your account while you're holding a neighbour's item. Return it first.",
+  deleteBlockedLastOrganizer:
+    "You're the only active organizer. Make someone else an organizer before you delete your account.",
 } as const;

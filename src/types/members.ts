@@ -27,6 +27,7 @@ export type AdminMemberDetailDTO = AdminMemberRowDTO & {
   openLoans: AdminMemberOpenLoan[];
   isSelf: boolean;
   isLastActiveOrganizer: boolean;
+  canDelete: boolean;
 };
 
 export type RoleChangeOutcome = "changed" | "stale" | "lastOrganizer";
@@ -48,6 +49,13 @@ export type MemberStatusState = {
 export type ResetLinkState = {
   created?: CreatedLinkDTO;
   formError?: "self" | "stale" | "unexpected";
+};
+
+export type DeleteMemberOutcome =
+  "deleted" | "stale" | "itemOut" | "holdingItem";
+
+export type DeleteMemberState = {
+  formError?: "self" | "stale" | "itemOut" | "holdingItem" | "unexpected";
 };
 
 export type ResetGrantOutcome =

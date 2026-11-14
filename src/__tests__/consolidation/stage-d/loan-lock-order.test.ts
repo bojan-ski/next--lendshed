@@ -115,8 +115,7 @@ function mayWriteUserFk(
     return expression.properties.some((property) =>
       ts.isSpreadAssignment(property)
         ? mayWriteUserFk(property.expression, functions)
-        : property.name !== undefined &&
-          USER_FK.test(property.name.getText()),
+        : property.name !== undefined && USER_FK.test(property.name.getText()),
     );
   }
   if (ts.isCallExpression(expression)) {
@@ -448,9 +447,14 @@ describe("loan-lock-order — src/data/", () => {
     expect(report.unlockedFirst).toEqual([]);
   });
 
+  // lockDeletionItems (spec 20) is found the same way: it is wider than
+  // lockMemberLoanItems because the user DELETE's FK cascade takes row locks on
+  // every item it touches (owned, borrowed or closed under, retired), not by
+  // any exemption.
   test("the item locks are found from their SQL", () => {
     expect(report.itemLockers).toEqual(
       expect.arrayContaining([
+        "lockDeletionItems",
         "lockItemForOrganizer",
         "lockMemberLoanItems",
         "lockOwnItem",
@@ -462,6 +466,7 @@ describe("loan-lock-order — src/data/", () => {
     expect(report.sweepCallers).toEqual(
       expect.arrayContaining([
         "src/data/items.ts#retireItemByOrganizer",
+        "src/data/members.ts#runAccountDeletion",
         "src/data/members.ts#suspendMemberAccount",
       ]),
     );
@@ -500,6 +505,61 @@ describe("loan-lock-order — src/data/", () => {
     ];
     expect(steps.every((at) => at !== null)).toBe(true);
     expect([...steps].sort((a, b) => a! - b!)).toEqual(steps);
+  });
+
+  // Spec 20: organizers → the member's user row → (runAccountDeletion) items →
+  // loans → grants → the user DELETE.
+  const membersSource = () =>
+    files.find(({ file }) => file === "src/data/members.ts")!.source;
+  const functionNamed = (name: string) => {
+    let fn: ts.FunctionDeclaration | undefined;
+    walk(membersSource(), (node) => {
+      if (ts.isFunctionDeclaration(node) && node.name?.text === name) fn = node;
+    });
+    return fn!;
+  };
+  const firstMatch = (fn: ts.Node, test: (node: ts.Node) => boolean) => {
+    let found: number | null = null;
+    walk(fn, (node) => {
+      if (found === null && test(node)) found = position(node);
+    });
+    return found;
+  };
+  const isMemberRowLock = (node: ts.Node) =>
+    ts.isTaggedTemplateExpression(node) &&
+    /FROM "user"[\s\S]*FOR UPDATE/.test(node.template.getText());
+
+  test.each(["deleteOwnUser", "deleteMemberAccount"])(
+    "%s takes the organizer locks, then the member row, then runs the deletion",
+    (name) => {
+      const fn = functionNamed(name);
+      const steps = [
+        firstCall(fn, "lockActiveOrganizerIds"),
+        firstMatch(fn, isMemberRowLock),
+        firstCall(fn, "runAccountDeletion"),
+      ];
+      expect(steps.every((at) => at !== null)).toBe(true);
+      expect([...steps].sort((a, b) => a! - b!)).toEqual(steps);
+    },
+  );
+
+  test("runAccountDeletion locks the items before any loan, item, grant or user write", () => {
+    const fn = functionNamed("runAccountDeletion");
+    const steps = [
+      firstCall(fn, "lockDeletionItems"),
+      firstCall(fn, "sweepMemberLoans"),
+      firstCall(fn, "retireOrDeleteOwnerItems"),
+      firstMatch(fn, (node) => delegateWrite(node, "passwordResetGrant")),
+      firstMatch(fn, (node) => delegateWrite(node, "user")),
+    ];
+    expect(steps.every((at) => at !== null)).toBe(true);
+    expect([...steps].sort((a, b) => a! - b!)).toEqual(steps);
+    // Nothing but the lock may write before it.
+    const lock = steps[0]!;
+    for (const delegate of ["loan", "item", "invitation", "user"]) {
+      const write = firstMatch(fn, (node) => delegateWrite(node, delegate));
+      expect(write === null || write > lock, delegate).toBe(true);
+    }
   });
 
   test("lockLoanForTransition locks the item, then the loan", () => {

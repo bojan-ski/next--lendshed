@@ -86,6 +86,8 @@ describe("action enforcement — derivation", () => {
       "declineLoan",
       "deleteCategory",
       "deleteItem",
+      "deleteMember",
+      "deleteOwnAccount",
       "demoteMember",
       "hideItem",
       "joinWithInvitation",
@@ -146,6 +148,7 @@ describe.each(guarded)("$name without a valid session", ({ file, name }) => {
     const ip = scope.ip();
     await signInForCookie({ ...user, ip });
     const before = {
+      users: await db.user.count({ where: { id: user.id } }),
       sessions: await scope.sessionsOf(user.id),
       accounts: await db.account.findMany({ where: { userId: user.id } }),
       rateLimits: await scope.rateLimitRows(),
@@ -173,6 +176,7 @@ describe.each(guarded)("$name without a valid session", ({ file, name }) => {
     expect(handler).not.toHaveBeenCalled();
     for (const spy of apiSpies) expect(spy).not.toHaveBeenCalled();
     expect({
+      users: await db.user.count({ where: { id: user.id } }),
       sessions: await scope.sessionsOf(user.id),
       accounts: await db.account.findMany({ where: { userId: user.id } }),
       rateLimits: await scope.rateLimitRows(),
@@ -260,6 +264,7 @@ describe("wrong role", () => {
       "createInvitation",
       "createResetLink",
       "deleteCategory",
+      "deleteMember",
       "demoteMember",
       "promoteMember",
       "reinstateMember",
@@ -271,14 +276,18 @@ describe("wrong role", () => {
   });
 
   describe.each(organizerOnly)("$name called by a member", ({ file, name }) => {
-    test("gets not-found and writes or changes no invitation, role, grant, category, loan or item", async () => {
+    test("gets not-found and writes or changes no invitation, role, grant, category, loan, item or user", async () => {
       const action = await loadAction(file, name);
       const member = await scope.createTestUser({ role: "member" });
       const ip = scope.ip();
       const cookie = await signInForCookie({ ...member, ip });
       const { id: invitationId } = await scope.createInvitation();
-      // An organizer target makes a demote meaningful, an active one the rest.
-      const target = await scope.createTestUser({ role: "organizer" });
+      // An organizer target makes a demote meaningful, an active one the rest;
+      // a suspended one is what a delete acts on.
+      const target = await scope.createTestUser({
+        role: "organizer",
+        status: name === "deleteMember" ? "suspended" : "active",
+      });
       const category = await scope.createCategory(`Wrong ${name.slice(0, 8)}`);
       // An out loan on a listed item is what the close and the retire act on.
       const { id: itemId } = await scope.createItem({
@@ -357,6 +366,9 @@ describe("wrong role", () => {
       expect(
         await db.loan.findUniqueOrThrow({ where: { id: loanId } }),
       ).toEqual(before.loan);
+      expect(
+        await db.user.count({ where: { id: { in: [member.id, target.id] } } }),
+      ).toBe(2);
     });
   });
 });

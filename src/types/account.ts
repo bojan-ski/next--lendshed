@@ -6,6 +6,10 @@ export type AccountDTO = {
   contactDetails: string | null;
   email: string;
   contactDetailsLocked: boolean;
+  deletion: {
+    allowed: boolean;
+    reason: "item_out" | "holding_item" | "last_organizer" | null;
+  };
 };
 
 export type ProfileFormState = {
@@ -31,3 +35,11 @@ export type ChangePasswordState = {
 
 export type ChangePasswordError =
   "invalidCurrentPassword" | "tooManyAttempts" | "unexpected";
+
+export type DeleteAccountOutcome =
+  "deleted" | "stale" | "itemOut" | "holdingItem" | "lastOrganizer";
+
+export type DeleteAccountState = {
+  formError?:
+    "stale" | "itemOut" | "holdingItem" | "lastOrganizer" | "unexpected";
+};

@@ -1,6 +1,7 @@
 import { isRedirectError } from "next/dist/client/components/redirect-error";
 import { refresh } from "next/cache";
-import { mockNextRequest } from "@/__tests__/support/next-request";
+import { redirect } from "next/navigation";
+import { mockNextRequest, readCookie } from "@/__tests__/support/next-request";
 import {
   assertMigrated,
   createTestScope,
@@ -9,6 +10,7 @@ import {
 } from "@/__tests__/support/test-db";
 import {
   changeMemberRole,
+  deleteMemberAccount,
   reinstateMemberAccount,
   suspendMemberAccount,
 } from "@/data/members";
@@ -18,14 +20,19 @@ import type { MemberStatus, Role } from "@/generated/prisma/enums";
 import { hashLinkToken } from "@/lib/auth/link-tokens";
 import { addDays, communityToday } from "@/lib/dates/dates";
 import { env } from "@/lib/env/server";
+import { setFlash } from "@/lib/feedback/flash";
 import { reportUnexpected } from "@/lib/feedback/report";
+import { FLASH_COOKIE } from "@/lib/feedback/toast";
 import type {
+  DeleteMemberOutcome,
+  DeleteMemberState,
   MemberStatusState,
   ResetLinkState,
   RoleChangeState,
 } from "@/types/members";
 import {
   createResetLink,
+  deleteMember,
   demoteMember,
   promoteMember,
   reinstateMember,
@@ -46,9 +53,18 @@ vi.mock("@/data/members", async (importOriginal) => {
     changeMemberRole: vi.fn(actual.changeMemberRole),
     suspendMemberAccount: vi.fn(actual.suspendMemberAccount),
     reinstateMemberAccount: vi.fn(actual.reinstateMemberAccount),
+    deleteMemberAccount: vi.fn(actual.deleteMemberAccount),
   };
 });
 vi.mock("@/lib/feedback/report", () => ({ reportUnexpected: vi.fn() }));
+vi.mock("@/lib/feedback/flash", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/feedback/flash")>();
+  return { setFlash: vi.fn(actual.setFlash) };
+});
+vi.mock("next/navigation", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("next/navigation")>();
+  return { ...actual, redirect: vi.fn(actual.redirect) };
+});
 vi.mock("@/data/reset-grants", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/data/reset-grants")>();
   return { ...actual, insertResetGrant: vi.fn(actual.insertResetGrant) };
@@ -516,4 +532,185 @@ describe("suspendMember / reinstateMember", () => {
       expect(reinstateMemberAccount).not.toHaveBeenCalled();
     },
   );
+});
+
+describe("deleteMember", () => {
+  const idle: DeleteMemberState = {};
+  const userExists = async (id: string) =>
+    (await db.user.count({ where: { id } })) === 1;
+
+  test("deletes a suspended member, flashes and redirects to /admin/members", async () => {
+    const viewer = await actAs("organizer");
+    const member = await scope.createTestUser({ status: "suspended" });
+    const { id: itemId } = await scope.createItem({ ownerId: member.id });
+
+    expect(await redirectTarget(deleteMember(idle, idForm(member.id)))).toBe(
+      "/admin/members",
+    );
+
+    expect(deleteMemberAccount).toHaveBeenCalledWith({
+      actorId: viewer.id,
+      memberId: member.id,
+      today: communityToday(),
+    });
+    expect(await userExists(member.id)).toBe(false);
+    expect(await db.item.count({ where: { id: itemId } })).toBe(0);
+    expect(readCookie(FLASH_COOKIE)).toBe("memberDeleted");
+    expect(setFlash).toHaveBeenCalledWith("memberDeleted");
+    expect(vi.mocked(setFlash).mock.invocationCallOrder[0]).toBeLessThan(
+      vi.mocked(redirect).mock.invocationCallOrder[0],
+    );
+    expect(redirect).toHaveBeenCalledWith("/admin/members");
+    expect(refresh).not.toHaveBeenCalled();
+    // The organizer is still signed in.
+    expect(await scope.sessionsOf(viewer.id)).toHaveLength(1);
+  });
+
+  test("an active member is stale: nothing written", async () => {
+    await actAs("organizer");
+    const member = await scope.createTestUser();
+
+    expect(await deleteMember(idle, idForm(member.id))).toEqual({
+      formError: "stale",
+    });
+    expect(await userExists(member.id)).toBe(true);
+    expect(setFlash).not.toHaveBeenCalled();
+    expect(refresh).not.toHaveBeenCalled();
+  });
+
+  test.each([
+    ["an unknown id", "no-such-member"],
+    ["an empty id", ""],
+    ["no id at all", undefined],
+  ])("%s is stale", async (_label, id) => {
+    await actAs("organizer");
+    expect(await deleteMember(idle, idForm(id))).toEqual({
+      formError: "stale",
+    });
+    expect(setFlash).not.toHaveBeenCalled();
+    expect(refresh).not.toHaveBeenCalled();
+  });
+
+  test("an organizer demoted since the page loaded is stale and deletes no one", async () => {
+    const viewer = await actAs("organizer");
+    const member = await scope.createTestUser({ status: "suspended" });
+    // The session still reads organizer; the locked row no longer does.
+    vi.mocked(deleteMemberAccount).mockImplementationOnce(async (input) => {
+      await db.user.update({
+        where: { id: viewer.id },
+        data: { role: "member" },
+      });
+      const actual =
+        await vi.importActual<typeof import("@/data/members")>(
+          "@/data/members",
+        );
+      return actual.deleteMemberAccount(input);
+    });
+
+    expect(await deleteMember(idle, idForm(member.id))).toEqual({
+      formError: "stale",
+    });
+    expect(await userExists(member.id)).toBe(true);
+  });
+
+  test("your own id is refused before any database read", async () => {
+    const viewer = await actAs("organizer");
+    expect(await deleteMember(idle, idForm(viewer.id))).toEqual({
+      formError: "self",
+    });
+    expect(deleteMemberAccount).not.toHaveBeenCalled();
+    expect(await userExists(viewer.id)).toBe(true);
+    expect(setFlash).not.toHaveBeenCalled();
+  });
+
+  test.each<Exclude<DeleteMemberOutcome, "deleted">>([
+    "stale",
+    "itemOut",
+    "holdingItem",
+  ])(
+    "a %s refusal is returned in place: no flash, redirect or refresh",
+    async (outcome) => {
+      await actAs("organizer");
+      const member = await scope.createTestUser({ status: "suspended" });
+      vi.mocked(deleteMemberAccount).mockResolvedValueOnce(outcome);
+
+      expect(await deleteMember(idle, idForm(member.id))).toEqual({
+        formError: outcome,
+      });
+      expect(setFlash).not.toHaveBeenCalled();
+      expect(redirect).not.toHaveBeenCalled();
+      expect(refresh).not.toHaveBeenCalled();
+      expect(await userExists(member.id)).toBe(true);
+    },
+  );
+
+  test("a real loan out to the suspended member is refused as holdingItem", async () => {
+    await actAs("organizer");
+    const member = await scope.createTestUser({ status: "suspended" });
+    const owner = await scope.createTestUser();
+    const { id: itemId } = await scope.createItem({
+      ownerId: owner.id,
+      status: "listed",
+    });
+    const today = communityToday();
+    await scope.createLoan({
+      itemId,
+      borrowerId: member.id,
+      status: "out",
+      startDate: addDays(today, -3),
+      endDate: addDays(today, -1),
+    });
+
+    expect(await deleteMember(idle, idForm(member.id))).toEqual({
+      formError: "holdingItem",
+    });
+    expect(await userExists(member.id)).toBe(true);
+  });
+
+  test("an unexpected failure is reported and returns the notice", async () => {
+    await actAs("organizer");
+    const member = await scope.createTestUser({ status: "suspended" });
+    const error = new Error("down");
+    vi.mocked(deleteMemberAccount).mockRejectedValueOnce(error);
+
+    expect(await deleteMember(idle, idForm(member.id))).toEqual({
+      formError: "unexpected",
+    });
+    expect(reportUnexpected).toHaveBeenCalledWith("deleteMember", error);
+    expect(setFlash).not.toHaveBeenCalled();
+    expect(await userExists(member.id)).toBe(true);
+  });
+
+  test("the acting organizer is the viewer, never a form field", async () => {
+    const viewer = await actAs("organizer");
+    const member = await scope.createTestUser({ status: "suspended" });
+    const data = idForm(member.id);
+    data.set("actorId", "someone-else");
+    data.set("today", "2020-01-01");
+
+    await redirectTarget(deleteMember(idle, data));
+
+    expect(deleteMemberAccount).toHaveBeenCalledWith({
+      actorId: viewer.id,
+      memberId: member.id,
+      today: communityToday(),
+    });
+  });
+
+  test("a member gets not-found and no one is deleted", async () => {
+    await actAs("member");
+    const target = await scope.createTestUser({ status: "suspended" });
+    const error = await thrownBy(deleteMember(idle, idForm(target.id)));
+    expect((error as { digest?: string }).digest).toBe(NOT_FOUND);
+    expect(deleteMemberAccount).not.toHaveBeenCalled();
+    expect(await userExists(target.id)).toBe(true);
+  });
+
+  test("a guest is sent to /login", async () => {
+    mockNextRequest({ ip: scope.ip() });
+    expect(await redirectTarget(deleteMember(idle, idForm("x")))).toBe(
+      "/login",
+    );
+    expect(deleteMemberAccount).not.toHaveBeenCalled();
+  });
 });

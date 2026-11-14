@@ -52,6 +52,25 @@ export const members = {
   keepActive: "Keep active",
   reinstate: "Reinstate",
   statusSelf: "You can't suspend or reinstate yourself.",
+  deleteHeading: "Delete account",
+  deleteBody:
+    "Deletes this suspended account for good. Past loans stay, shown as “Former member”.",
+  deleteStillOut:
+    "Something is still out on loan to or from them. An organizer has to close it first.",
+  deleteAccount: "Delete account",
+  deleteFor: "Delete {name}'s account",
+  deleteConfirm: "Delete {name}'s account? This will:",
+  deleteLoans: "end anything of theirs that is still open",
+  deleteItems: "delete items they've never lent and retire the rest",
+  deletePhotos: "remove their item photos",
+  deleteHistory: "show them as “Former member” on past loans",
+  deleteFinal: "this can't be undone",
+  keepAccount: "Keep account",
+  deleteItemOut:
+    "One of their items is out. An organizer has to close that loan first.",
+  deleteHolding:
+    "They're holding someone's item. An organizer has to close that loan first.",
+  deleteSelf: "You can't delete your own account here. Use Account.",
   roleHeading: "Role",
   promote: "Make organizer",
   demote: "Remove organizer role",

@@ -1,6 +1,12 @@
 import "server-only";
+import { deletePendingBlobs } from "@/data/blob-deletions";
 import { fromDbDate } from "@/data/db-dates";
-import { blockingLoanWhere, effectiveLoanWhere } from "@/data/loan-scopes";
+import { retireOrDeleteOwnerItems } from "@/data/items";
+import {
+  blockingLoanWhere,
+  effectiveLoanWhere,
+  occupyingLoanWhere,
+} from "@/data/loan-scopes";
 import { personName } from "@/data/mappers";
 import {
   lockActiveOrganizerIds,
@@ -17,10 +23,12 @@ import type {
 import { communityToday } from "@/lib/dates/dates";
 import { effectiveStatus } from "@/lib/dates/effective-status";
 import { initialsOf } from "@/lib/text/initials";
+import type { DeleteAccountOutcome } from "@/types/account";
 import type {
   AdminMemberDetailDTO,
   AdminMemberOpenLoan,
   AdminMemberRowDTO,
+  DeleteMemberOutcome,
   ReinstateOutcome,
   RoleChangeOutcome,
   SuspendOutcome,
@@ -132,6 +140,11 @@ export function toAdminMemberDetailDTO(
       row.role === "organizer" &&
       row.status === "active" &&
       activeOrganizerCount === 1,
+    // Effective out or overdue is exactly stored out: occupyingLoanWhere().
+    canDelete:
+      row.status === "suspended" &&
+      row.id !== viewerId &&
+      !openLoans.some(({ status }) => status === "out" || status === "overdue"),
   };
 }
 
@@ -365,6 +378,151 @@ export async function suspendMemberAccount(input: {
     await tx.session.deleteMany({ where: { userId: input.memberId } });
     return "suspended";
   }, ROLE_TRANSACTION);
+}
+
+// Every item whose rows the user DELETE's cascade touches: owned items, items
+// under any loan the member borrowed or closed (SET NULL on borrowerId and
+// closedById) and items they retired (SET NULL on retiredById). A loan
+// transition locks item → loan, so holding these items first means no cycle.
+// The locked member row stops the set growing between the read and the lock.
+async function lockDeletionItems(
+  tx: Prisma.TransactionClient,
+  memberId: string,
+): Promise<void> {
+  const items = await tx.item.findMany({
+    where: {
+      OR: [
+        { ownerId: memberId },
+        { retiredById: memberId },
+        {
+          loans: {
+            some: { OR: [{ borrowerId: memberId }, { closedById: memberId }] },
+          },
+        },
+      ],
+    },
+    select: { id: true },
+  });
+  if (items.length === 0) return;
+  const ids = items.map(({ id }) => id);
+  await tx.$queryRaw`
+    SELECT id FROM item WHERE id = ANY(${ids}) ORDER BY id FOR UPDATE`;
+}
+
+type DeletionMember = { id: string; role: Role; activeOrganizers: number };
+
+type DeletionResult =
+  | { refused: "stale" | "itemOut" | "holdingItem" | "lastOrganizer" }
+  | { keys: string[] };
+
+// Steps 3–9 of the deletion workflow, after the caller's organizer locks and
+// member row. Grants go before the user row, so a deletion and a reset through
+// one grant lock it first and never cross over sessions and credentials.
+async function runAccountDeletion(
+  tx: Prisma.TransactionClient,
+  member: DeletionMember,
+  today: string,
+  now: Date,
+  options: { checkLastOrganizer: boolean },
+): Promise<DeletionResult> {
+  await lockDeletionItems(tx, member.id);
+  const [lentOut, holding] = await Promise.all([
+    tx.loan.count({
+      where: { AND: [{ item: { ownerId: member.id } }, occupyingLoanWhere()] },
+      take: 1,
+    }),
+    tx.loan.count({
+      where: { AND: [{ borrowerId: member.id }, occupyingLoanWhere()] },
+      take: 1,
+    }),
+  ]);
+  if (lentOut > 0) return { refused: "itemOut" };
+  if (holding > 0) return { refused: "holdingItem" };
+  const organizer = member.role === "organizer";
+  if (options.checkLastOrganizer && organizer && member.activeOrganizers < 2) {
+    return { refused: "lastOrganizer" };
+  }
+
+  await sweepMemberLoans(tx, member.id, today, now, {
+    borrower: "account_deleted",
+    owner: "account_deleted",
+  });
+  const keys = await retireOrDeleteOwnerItems(tx, member.id, now);
+  if (organizer) {
+    await tx.invitation.updateMany({
+      where: {
+        createdById: member.id,
+        usedAt: null,
+        revokedAt: null,
+        expiresAt: { gt: now },
+      },
+      data: { revokedAt: now },
+    });
+  }
+  await tx.passwordResetGrant.deleteMany({ where: { userId: member.id } });
+  // Sessions and credentials cascade; every other reference becomes null.
+  await tx.user.delete({ where: { id: member.id } });
+  return { keys };
+}
+
+async function afterDeletion(
+  result: DeletionResult,
+): Promise<DeleteAccountOutcome> {
+  if ("refused" in result) return result.refused;
+  if (result.keys.length > 0) await deletePendingBlobs(result.keys);
+  return "deleted";
+}
+
+// Lock order: organizers → own row → items → loans → grants → the user row.
+export async function deleteOwnUser(
+  userId: string,
+  today: string,
+): Promise<DeleteAccountOutcome> {
+  const now = new Date();
+  const result = await db.$transaction(async (tx): Promise<DeletionResult> => {
+    const organizers = await lockActiveOrganizerIds(tx);
+    const [member] = await tx.$queryRaw<{ role: Role; status: MemberStatus }[]>`
+      SELECT role, status FROM "user" WHERE id = ${userId} FOR UPDATE`;
+    if (member?.status !== "active") return { refused: "stale" };
+    return runAccountDeletion(
+      tx,
+      { id: userId, role: member.role, activeOrganizers: organizers.length },
+      today,
+      now,
+      { checkLastOrganizer: true },
+    );
+  }, ROLE_TRANSACTION);
+  return afterDeletion(result);
+}
+
+// A suspended member is never an active organizer, so no last-organizer rule.
+export async function deleteMemberAccount(input: {
+  actorId: string;
+  memberId: string;
+  today: string;
+}): Promise<DeleteMemberOutcome> {
+  const now = new Date();
+  const result = await db.$transaction(async (tx): Promise<DeletionResult> => {
+    const organizers = await lockActiveOrganizerIds(tx);
+    if (!organizers.includes(input.actorId)) return { refused: "stale" };
+    const [member] = await tx.$queryRaw<{ role: Role; status: MemberStatus }[]>`
+      SELECT role, status FROM "user" WHERE id = ${input.memberId} FOR UPDATE`;
+    if (member?.status !== "suspended") return { refused: "stale" };
+    return runAccountDeletion(
+      tx,
+      {
+        id: input.memberId,
+        role: member.role,
+        activeOrganizers: organizers.length,
+      },
+      input.today,
+      now,
+      { checkLastOrganizer: false },
+    );
+  }, ROLE_TRANSACTION);
+  const outcome = await afterDeletion(result);
+  // Unreachable: the last-organizer check is off for this caller.
+  return outcome === "lastOrganizer" ? "stale" : outcome;
 }
 
 // Access only: swept loans stay ended, revoked invitations stay revoked.

@@ -1,8 +1,10 @@
 "use server";
 
 import { refresh } from "next/cache";
+import { redirect } from "next/navigation";
 import {
   changeMemberRole,
+  deleteMemberAccount,
   reinstateMemberAccount,
   suspendMemberAccount,
 } from "@/data/members";
@@ -12,9 +14,12 @@ import { requireOrganizer } from "@/lib/auth/guards";
 import { createLinkToken } from "@/lib/auth/link-tokens";
 import { communityToday } from "@/lib/dates/dates";
 import { env } from "@/lib/env/server";
+import { setFlash } from "@/lib/feedback/flash";
 import { reportUnexpected } from "@/lib/feedback/report";
 import { memberIdSchema } from "@/lib/schemas/members";
 import type {
+  DeleteMemberOutcome,
+  DeleteMemberState,
   MemberStatusState,
   ReinstateOutcome,
   ResetGrantOutcome,
@@ -109,6 +114,34 @@ async function changeStatus(
   return {
     flash: outcome === "suspended" ? "memberSuspended" : "memberReinstated",
   };
+}
+
+// Suspended members only, never self. Success leaves the deleted member's
+// page, which is not-found from then on.
+export async function deleteMember(
+  _prev: DeleteMemberState,
+  formData: FormData,
+): Promise<DeleteMemberState> {
+  const viewer = await requireOrganizer();
+  const parsed = memberIdSchema.safeParse({ id: formData.get("id") });
+  if (!parsed.success) return { formError: "stale" };
+  if (parsed.data.id === viewer.id) return { formError: "self" };
+
+  let outcome: DeleteMemberOutcome;
+  try {
+    outcome = await deleteMemberAccount({
+      actorId: viewer.id,
+      memberId: parsed.data.id,
+      today: communityToday(),
+    });
+  } catch (error) {
+    reportUnexpected("deleteMember", error);
+    return { formError: "unexpected" };
+  }
+  if (outcome !== "deleted") return { formError: outcome };
+
+  await setFlash("memberDeleted");
+  redirect("/admin/members");
 }
 
 // Nothing on the page shows grants, so there is nothing to refresh.

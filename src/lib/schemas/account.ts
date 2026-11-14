@@ -45,6 +45,12 @@ export const changePasswordSchema = z.object({
     .max(PASSWORD_MAX, { error: account.passwordTooLong }),
 });
 
+// The confirm step's hidden field. Anything else is a stale page, never a
+// field error.
+export const confirmDeleteSchema = z.object({
+  confirm: z.literal("true"),
+});
+
 export type ProfileInput = z.infer<typeof profileSchema>;
 export type ContactDetailsInput = z.infer<typeof contactDetailsSchema>;
 export type ChangePasswordInput = z.infer<typeof changePasswordSchema>;

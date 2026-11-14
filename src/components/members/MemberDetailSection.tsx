@@ -5,6 +5,7 @@ import {
   LOANS_HEADING_ID,
   ROLE_HEADING_ID,
 } from "@/components/members/ids";
+import DeleteMemberButton from "@/components/members/DeleteMemberButton";
 import MemberCard from "@/components/members/MemberCard";
 import MemberOpenLoans from "@/components/members/MemberOpenLoans";
 import MemberStatusControl from "@/components/members/MemberStatusControl";
@@ -128,6 +129,21 @@ export default async function MemberDetailSection({
           <MemberCard id={ACCESS_HEADING_ID} heading={members.accessHeading}>
             <AccessControl member={member} />
           </MemberCard>
+          {member.status === "suspended" && (
+            <MemberCard id="delete-heading" heading={members.deleteHeading}>
+              {member.canDelete ? (
+                <>
+                  <p className="text-sm text-muted">{members.deleteBody}</p>
+                  <DeleteMemberButton
+                    memberId={member.id}
+                    memberName={member.displayName}
+                  />
+                </>
+              ) : (
+                <p className="text-sm text-muted">{members.deleteStillOut}</p>
+              )}
+            </MemberCard>
+          )}
           <MemberCard id={ROLE_HEADING_ID} heading={members.roleHeading}>
             <RoleControl member={member} />
           </MemberCard>

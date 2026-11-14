@@ -24,6 +24,7 @@ import { demoteMember } from "@/actions/members";
 import MemberDetailSection from "@/components/members/MemberDetailSection";
 import {
   changeMemberRole,
+  deleteMemberAccount,
   getAdminMemberDetail,
   reinstateMemberAccount,
   suspendMemberAccount,
@@ -48,6 +49,7 @@ vi.mock("@/data/members", async (importOriginal) => {
     getAdminMemberDetail: vi.fn(actual.getAdminMemberDetail),
     suspendMemberAccount: vi.fn(actual.suspendMemberAccount),
     reinstateMemberAccount: vi.fn(actual.reinstateMemberAccount),
+    deleteMemberAccount: vi.fn(actual.deleteMemberAccount),
   };
 });
 vi.mock("@/data/reset-grants", async (importOriginal) => {
@@ -65,6 +67,10 @@ vi.mock("@/components/members/RoleChangeButton", () => ({
 }));
 vi.mock("@/components/members/ResetLinkForm", () => ({
   default: () => createElement("reset-link-form"),
+}));
+vi.mock("@/components/members/DeleteMemberButton", () => ({
+  default: ({ memberId }: { memberId: string }) =>
+    createElement("delete-member-button", { "data-member": memberId }),
 }));
 
 vi.setConfig({ testTimeout: 60_000, hookTimeout: 60_000 });
@@ -106,9 +112,10 @@ async function loadAction(file: string, name: string): Promise<Action> {
 }
 
 describe("organizer actions never target yourself", () => {
-  test("the 'not self' actions in code are promote, demote, reset link, suspend and reinstate", () => {
+  test("the 'not self' actions in code are promote, demote, reset link, suspend, reinstate and delete", () => {
     expect(notSelf.map(({ name }) => name).sort()).toEqual([
       "createResetLink",
+      "deleteMember",
       "demoteMember",
       "promoteMember",
       "reinstateMember",
@@ -160,6 +167,8 @@ describe("organizer actions never target yourself", () => {
       expect(insertResetGrant).not.toHaveBeenCalled();
       expect(suspendMemberAccount).not.toHaveBeenCalled();
       expect(reinstateMemberAccount).not.toHaveBeenCalled();
+      expect(deleteMemberAccount).not.toHaveBeenCalled();
+      expect(await db.user.count({ where: { id: viewer.id } })).toBe(1);
       expect(refresh).not.toHaveBeenCalled();
     },
   );
@@ -435,6 +444,151 @@ describe("lock-first: closedById and retiredById writes take the organizer locks
   });
 });
 
+// Deletes of `user` rows (spec 20): the cascade's SET NULLs and the row lock
+// itself meet a role change, which holds every active organizer FOR UPDATE, so
+// the deleter locks the organizers first (rules/data.md). One level of
+// indirection is accepted, because the deletion's steps 3–9 live in the
+// private runAccountDeletion while its two callers (deleteOwnUser,
+// deleteMemberAccount) take the locks: a non-exported function whose every
+// call site in the file follows lockActiveOrganizerIds in the caller's own
+// function. An exported deleter must lock itself.
+function userDeletes(source: ts.SourceFile): ts.Node[] {
+  const deletes: ts.Node[] = callsIn(source).filter((call) => {
+    const callee = call.expression;
+    return (
+      ts.isPropertyAccessExpression(callee) &&
+      (callee.name.text === "delete" || callee.name.text === "deleteMany") &&
+      ts.isPropertyAccessExpression(callee.expression) &&
+      callee.expression.name.text === "user"
+    );
+  });
+  walk(source, (node) => {
+    if (
+      ts.isTaggedTemplateExpression(node) &&
+      /DELETE\s+FROM\s+"user"/i.test(node.template.getText())
+    ) {
+      deletes.push(node);
+    }
+  });
+  return deletes;
+}
+
+function privateFunctionName(fn: ts.Node): string | null {
+  if (!ts.isFunctionDeclaration(fn) || !fn.name) return null;
+  const exported = ts
+    .getModifiers(fn)
+    ?.some((modifier) => modifier.kind === ts.SyntaxKind.ExportKeyword);
+  return exported ? null : fn.name.text;
+}
+
+function unlockedUserDeletes(source: ts.SourceFile): string[] {
+  const calls = callsIn(source);
+  const lockedBefore = (node: ts.Node) =>
+    calls.some(
+      (call) =>
+        calleeName(call) === "lockActiveOrganizerIds" &&
+        enclosingFunction(call) === enclosingFunction(node) &&
+        call.getStart() < node.getStart(),
+    );
+  return userDeletes(source)
+    .filter((deletion) => {
+      if (lockedBefore(deletion)) return false;
+      const name = privateFunctionName(enclosingFunction(deletion));
+      if (!name) return true;
+      const sites = calls.filter((call) => calleeName(call) === name);
+      return sites.length === 0 || !sites.every(lockedBefore);
+    })
+    .map((deletion) => deletion.getText().split("\n")[0]);
+}
+
+describe("lock-first: user deletes take the organizer locks first", () => {
+  test("finds the deleter: runAccountDeletion, reached from deleteOwnUser and deleteMemberAccount", () => {
+    const deleters = dataFiles.flatMap((file) =>
+      userDeletes(parseFile(file)).map((deletion) => {
+        const fn = enclosingFunction(deletion);
+        const name = ts.isFunctionDeclaration(fn) ? fn.name?.text : undefined;
+        return `${file}#${name}`;
+      }),
+    );
+    expect(deleters).toEqual(["src/data/members.ts#runAccountDeletion"]);
+    const callers = callsIn(parseFile("src/data/members.ts"))
+      .filter((call) => calleeName(call) === "runAccountDeletion")
+      .map((call) => {
+        let current: ts.Node | undefined = call.parent;
+        while (current && !ts.isFunctionDeclaration(current)) {
+          current = current.parent;
+        }
+        return current?.name?.text;
+      });
+    expect(callers.sort()).toEqual(["deleteMemberAccount", "deleteOwnUser"]);
+  });
+
+  test.each(dataFiles)(
+    "%s deletes user rows only after lockActiveOrganizerIds",
+    (file) => {
+      expect(unlockedUserDeletes(parseFile(file))).toEqual([]);
+    },
+  );
+
+  test("the check catches a delete without the lock, with the lock after it, or behind an unlocked caller", () => {
+    const probe = (code: string) =>
+      unlockedUserDeletes(
+        ts.createSourceFile("probe.ts", code, ts.ScriptTarget.Latest, true),
+      );
+    // In the same function.
+    expect(
+      probe(
+        `export async function f(tx) { await tx.user.delete({ where: { id } }); }`,
+      ),
+    ).toHaveLength(1);
+    expect(
+      probe(
+        `export async function f(tx) { await tx.user.deleteMany({}); await lockActiveOrganizerIds(tx); }`,
+      ),
+    ).toHaveLength(1);
+    expect(
+      probe(
+        'export async function f(tx) { await tx.$executeRaw`DELETE FROM "user" WHERE id = ${id}`; }',
+      ),
+    ).toHaveLength(1);
+    expect(
+      probe(
+        `export async function f(tx) { await lockActiveOrganizerIds(tx); await tx.user.delete({ where: { id } }); }`,
+      ),
+    ).toEqual([]);
+    // One level through a private helper.
+    const helper = `async function run(tx) { await tx.user.delete({ where: { id } }); }`;
+    expect(
+      probe(
+        `${helper} export async function a(tx) { await lockActiveOrganizerIds(tx); await run(tx); }`,
+      ),
+    ).toEqual([]);
+    expect(
+      probe(
+        `${helper} export async function a(tx) { await lockActiveOrganizerIds(tx); await run(tx); } export async function b(tx) { await run(tx); }`,
+      ),
+    ).toHaveLength(1);
+    expect(
+      probe(
+        `${helper} export async function a(tx) { await run(tx); await lockActiveOrganizerIds(tx); }`,
+      ),
+    ).toHaveLength(1);
+    expect(probe(helper)).toHaveLength(1);
+    // An exported helper may be called from anywhere: it must lock itself.
+    expect(
+      probe(
+        `export ${helper} export async function a(tx) { await lockActiveOrganizerIds(tx); await run(tx); }`,
+      ),
+    ).toHaveLength(1);
+    // Other deletes are not user deletes.
+    expect(
+      probe(
+        `export async function f(tx) { await tx.session.deleteMany({}); await tx.item.delete({}); }`,
+      ),
+    ).toEqual([]);
+  });
+});
+
 // The detail page's controls, rendered from a stubbed DTO.
 const otherMember: AdminMemberDetailDTO = {
   id: "member-2",
@@ -448,6 +602,7 @@ const otherMember: AdminMemberDetailDTO = {
   openLoans: [],
   isSelf: false,
   isLastActiveOrganizer: false,
+  canDelete: false,
 };
 
 async function renderDetail(dto: AdminMemberDetailDTO): Promise<string> {
@@ -550,5 +705,49 @@ describe("MemberDetailSection's Access card", () => {
     });
     expect(html).not.toContain(`>${members.accessHeading}</h2>`);
     expect(html).not.toContain("<member-status-control");
+  });
+});
+
+// Spec 20: a suspended, non-self member only; the control only with nothing out.
+describe("MemberDetailSection's Delete account card", () => {
+  const suspended = { ...otherMember, status: "suspended" as const };
+
+  test("a suspended member with nothing out: the delete control, after Access and before Role", async () => {
+    const html = await renderDetail({ ...suspended, canDelete: true });
+    expect(html).toContain('<delete-member-button data-member="member-2">');
+    expect(html).toContain(members.deleteBody.replaceAll("'", "&#x27;"));
+    expect(html).not.toContain(members.deleteStillOut);
+    const order = [
+      members.loansHeading,
+      members.accessHeading,
+      members.deleteHeading,
+      members.roleHeading,
+      members.resetHeading,
+    ].map((heading) => html.indexOf(`>${heading}</h2>`));
+    expect(order.every((at) => at >= 0)).toBe(true);
+    expect([...order].sort((a, b) => a - b)).toEqual(order);
+  });
+
+  test("a suspended member with something out: the reason, no control", async () => {
+    const html = await renderDetail({ ...suspended, canDelete: false });
+    expect(html).toContain(`>${members.deleteHeading}</h2>`);
+    expect(html).toContain(members.deleteStillOut);
+    expect(html).not.toContain("<delete-member-button");
+  });
+
+  test("an active member: no Delete account card", async () => {
+    const html = await renderDetail(otherMember);
+    expect(html).not.toContain(`>${members.deleteHeading}</h2>`);
+    expect(html).not.toContain("<delete-member-button");
+  });
+
+  test("your own record: no Delete account card, even when suspended and deletable", async () => {
+    const html = await renderDetail({
+      ...suspended,
+      isSelf: true,
+      canDelete: true,
+    });
+    expect(html).not.toContain(`>${members.deleteHeading}</h2>`);
+    expect(html).not.toContain("<delete-member-button");
   });
 });

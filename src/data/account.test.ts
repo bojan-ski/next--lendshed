@@ -23,7 +23,7 @@ const columns = (id: string) =>
   });
 
 describe("getAccount", () => {
-  test("returns exactly the five AccountDTO fields", async () => {
+  test("returns exactly the six AccountDTO fields", async () => {
     const user = await scope.createTestUser({ name: "Mira K." });
     await db.user.update({
       where: { id: user.id },
@@ -36,6 +36,7 @@ describe("getAccount", () => {
       contactDetails: "Phone 555 0101\nAfter 6",
       email: user.email,
       contactDetailsLocked: false,
+      deletion: { allowed: true, reason: null },
     });
   });
 
@@ -47,9 +48,12 @@ describe("getAccount", () => {
       "area",
       "contactDetails",
       "contactDetailsLocked",
+      "deletion",
       "displayName",
       "email",
     ]);
+    expect(dto.deletion).toEqual({ allowed: true, reason: null });
+    expect(JSON.stringify(dto)).not.toContain("organizer");
     expect(dto.area).toBeNull();
     expect(dto.contactDetails).toBeNull();
     expect(JSON.stringify(dto)).not.toContain(user.id);
