@@ -121,13 +121,48 @@ describe("proxy Referrer-Policy", () => {
   });
 });
 
-describe("proxy matcher", () => {
-  test.each(["/", "/nope", "/wordmark.svg", "/house-rules", "/icon.svg"])(
-    "covers %s",
+describe("proxy X-Robots-Tag on every matched path", () => {
+  test.each(["/robots.txt", "/sitemap.xml"])(
+    "a cookie-less %s passes through with the header (a crawler gets the real body or the real 404)",
     (path) => {
-      expect(unstable_doesMiddlewareMatch({ config, url: path })).toBe(true);
+      const response = proxy(request(path));
+      expect(response.headers.get("x-middleware-next")).toBe("1");
+      expect(response.headers.get("location")).toBeNull();
+      expect(response.headers.get("X-Robots-Tag")).toBe("noindex, nofollow");
     },
   );
+
+  test.each([
+    ["(public)", "/house-rules", {}],
+    ["(app)", "/my/loans", withSession],
+  ])("%s: %s passes through with the header", (_group, path, headers) => {
+    const response = proxy(request(path, headers));
+    expect(response.headers.get("x-middleware-next")).toBe("1");
+    expect(response.headers.get("X-Robots-Tag")).toBe("noindex, nofollow");
+  });
+
+  test("(app)/admin: a cookie-less /admin/usage gets the 307 with the header", () => {
+    const response = proxy(request("/admin/usage"));
+    expect(response.status).toBe(307);
+    expect(response.headers.get("location")).toBe(
+      `${ORIGIN}/login?next=%2Fadmin%2Fusage`,
+    );
+    expect(response.headers.get("X-Robots-Tag")).toBe("noindex, nofollow");
+  });
+});
+
+describe("proxy matcher", () => {
+  test.each([
+    "/",
+    "/nope",
+    "/wordmark.svg",
+    "/house-rules",
+    "/icon.svg",
+    "/robots.txt",
+    "/sitemap.xml",
+  ])("covers %s", (path) => {
+    expect(unstable_doesMiddlewareMatch({ config, url: path })).toBe(true);
+  });
 
   test.each([
     "/_next/static/chunks/main.js",
