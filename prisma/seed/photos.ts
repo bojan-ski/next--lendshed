@@ -10,8 +10,8 @@ import { newPhotoKey } from "@/lib/storage/keys";
 import type { PhotoStorage } from "@/lib/storage/types";
 import { SEED_ITEMS, type SeedItem } from "./items";
 
-// Plain flat colours until the client's demo photos arrive (OQ-15): never a
-// real photo or a board image.
+// Plain flat colours are the demo photos (OQ-15, decided): never a real,
+// stock or board image.
 const MUTED_COLOURS = [
   { r: 196, g: 183, b: 160 },
   { r: 160, g: 178, b: 168 },
@@ -59,7 +59,8 @@ export async function ensureItemPhotos(
     const bytes = await placeholderPhoto(index);
     const key = newPhotoKey();
     const { url } = await storage.put(key, bytes, "image/webp");
-    const list = item.status === "hidden" && Boolean(item.owner?.contactDetails);
+    const list =
+      item.status === "hidden" && Boolean(item.owner?.contactDetails);
     await client.item.update({
       where: { id: item.id },
       data: {

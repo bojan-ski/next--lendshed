@@ -175,6 +175,39 @@ describe("cleanup", () => {
     ).toBe(0);
   });
 
+  test("trackItem takes an ownerless item made elsewhere, with its borrowerless loan", async () => {
+    const inner = createTestScope();
+    const category = await inner.createCategory("Ownerless");
+    const { id } = await db.item.create({
+      data: {
+        ownerId: null,
+        categoryId: category.id,
+        title: `${inner.tag} ownerless`,
+        description: "",
+        condition: "good",
+        status: "retired",
+        retiredAt: new Date(),
+      },
+      select: { id: true },
+    });
+    const loan = await db.loan.create({
+      data: {
+        itemId: id,
+        borrowerId: null,
+        status: "returned",
+        startDate: new Date("2030-07-01T00:00:00.000Z"),
+        endDate: new Date("2030-07-03T00:00:00.000Z"),
+      },
+      select: { id: true },
+    });
+    inner.trackItem(id);
+
+    await inner.cleanup();
+
+    expect(await db.item.count({ where: { id } })).toBe(0);
+    expect(await db.loan.count({ where: { id: loan.id } })).toBe(0);
+  });
+
   test("both spec 09 migrations are applied to the test database", async () => {
     const applied = await db.$queryRaw<{ migration_name: string }[]>`
       SELECT migration_name FROM "_prisma_migrations" WHERE finished_at IS NOT NULL`;

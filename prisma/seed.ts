@@ -5,6 +5,7 @@ import { PRODUCTION_CATEGORIES } from "@/lib/categories/production";
 import { parseEnv } from "@/lib/env/parse";
 import { demoSeedEnvSchema } from "@/lib/schemas/bootstrap";
 import { seedCategories } from "./seed/categories";
+import { DEMO_SCENARIO, seedDemoScenario } from "./seed/demo-scenario";
 import { seedInvitations, SEED_INVITATION_NOTES } from "./seed/invitations";
 import { seedItems, SEED_ITEMS } from "./seed/items";
 import { seedPeople, SEED_PEOPLE } from "./seed/people";
@@ -38,6 +39,8 @@ async function main(): Promise<number> {
     console.log(`Photos: ${photographed} added, ${listed} items listed`);
     await seedReviewLoans(client);
     console.log(`Review loans: ${REVIEW_LOANS.length} present`);
+    await seedDemoScenario(client);
+    console.log(`Demo scenario: ${DEMO_SCENARIO.length} present`);
     return 0;
   } catch (error) {
     console.error(failureLine(error));
