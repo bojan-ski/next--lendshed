@@ -46,8 +46,10 @@ export function seedOrganizer() {
 
 export const runEmail = (tag: string, who: "lender" | "borrower") =>
   `${tag}-${who}@test.invalid`;
-export const invitationNote = (tag: string, who: "lender" | "borrower") =>
-  `${tag} e2e ${who}`;
+export const invitationNote = (
+  tag: string,
+  who: "lender" | "borrower" | "panel",
+) => `${tag} e2e ${who}`;
 export const itemTitle = (tag: string) => `${tag} e2e drill`;
 
 // One TEST-NET-3 address per role, derived from the tag so teardown can

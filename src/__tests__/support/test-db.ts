@@ -254,6 +254,12 @@ export function createTestScope() {
       userIds.push(userId);
     },
 
+    // An item created outside createItem (a seeder's ownerless item) joins the
+    // cleanup with its loans.
+    trackItem: (itemId: string) => {
+      itemIds.push(itemId);
+    },
+
     // A stored file whose queue row and disk file go with the cleanup.
     trackPhotoKey: (key: string) => {
       photoKeys.push(key);

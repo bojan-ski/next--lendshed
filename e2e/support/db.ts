@@ -1,6 +1,7 @@
 import type { LoanStatus, PrismaClient } from "@/generated/prisma/client";
 import { PRODUCTION_CATEGORIES } from "@/lib/categories/production";
 import { categoryNameKey } from "@/lib/categories/name";
+import { addDays } from "@/lib/dates/dates";
 import { effectiveStatus } from "@/lib/dates/effective-status";
 import { REQUEST_LIMITS } from "@/lib/loans/limits";
 import {
@@ -210,6 +211,223 @@ export async function pickResponsiveTargets(
 
 export const countLoansOnItem = (client: PrismaClient, itemId: string) =>
   client.loan.count({ where: { itemId } });
+
+const OCCUPYING = new Set(["out", "overdue"]);
+const effective = (
+  loan: { status: LoanStatus; startDate: Date; endDate: Date },
+  today: string,
+) =>
+  effectiveStatus(
+    {
+      status: loan.status,
+      startDate: fromDbDate(loan.startDate),
+      endDate: fromDbDate(loan.endDate),
+    },
+    today,
+  );
+
+const loanDates = { status: true, startDate: true, endDate: true } as const;
+
+// Nothing out and nothing held: their Delete account control is offered.
+const deletable = (
+  person: {
+    itemsOwned: {
+      loans: { status: LoanStatus; startDate: Date; endDate: Date }[];
+    }[];
+    loansBorrowed: { status: LoanStatus; startDate: Date; endDate: Date }[];
+  },
+  today: string,
+) =>
+  [...person.itemsOwned.flatMap(({ loans }) => loans), ...person.loansBorrowed]
+    .map((loan) => effective(loan, today))
+    .every((status) => !OCCUPYING.has(status));
+
+export type InteractiveTargets =
+  | {
+      suspendedMemberId: string;
+      organizerItemId: string;
+      // The seed rows the sweep opens, compared after it: no state may write.
+      fingerprint: string;
+    }
+  | { fix: string };
+
+// The ids the interactive sweep (spec 26) needs beyond responsive-targets,
+// chosen by role and data. Read-only.
+export async function pickInteractiveTargets(
+  client: PrismaClient,
+  {
+    organizerEmail,
+    memberEmail,
+    tag,
+    today,
+  }: {
+    organizerEmail: string;
+    memberEmail: string;
+    tag: string;
+    today: string;
+  },
+): Promise<InteractiveTargets> {
+  const seedEmails = SEED_PEOPLE.map((person) => person.email);
+  const footprint = {
+    itemsOwned: { select: { loans: { select: loanDates } } },
+    loansBorrowed: { select: loanDates },
+  } as const;
+  const member = await client.user.findUnique({
+    where: { email: memberEmail },
+    select: { name: true, area: true, role: true, status: true, ...footprint },
+  });
+  if (!member || !deletable(member, today)) {
+    return {
+      fix: `The sweep's member has an item out or is holding one, so Delete account isn't offered. Run: ${SEED}`,
+    };
+  }
+  const suspended = (
+    await client.user.findMany({
+      where: { email: { in: seedEmails }, role: "member", status: "suspended" },
+      orderBy: { email: "asc" },
+      select: { id: true, role: true, status: true, ...footprint },
+    })
+  ).find((person) => deletable(person, today));
+  if (!suspended) {
+    return {
+      fix: `No suspended seed member with nothing out or held. Run: ${SEED}`,
+    };
+  }
+  const organizer = await client.user.findUnique({
+    where: { email: organizerEmail },
+    select: { id: true },
+  });
+  const item = organizer
+    ? await client.item.findFirst({
+        where: {
+          status: "listed",
+          ownerId: { not: organizer.id },
+          owner: { email: { in: seedEmails }, status: "active" },
+        },
+        orderBy: { id: "asc" },
+        select: { id: true },
+      })
+    : null;
+  if (!item) {
+    return {
+      fix: `No Listed item of another active seed member. Run: ${SEED}`,
+    };
+  }
+
+  const itemColumns = {
+    id: true,
+    status: true,
+    retiredAt: true,
+    retiredNote: true,
+    retiredById: true,
+    photoKey: true,
+  } as const;
+  const fingerprint = JSON.stringify({
+    member: {
+      name: member.name,
+      area: member.area,
+      role: member.role,
+      status: member.status,
+    },
+    memberItems: await client.item.findMany({
+      where: {
+        owner: { email: memberEmail },
+        NOT: { title: { startsWith: `${tag} ` } },
+      },
+      orderBy: { id: "asc" },
+      select: itemColumns,
+    }),
+    suspended: { role: suspended.role, status: suspended.status },
+    organizerItem: await client.item.findUnique({
+      where: { id: item.id },
+      select: itemColumns,
+    }),
+  });
+  return {
+    suspendedMemberId: suspended.id,
+    organizerItemId: item.id,
+    fingerprint,
+  };
+}
+
+export const interactiveItemTitle = (tag: string) => `${tag} e2e sweep ladder`;
+
+export type InteractiveLoans =
+  { requestLoanId: string; approvedLoanId: string } | { fix: string };
+
+// A run-titled Hidden item of the member with one requested and one approved
+// loan (spec 26 states 10 and 11). The borrower is another active seed member
+// with contact details, never the journey's seed borrower: this request stays
+// until teardown and would count against their open-request limit.
+export async function createInteractiveLoans(
+  client: PrismaClient,
+  {
+    tag,
+    ownerEmail,
+    seedBorrowerEmail,
+    today,
+  }: {
+    tag: string;
+    ownerEmail: string;
+    seedBorrowerEmail: string;
+    today: string;
+  },
+): Promise<InteractiveLoans> {
+  const owner = await client.user.findUnique({
+    where: { email: ownerEmail },
+    select: { id: true },
+  });
+  const borrower = await client.user.findFirst({
+    where: {
+      email: {
+        in: SEED_PEOPLE.map((person) => person.email).filter(
+          (email) => email !== ownerEmail && email !== seedBorrowerEmail,
+        ),
+      },
+      role: "member",
+      status: "active",
+      contactDetails: { not: null },
+    },
+    orderBy: { email: "asc" },
+    select: { id: true },
+  });
+  const category = await client.category.findUnique({
+    where: { nameKey: categoryNameKey(PRODUCTION_CATEGORIES[0]) },
+    select: { id: true },
+  });
+  if (!owner || !borrower || !category) {
+    return {
+      fix: `No other active seed member with contact details to borrow. Run: ${SEED}`,
+    };
+  }
+  const item = await client.item.create({
+    data: {
+      ownerId: owner.id,
+      categoryId: category.id,
+      title: interactiveItemTitle(tag),
+      description: "",
+      condition: "good",
+      maxLoanDays: 7,
+    },
+    select: { id: true },
+  });
+  const loan = (status: LoanStatus, start: number) =>
+    client.loan.create({
+      data: {
+        itemId: item.id,
+        borrowerId: borrower.id,
+        status,
+        startDate: toDbDay(addDays(today, start)),
+        endDate: toDbDay(addDays(today, start + 2)),
+      },
+      select: { id: true },
+    });
+  const request = await loan("requested", 20);
+  const approved = await loan("approved", 30);
+  return { requestLoanId: request.id, approvedLoanId: approved.id };
+}
+
+const toDbDay = (date: string) => new Date(`${date}T00:00:00.000Z`);
 
 const runUsers = (tag: string) => ({ email: { startsWith: `${tag}-` } });
 const runItems = (tag: string) => ({

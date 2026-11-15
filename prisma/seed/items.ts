@@ -12,8 +12,9 @@ export type SeedItem = {
 
 const owner = (local: string) => `${local}@${SEED_EMAIL_DOMAIN}`;
 
-// Hidden with no photo until spec 11 gives them placeholders (OQ-15). Every
-// category is used and every seed person owns one, the suspended one included.
+// Created Hidden; seedPhotos gives them the flat-colour placeholders, which
+// are the demo photos (OQ-15, decided). Every category is used and every seed
+// person owns one, the suspended one included.
 export const SEED_ITEMS: readonly SeedItem[] = [
   {
     ownerEmail: owner("ruth"),

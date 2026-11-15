@@ -4,8 +4,10 @@ import {
   cleanupRun,
   countLoansOnItem,
   countRunRows,
+  createInteractiveLoans,
   missingPrerequisite,
   noEligibleBorrower,
+  pickInteractiveTargets,
   pickResponsiveTargets,
   pickSeedBorrower,
 } from "./db";
@@ -30,6 +32,22 @@ const commands: Record<
   },
   "responsive-targets"(client, { organizerEmail, today }) {
     return pickResponsiveTargets(client, String(organizerEmail), String(today));
+  },
+  "interactive-targets"(client, { organizerEmail, memberEmail, tag, today }) {
+    return pickInteractiveTargets(client, {
+      organizerEmail: String(organizerEmail),
+      memberEmail: String(memberEmail),
+      tag: String(tag),
+      today: String(today),
+    });
+  },
+  "interactive-loans"(client, { tag, ownerEmail, seedBorrowerEmail, today }) {
+    return createInteractiveLoans(client, {
+      tag: String(tag),
+      ownerEmail: String(ownerEmail),
+      seedBorrowerEmail: String(seedBorrowerEmail),
+      today: String(today),
+    });
   },
   async "count-loans"(client, { itemId }) {
     return { count: await countLoansOnItem(client, String(itemId)) };
