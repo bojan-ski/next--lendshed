@@ -346,9 +346,8 @@ for (const entry of RESPONSIVE_PAGES) {
   });
 }
 
-// F25-2 (spec 01's SkipLink): `focus:not-sr-only` resets padding, so the
-// focused link is 158 × 26. Remove the mark when fix/skip-link-target lands.
-test.fail("elements shown only on focus are target-sized (F25-2)", () => {
+// F25-2 was the skip link losing its padding to `focus:not-sr-only` (158 × 26).
+test("elements shown only on focus are target-sized", () => {
   expect([...appearingOnFocus]).toEqual([]);
 });
 
