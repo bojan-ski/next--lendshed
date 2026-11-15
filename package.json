@@ -10,6 +10,8 @@
     "typecheck": "prisma generate && next typegen && tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
+    "test:ui": "vitest run --project islands",
+    "test:server": "vitest run --project server",
     "e2e": "playwright test",
     "db:generate": "prisma generate",
     "db:bootstrap": "tsx scripts/bootstrap-organizer.ts",
