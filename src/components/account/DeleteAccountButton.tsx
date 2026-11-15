@@ -89,19 +89,17 @@ export default function DeleteAccountButton({
         </ul>
       </div>
       <input type="hidden" name="confirm" value="true" />
-      <div className="flex gap-2">
+      <div className="flex flex-col gap-2 sm:flex-row">
         <Button
           ref={confirm}
           type="submit"
           variant="outline"
           aria-describedby={questionId}
-          className="max-sm:flex-1"
         >
           {account.deleteConfirmButton}
         </Button>
         <Button
           variant="outline"
-          className="max-sm:flex-1"
           onClick={() => {
             kept.current = true;
             setConfirming(false);

@@ -104,18 +104,12 @@ export default function OrganizerRetireForm({
           />
         )}
       </Field>
-      <div className="flex gap-2">
-        <Button
-          type="submit"
-          variant="outline"
-          aria-describedby={questionId}
-          className="max-sm:flex-1"
-        >
+      <div className="flex flex-col gap-2 sm:flex-row">
+        <Button type="submit" variant="outline" aria-describedby={questionId}>
           {items.retireConfirmButton}
         </Button>
         <Button
           variant="outline"
-          className="max-sm:flex-1"
           onClick={() => {
             kept.current = true;
             setConfirming(false);

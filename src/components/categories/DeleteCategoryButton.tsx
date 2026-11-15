@@ -92,19 +92,19 @@ export default function DeleteCategoryButton({
         {t(categories.deleteConfirm, { name: category.name })}
       </p>
       <input type="hidden" name="id" value={category.id} />
-      <div className="flex gap-2">
+      <div className="flex flex-col gap-2 sm:flex-row">
         <Button
           ref={confirm}
           type="submit"
           variant="outline"
           aria-describedby={questionId}
-          className="max-lg:flex-1"
+          className="sm:max-lg:flex-1"
         >
           {categories.deleteConfirmButton}
         </Button>
         <Button
           variant="outline"
-          className="max-lg:flex-1"
+          className="sm:max-lg:flex-1"
           onClick={() => {
             kept.current = true;
             setConfirming(false);

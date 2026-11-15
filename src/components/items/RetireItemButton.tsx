@@ -94,19 +94,17 @@ export default function RetireItemButton({
         {t(items.retireConfirm, { title })}
       </p>
       <input type="hidden" name="id" value={itemId} />
-      <div className="flex gap-2">
+      <div className="flex flex-col gap-2 sm:flex-row">
         <Button
           ref={confirm}
           type="submit"
           variant="outline"
           aria-describedby={questionId}
-          className="max-sm:flex-1"
         >
           {items.retireConfirmButton}
         </Button>
         <Button
           variant="outline"
-          className="max-sm:flex-1"
           onClick={() => {
             kept.current = true;
             setConfirming(false);

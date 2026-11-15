@@ -63,17 +63,16 @@ export default function ReasonConfirmStep({
           />
         )}
       </Field>
-      <div className="flex gap-2">
+      <div className="flex flex-col gap-2 sm:flex-row">
         <Button
           ref={confirmRef}
           type="submit"
           variant="outline"
           aria-describedby={questionId}
-          className="max-sm:flex-1"
         >
           {confirmLabel}
         </Button>
-        <Button variant="outline" className="max-sm:flex-1" onClick={onKeep}>
+        <Button variant="outline" onClick={onKeep}>
           {loanActions.keep}
         </Button>
       </div>
