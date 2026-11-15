@@ -45,7 +45,7 @@ describe("NewInvitationForm", () => {
     const heading = await screen.findByRole("heading", {
       name: t(oneTimeLink.headingFor, { note: "Mira, no. 14" }),
     });
-    expect(heading).toHaveFocus();
+    await vi.waitFor(() => expect(heading).toHaveFocus());
     expect(screen.getByLabelText(oneTimeLink.fieldLabel)).toHaveValue(URL_);
     expect(screen.getByLabelText(oneTimeLink.fieldLabel)).toHaveAttribute(
       "readonly",
@@ -68,7 +68,7 @@ describe("NewInvitationForm", () => {
       await screen.findByText(invitations.noteTooLong),
     ).toBeInTheDocument();
     expect(note).toHaveValue("Mira, no. 14");
-    expect(note).toHaveFocus();
+    await vi.waitFor(() => expect(note).toHaveFocus());
     expect(screen.queryByText(oneTimeLink.warning)).toBeNull();
   });
 
