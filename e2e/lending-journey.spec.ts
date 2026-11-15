@@ -339,7 +339,7 @@ test("13 · the lender marks it as back", async () => {
     .getByLabel(loanActions.backOn, { exact: true })
     .fill(communityToday());
   await page
-    .getByRole("group", { name: loanActions.asLentLegend })
+    .getByRole("radiogroup", { name: loanActions.asLentLegend })
     .getByRole("radio", { name: loanActions.asLentYes })
     .check();
   await page.getByRole("button", { name: loanActions.markBack }).click();
