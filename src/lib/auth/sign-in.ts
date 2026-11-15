@@ -3,6 +3,7 @@ import { parseSetCookieHeader, toCookieOptions } from "better-auth/cookies";
 import { cookies, headers } from "next/headers";
 import { auth } from "@/lib/auth/auth";
 import { env } from "@/lib/env/server";
+import { reportUnexpected } from "@/lib/feedback/report";
 import type { ChangePasswordError } from "@/types/account";
 import type { SignInFormError } from "@/types/auth";
 
@@ -46,7 +47,8 @@ export async function forwardSignIn(
       "x-forwarded-for",
       "user-agent",
     ]);
-  } catch {
+  } catch (error) {
+    reportUnexpected("signIn", error);
     return "unexpected";
   }
 
@@ -63,6 +65,7 @@ export async function forwardSignIn(
   if (response.status === 403 && code === "ACCOUNT_SUSPENDED") {
     return "suspended";
   }
+  reportStatus("signIn", response.status, code);
   return "unexpected";
 }
 
@@ -79,7 +82,8 @@ export async function forwardChangePassword(
       { currentPassword, newPassword, revokeOtherSessions: true },
       ["x-forwarded-for", "user-agent", "cookie"],
     );
-  } catch {
+  } catch (error) {
+    reportUnexpected("changePassword", error);
     return "unexpected";
   }
 
@@ -88,13 +92,22 @@ export async function forwardChangePassword(
     return null;
   }
   if (response.status === 429) return "tooManyAttempts";
-  if (
-    response.status === 400 &&
-    (await errorCode(response)) === "INVALID_PASSWORD"
-  ) {
+  const code = await errorCode(response);
+  if (response.status === 400 && code === "INVALID_PASSWORD") {
     return "invalidCurrentPassword";
   }
+  reportStatus("changePassword", response.status, code);
   return "unexpected";
+}
+
+// An unexpected library response: its status and error code only, never the
+// request body (it carries the password).
+function reportStatus(
+  action: string,
+  status: number,
+  code: string | undefined,
+) {
+  console.error(`${action}: unexpected`, { status, code });
 }
 
 async function errorCode(response: Response): Promise<string | undefined> {
