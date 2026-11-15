@@ -43,8 +43,8 @@ export default function MarkReturnedForm({
   const notice = useRef<HTMLDivElement>(null);
   const asLentError = state.fieldErrors?.asLent?.[0];
 
-  // A radio can't carry aria-invalid, so the group's first radio is found by
-  // name; the date comes first when both are wrong.
+  // A radio can't carry aria-invalid (the radiogroup does), so the group's
+  // first radio is found by name; the date comes first when both are wrong.
   useEffect(() => {
     if (state === initialState) return;
     if (state.formError) notice.current?.focus();
@@ -87,6 +87,8 @@ export default function MarkReturnedForm({
         )}
       </Field>
       <fieldset
+        role="radiogroup"
+        aria-invalid={asLentError ? true : undefined}
         aria-describedby={asLentError ? AS_LENT_ERROR_ID : undefined}
         className="flex flex-col gap-1.5"
       >

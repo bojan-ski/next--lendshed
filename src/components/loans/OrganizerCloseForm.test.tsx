@@ -74,8 +74,8 @@ describe("OrganizerCloseForm", () => {
       expect(radio(label)).not.toBeRequired();
     }
     expect(
-      screen.getByRole("group", { name: loanActions.asLentLegend }),
-    ).toBeInTheDocument();
+      screen.getByRole("radiogroup", { name: loanActions.asLentLegend }),
+    ).not.toHaveAttribute("aria-invalid");
     expect(dateInput()).toHaveAttribute("type", "date");
     expect(dateInput()).toHaveAttribute("min", MIN);
     expect(dateInput()).toHaveAttribute("max", MAX);
@@ -119,7 +119,7 @@ describe("OrganizerCloseForm", () => {
     expect(dateInput()).toHaveValue("2030-06-09");
   });
 
-  test("a missing answer before a note error focuses the first radio", async () => {
+  test("a missing answer before a note error focuses the first radio; the group is invalid", async () => {
     refuseWith({
       fieldErrors: {
         asLent: [loanActions.asLentRequiredClose],
@@ -132,9 +132,11 @@ describe("OrganizerCloseForm", () => {
 
     await screen.findByText(loanActions.asLentRequiredClose);
     await vi.waitFor(() => expect(radio(loanActions.asLentYes)).toHaveFocus());
-    expect(
-      screen.getByRole("group", { name: loanActions.asLentLegend }),
-    ).toHaveAccessibleDescription(loanActions.asLentRequiredClose);
+    const group = screen.getByRole("radiogroup", {
+      name: loanActions.asLentLegend,
+    });
+    expect(group).toHaveAttribute("aria-invalid", "true");
+    expect(group).toHaveAccessibleDescription(loanActions.asLentRequiredClose);
   });
 
   test("a note error alone focuses the note; the echoed answer is checked", async () => {

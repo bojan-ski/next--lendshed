@@ -63,8 +63,8 @@ describe("MarkReturnedForm", () => {
     expect(radio(loanActions.asLentNo)).not.toBeChecked();
     expect(radio(loanActions.asLentYes)).not.toBeRequired();
     expect(
-      screen.getByRole("group", { name: loanActions.asLentLegend }),
-    ).toBeInTheDocument();
+      screen.getByRole("radiogroup", { name: loanActions.asLentLegend }),
+    ).not.toHaveAttribute("aria-invalid");
   });
 
   test("submits the id, the date and the answer", async () => {
@@ -95,7 +95,7 @@ describe("MarkReturnedForm", () => {
     expect(radio(loanActions.asLentYes)).toBeChecked();
   });
 
-  test("a missing answer focuses the first radio; the group describes the error", async () => {
+  test("a missing answer focuses the first radio; the group is invalid and describes the error", async () => {
     refuseWith({
       fieldErrors: { asLent: [loanActions.asLentRequired] },
       values: { returnedOn: "2030-06-14", asLent: "" },
@@ -105,9 +105,11 @@ describe("MarkReturnedForm", () => {
 
     await screen.findByText(loanActions.asLentRequired);
     await vi.waitFor(() => expect(radio(loanActions.asLentYes)).toHaveFocus());
-    expect(
-      screen.getByRole("group", { name: loanActions.asLentLegend }),
-    ).toHaveAccessibleDescription(loanActions.asLentRequired);
+    const group = screen.getByRole("radiogroup", {
+      name: loanActions.asLentLegend,
+    });
+    expect(group).toHaveAttribute("aria-invalid", "true");
+    expect(group).toHaveAccessibleDescription(loanActions.asLentRequired);
     expect(dateInput()).toHaveValue("2030-06-14");
   });
 

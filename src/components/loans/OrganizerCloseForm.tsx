@@ -90,6 +90,8 @@ export default function OrganizerCloseForm({
         )}
       </Field>
       <fieldset
+        role="radiogroup"
+        aria-invalid={asLentError ? true : undefined}
         aria-describedby={asLentError ? AS_LENT_ERROR_ID : undefined}
         className="flex flex-col gap-1.5"
       >
