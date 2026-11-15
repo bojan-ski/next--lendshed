@@ -15,7 +15,7 @@ export const loanActions = {
   asLentRequired: "Choose Yes or No.",
   headingClose: "Close this loan",
   closeWhen:
-    "Use this only when the owner can't mark it as back: their account is paused, they can't be reached, or the two of them disagree. Both people on the loan see your note.",
+    "Use this only when the owner can't mark it as back: their account is suspended, they can't be reached, or the two of them disagree. Both people on the loan see your note.",
   asLentUnknown: "Not known",
   asLentRequiredClose: "Choose Yes, No or Not known.",
   noteLabel: "Note",
