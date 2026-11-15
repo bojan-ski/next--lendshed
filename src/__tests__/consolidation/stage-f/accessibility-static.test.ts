@@ -20,9 +20,7 @@ import {
 
 // Findings against app code (spec 25 "Handling findings"): each cell stays a
 // failing test until its fix/ branch lands and removes the mark.
-const FINDINGS: Record<string, string> = {
-  "src/components/feedback/RouteError.tsx": "F25-1",
-};
+const FINDINGS: Record<string, string> = {};
 
 type ClassList = { file: string; line: number; tokens: string[] };
 

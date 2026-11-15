@@ -13,11 +13,7 @@ export default function RouteError({ retry }: { retry: () => void }) {
   return (
     <Notice tone="error" alert={false}>
       <div className="flex flex-col items-start gap-3">
-        <h1
-          ref={heading}
-          tabIndex={-1}
-          className="font-bold focus:outline-none"
-        >
+        <h1 ref={heading} tabIndex={-1} className="font-bold">
           {errors.somethingWentWrong}
         </h1>
         <Button variant="outline" onClick={() => retry()}>
