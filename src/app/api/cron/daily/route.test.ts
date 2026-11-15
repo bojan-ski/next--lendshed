@@ -120,12 +120,14 @@ describe("/api/cron/daily — static", () => {
     );
   });
 
-  test("vercel.json holds exactly one cron: this route, daily at 02:00 UTC", () => {
+  test("vercel.json holds exactly one cron: this route, daily at 02:00 UTC, in fra1", () => {
     const config = JSON.parse(
       readFileSync(path.join(REPO_ROOT, "vercel.json"), "utf8"),
     );
     const url = `/${path.posix.dirname(ROUTE).replace(/^src\/app\//, "")}`;
+    // Hobby allows one function region; Frankfurt sits beside Neon (OQ-03).
     expect(config).toEqual({
+      regions: ["fra1"],
       crons: [{ path: url, schedule: "0 2 * * *" }],
     });
     expect(url).toBe("/api/cron/daily");
