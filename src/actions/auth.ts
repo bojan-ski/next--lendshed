@@ -6,6 +6,7 @@ import { z } from "zod";
 import { auth } from "@/lib/auth/auth";
 import { requireViewer } from "@/lib/auth/guards";
 import { copySetCookies, forwardSignIn } from "@/lib/auth/sign-in";
+import { reportUnexpected } from "@/lib/feedback/report";
 import { signInSchema } from "@/lib/schemas/auth";
 import type { SignInState } from "@/types/auth";
 
@@ -36,10 +37,17 @@ export async function signIn(
 
 export async function signOut(): Promise<void> {
   await requireViewer();
-  const { headers: responseHeaders } = await auth.api.signOut({
-    headers: await headers(),
-    returnHeaders: true,
-  });
-  await copySetCookies(responseHeaders);
+  try {
+    const { headers: responseHeaders } = await auth.api.signOut({
+      headers: await headers(),
+      returnHeaders: true,
+    });
+    await copySetCookies(responseHeaders);
+  } catch (error) {
+    // Still signed in on the server, so no redirect: the error surface offers
+    // Try again.
+    reportUnexpected("signOut", error);
+    throw error;
+  }
   redirect("/login");
 }

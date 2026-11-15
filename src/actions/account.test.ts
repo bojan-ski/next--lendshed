@@ -452,11 +452,25 @@ describe("changePassword", () => {
     expect(await scope.sessionsOf(viewer.id)).toHaveLength(1);
   });
 
+  test("a library throw is unexpected and reported", async () => {
+    await actAs();
+    const error = new Error("boom");
+    vi.spyOn(auth, "handler").mockRejectedValue(error);
+
+    const state = await changePassword(
+      idlePassword,
+      form({ currentPassword: "whatever-old", newPassword: NEW_PASSWORD }),
+    );
+
+    expect(state).toEqual({ formError: "unexpected" });
+    expect(reportUnexpected).toHaveBeenCalledWith("changePassword", error);
+  });
+
   test.each([
-    ["a library throw", () => Promise.reject(new Error("boom"))],
     [
       "a 401 (the session vanished mid-request)",
       () => Promise.resolve(new Response("{}", { status: 401 })),
+      { status: 401, code: undefined },
     ],
     [
       "a 400 with another code",
@@ -464,18 +478,29 @@ describe("changePassword", () => {
         Promise.resolve(
           Response.json({ code: "PASSWORD_TOO_SHORT" }, { status: 400 }),
         ),
+      { status: 400, code: "PASSWORD_TOO_SHORT" },
     ],
-  ])("%s is unexpected", async (_label, reply) => {
-    await actAs();
-    vi.spyOn(auth, "handler").mockImplementation(reply);
+  ])(
+    "%s is unexpected and logged once, without the passwords",
+    async (_label, reply, logLine) => {
+      await actAs();
+      vi.spyOn(auth, "handler").mockImplementation(reply);
+      const logged = vi.spyOn(console, "error").mockImplementation(() => {});
 
-    const state = await changePassword(
-      idlePassword,
-      form({ currentPassword: "whatever", newPassword: NEW_PASSWORD }),
-    );
+      const state = await changePassword(
+        idlePassword,
+        form({ currentPassword: "whatever-old", newPassword: NEW_PASSWORD }),
+      );
 
-    expect(state).toEqual({ formError: "unexpected" });
-  });
+      expect(state).toEqual({ formError: "unexpected" });
+      expect(logged.mock.calls).toEqual([
+        ["changePassword: unexpected", logLine],
+      ]);
+      const text = JSON.stringify(logged.mock.calls);
+      expect(text).not.toContain("whatever-old");
+      expect(text).not.toContain(NEW_PASSWORD);
+    },
+  );
 
   test("no state ever carries a password", async () => {
     const viewer = await actAs();

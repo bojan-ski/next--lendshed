@@ -248,17 +248,33 @@ describe("signIn", () => {
     expect(rows.some((row) => row.key.startsWith(`${ip}|`))).toBe(true);
   });
 
-  test("a thrown library error is reported as unexpected", async () => {
+  // The operator's log line carries neither the email nor the password.
+  const expectLoggedOnce = (
+    logged: ReturnType<typeof vi.spyOn>,
+    payload: unknown,
+  ) => {
+    expect(logged.mock.calls).toEqual([["signIn: unexpected", payload]]);
+    const text = JSON.stringify(logged.mock.calls);
+    expect(text).not.toContain("mira@example.com");
+    expect(text).not.toContain("secret-password");
+  };
+
+  test("a thrown library error is reported as unexpected and logged", async () => {
     mockNextRequest({ ip: scope.ip() });
     vi.spyOn(auth, "handler").mockRejectedValue(new Error("boom"));
+    const logged = vi.spyOn(console, "error").mockImplementation(() => {});
     const state = await signIn(
       idle,
-      form({ email: "mira@example.com", password: "x" }),
+      form({ email: "mira@example.com", password: "secret-password" }),
     );
     expect(state).toEqual({
       formError: "unexpected",
       email: "mira@example.com",
     });
+    expectLoggedOnce(
+      logged,
+      expect.objectContaining({ name: "Error", message: "boom" }),
+    );
   });
 
   test.each([
@@ -266,19 +282,33 @@ describe("signIn", () => {
     [403, { code: "INVALID_ORIGIN" }],
     [401, { code: "FAILED_TO_CREATE_SESSION" }],
   ])(
-    "a %i response with %o is reported as unexpected",
+    "a %i response with %o is reported as unexpected and logged",
     async (status, body) => {
       mockNextRequest({ ip: scope.ip() });
       vi.spyOn(auth, "handler").mockResolvedValue(
         Response.json(body, { status }),
       );
+      const logged = vi.spyOn(console, "error").mockImplementation(() => {});
       const state = await signIn(
         idle,
-        form({ email: "mira@example.com", password: "x" }),
+        form({ email: "mira@example.com", password: "secret-password" }),
       );
       expect(state.formError).toBe("unexpected");
+      expectLoggedOnce(logged, { status, code: body.code });
     },
   );
+
+  test("an expected refusal writes no log line", async () => {
+    const user = await scope.createTestUser();
+    mockNextRequest({ ip: scope.ip() });
+    const logged = vi.spyOn(console, "error").mockImplementation(() => {});
+    const state = await signIn(
+      idle,
+      form({ email: user.email, password: "not-the-password" }),
+    );
+    expect(state.formError).toBe("invalidCredentials");
+    expect(logged).not.toHaveBeenCalled();
+  });
 });
 
 describe("signOut", () => {
@@ -324,6 +354,27 @@ describe("signOut", () => {
     expect(deleteMany).not.toHaveBeenCalled();
     expect(del).not.toHaveBeenCalled();
     expect(await scope.sessionsOf(user.id)).toHaveLength(1);
+  });
+
+  test("a library failure is logged and rethrown: no redirect, the session stays", async () => {
+    const user = await scope.createTestUser();
+    const ip = scope.ip();
+    const token = await signInForCookie({ ...user, ip });
+    mockNextRequest({ ip, cookies: { [SESSION_COOKIE]: token } });
+    const failure = new Error("boom");
+    vi.spyOn(auth.api, "signOut").mockRejectedValue(failure);
+    const logged = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    await expect(signOut()).rejects.toBe(failure);
+
+    expect(logged.mock.calls).toEqual([
+      [
+        "signOut: unexpected",
+        expect.objectContaining({ name: "Error", message: "boom" }),
+      ],
+    ]);
+    expect(await scope.sessionsOf(user.id)).toHaveLength(1);
+    expect(readCookie(SESSION_COOKIE)).toBe(token);
   });
 
   test("a suspended member's leftover session is not deleted", async () => {
