@@ -3,6 +3,7 @@ import { NextRequest } from "next/server";
 import { createElement, isValidElement, Suspense, type ReactNode } from "react";
 import { readSource, sourceFiles } from "@/__tests__/support/import-graph";
 import { mockNextRequest } from "@/__tests__/support/next-request";
+import { GUARDING_LAYOUTS, guardChain } from "@/__tests__/support/route-guards";
 import { routePattern, routeUrl } from "@/__tests__/support/routeParams";
 import AdminLayout from "@/app/(app)/admin/layout";
 import AppLayout from "@/app/(app)/layout";
@@ -21,43 +22,9 @@ vi.mock(
     (await import("@/__tests__/support/next-request")).nextHeadersModule,
 );
 
-type Guard = "none" | "viewerGate" | "requireOrganizer";
-
-// The layouts that guard a route group, and the call each must contain. A page is
-// classified by the nearest of these above it; a page under none of them fails.
-const GUARDING_LAYOUTS: Record<
-  string,
-  { guard: Guard; marker: string | null }
-> = {
-  "src/app/(public)/layout.tsx": { guard: "none", marker: null },
-  "src/app/(app)/layout.tsx": { guard: "viewerGate", marker: "<ViewerGate>" },
-  "src/app/(app)/admin/layout.tsx": {
-    guard: "requireOrganizer",
-    marker: "<OrganizerGate>",
-  },
-};
-
 const PAGE_COUNT = 20;
 const ORIGIN = "http://localhost:3000";
 const SEARCH = "?probe=1";
-
-// Every guarding layout above the page, nearest first.
-function guardChain(pageFile: string, layouts: Iterable<string>): Guard[] {
-  const known = new Set(layouts);
-  const chain: Guard[] = [];
-  let dir = pageFile.slice(0, pageFile.lastIndexOf("/"));
-  while (dir.startsWith("src/app")) {
-    const layout = `${dir}/layout.tsx`;
-    if (known.has(layout) && layout in GUARDING_LAYOUTS) {
-      chain.push(GUARDING_LAYOUTS[layout].guard);
-    }
-    dir = dir.slice(0, dir.lastIndexOf("/"));
-  }
-  if (chain.length === 0) {
-    throw new Error(`${pageFile} sits under no guarding layout`);
-  }
-  return chain;
-}
 
 const pageFiles = sourceFiles("src/app/**/page.tsx");
 const layoutFiles = sourceFiles("src/app/**/layout.tsx");

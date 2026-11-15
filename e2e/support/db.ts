@@ -1,4 +1,4 @@
-import type { PrismaClient } from "@/generated/prisma/client";
+import type { LoanStatus, PrismaClient } from "@/generated/prisma/client";
 import { PRODUCTION_CATEGORIES } from "@/lib/categories/production";
 import { categoryNameKey } from "@/lib/categories/name";
 import { effectiveStatus } from "@/lib/dates/effective-status";
@@ -10,6 +10,7 @@ import {
 } from "@/lib/storage/disk";
 import { REQUIRED_MIGRATIONS } from "@/__tests__/support/required-migrations";
 import { SEED_EMAIL_DOMAIN, SEED_PEOPLE } from "../../prisma/seed/people";
+import { REVIEW_LOANS, reviewLoanMarker } from "../../prisma/seed/review-loans";
 import { seedOrganizer } from "./run";
 
 // Loaded only in the tsx child (db-cli.ts): the generated client can't load
@@ -93,6 +94,119 @@ export async function pickSeedBorrower(
 
 export const noEligibleBorrower = () =>
   `No active seed member with contact details has room for a request. Run: ${SEED}`;
+
+export type ResponsiveTargets =
+  | {
+      memberEmail: string;
+      params: Record<string, Record<string, string>>;
+      // The chosen loan's seen-at values, compared after the sweep: an
+      // organizer who is no party must never write them.
+      loanSeenAt: { owner: string | null; borrower: string | null };
+    }
+  | { fix: string };
+
+const BLOCKS_RETIRE = new Set(["approved", "out", "overdue"]);
+
+// The ids the 360 px sweep visits (spec 25), chosen by role and data, never by
+// name. Read-only.
+export async function pickResponsiveTargets(
+  client: PrismaClient,
+  organizerEmail: string,
+  today: string,
+): Promise<ResponsiveTargets> {
+  const seedEmails = SEED_PEOPLE.map((person) => person.email);
+  const members = await client.user.findMany({
+    where: { email: { in: seedEmails }, role: "member", status: "active" },
+    orderBy: { email: "asc" },
+    select: {
+      id: true,
+      email: true,
+      itemsOwned: {
+        where: { status: { not: "retired" } },
+        orderBy: { id: "asc" },
+        select: {
+          id: true,
+          loans: { select: { status: true, startDate: true, endDate: true } },
+        },
+      },
+    },
+  });
+  // Its Edit page then offers Delete or Retire.
+  const free = (
+    loans: { status: LoanStatus; startDate: Date; endDate: Date }[],
+  ) =>
+    loans.every(
+      (loan) =>
+        !BLOCKS_RETIRE.has(
+          effectiveStatus(
+            {
+              status: loan.status,
+              startDate: fromDbDate(loan.startDate),
+              endDate: fromDbDate(loan.endDate),
+            },
+            today,
+          ),
+        ),
+    );
+  const member = members.find(({ itemsOwned }) =>
+    itemsOwned.some(({ loans }) => free(loans)),
+  );
+  if (!member) {
+    return {
+      fix: `No active seed member owns an item free of approved or out loans. Run: ${SEED}`,
+    };
+  }
+  const ownItem = member.itemsOwned.find(({ loans }) => free(loans))!;
+
+  const listed = await client.item.findFirst({
+    where: {
+      status: "listed",
+      ownerId: { not: member.id },
+      owner: { email: { in: seedEmails }, status: "active" },
+    },
+    orderBy: { id: "asc" },
+    select: { id: true, ownerId: true },
+  });
+  if (!listed?.ownerId) {
+    return {
+      fix: `No other active seed member has a Listed item. Run: ${SEED}`,
+    };
+  }
+
+  const organizer = await client.user.findUnique({
+    where: { email: organizerEmail },
+    select: { id: true },
+  });
+  const loan = await client.loan.findFirst({
+    where: {
+      requestMessage: {
+        in: REVIEW_LOANS.map(({ kind }) => reviewLoanMarker(kind)),
+      },
+      borrowerId: { not: organizer?.id },
+      item: { ownerId: { not: organizer?.id } },
+    },
+    orderBy: { id: "asc" },
+    select: { id: true, ownerSeenAt: true, borrowerSeenAt: true },
+  });
+  if (!organizer || !loan) {
+    return { fix: `No review loan without the seed organizer. Run: ${SEED}` };
+  }
+
+  return {
+    memberEmail: member.email,
+    params: {
+      "/my/items/[id]/edit": { id: ownItem.id },
+      "/items/[id]": { id: listed.id },
+      "/members/[id]": { id: listed.ownerId },
+      "/loans/[id]": { id: loan.id },
+      "/admin/members/[id]": { id: member.id },
+    },
+    loanSeenAt: {
+      owner: loan.ownerSeenAt?.toISOString() ?? null,
+      borrower: loan.borrowerSeenAt?.toISOString() ?? null,
+    },
+  };
+}
 
 export const countLoansOnItem = (client: PrismaClient, itemId: string) =>
   client.loan.count({ where: { itemId } });

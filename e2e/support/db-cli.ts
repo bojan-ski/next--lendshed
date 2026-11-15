@@ -6,6 +6,7 @@ import {
   countRunRows,
   missingPrerequisite,
   noEligibleBorrower,
+  pickResponsiveTargets,
   pickSeedBorrower,
 } from "./db";
 
@@ -26,6 +27,9 @@ const commands: Record<
     if (missing) return { fix: missing };
     const borrower = await pickSeedBorrower(client, String(today));
     return borrower ? { borrower } : { fix: noEligibleBorrower() };
+  },
+  "responsive-targets"(client, { organizerEmail, today }) {
+    return pickResponsiveTargets(client, String(organizerEmail), String(today));
   },
   async "count-loans"(client, { itemId }) {
     return { count: await countLoansOnItem(client, String(itemId)) };
