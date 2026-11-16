@@ -7,6 +7,10 @@ import { members } from "@/strings/members";
 
 export const metadata: Metadata = { title: members.title };
 
+// A member gets notFound() from the layout gate, which stops dev-time instant
+// validation and logs a console error (spec 27, W-05).
+export const instant = false;
+
 export default function MembersPage({
   searchParams,
 }: PageProps<"/admin/members">) {

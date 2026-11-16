@@ -8,6 +8,10 @@ import { categories } from "@/strings/categories";
 
 export const metadata: Metadata = { title: categories.title };
 
+// A member gets notFound() from the layout gate, which stops dev-time instant
+// validation and logs a console error (spec 27, W-05).
+export const instant = false;
+
 export default function CategoriesPage() {
   return (
     <div className="flex flex-col gap-6">

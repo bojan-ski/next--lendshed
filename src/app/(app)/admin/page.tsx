@@ -6,6 +6,10 @@ import { admin } from "@/strings/admin";
 
 export const metadata: Metadata = { title: admin.title };
 
+// A member gets notFound() from the layout gate, which stops dev-time instant
+// validation and logs a console error (spec 27, W-05).
+export const instant = false;
+
 // Static links only: no organizer data, so the layout's guard is enough here.
 export default function AdminPage() {
   return (
