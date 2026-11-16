@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { MY_ITEMS_HEADING_ID } from "@/components/items/ids";
 import ButtonLink from "@/components/ui/ButtonLink";
 import Card from "@/components/ui/Card";
@@ -25,7 +26,8 @@ function NowLine({ now }: { now: OwnItemRowDTO["now"] }) {
 }
 
 // A table from 1024 px; below that each row stacks: thumbnail and title, then
-// the label and the Now line, then a full-width Edit or View link.
+// the label and the Now line, then a full-width Edit or View link. A listed
+// item's title opens its page, as neighbours see it.
 export default function OwnItemsTable({ rows }: { rows: OwnItemRowDTO[] }) {
   return (
     <Card className="px-4">
@@ -69,9 +71,18 @@ export default function OwnItemsTable({ rows }: { rows: OwnItemRowDTO[] }) {
                     ) : (
                       <PhotoPlaceholder className="size-12 shrink-0 rounded-control" />
                     )}
-                    <span className="font-bold wrap-break-word">
-                      {row.title}
-                    </span>
+                    {row.status === "listed" ? (
+                      <Link
+                        href={`/items/${row.id}`}
+                        className="inline-flex min-h-11 items-center font-bold wrap-break-word text-accent underline underline-offset-4"
+                      >
+                        {row.title}
+                      </Link>
+                    ) : (
+                      <span className="font-bold wrap-break-word">
+                        {row.title}
+                      </span>
+                    )}
                   </span>
                 </th>
                 <td className={cell}>
