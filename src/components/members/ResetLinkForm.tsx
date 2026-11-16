@@ -3,6 +3,7 @@
 import { useActionState, useEffect, useRef } from "react";
 import { createResetLink } from "@/actions/members";
 import OneTimeLinkPanel from "@/components/feedback/OneTimeLinkPanel";
+import { useShownUntilHidden } from "@/components/feedback/one-time-link";
 import Button from "@/components/ui/Button";
 import Notice from "@/components/ui/Notice";
 import { errors } from "@/strings/errors";
@@ -20,6 +21,7 @@ const failureText: Record<NonNullable<ResetLinkState["formError"]>, string> = {
 // The link lives only in this state: shown once, replaced by the next create.
 export default function ResetLinkForm({ memberId }: { memberId: string }) {
   const [state, formAction] = useActionState(createResetLink, initialState);
+  const created = useShownUntilHidden(state.created);
   const notice = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -41,12 +43,8 @@ export default function ResetLinkForm({ memberId }: { memberId: string }) {
           {members.createResetLink}
         </Button>
       </form>
-      {state.created && (
-        <OneTimeLinkPanel
-          key={state.created.url}
-          link={state.created}
-          headingLevel={3}
-        />
+      {created && (
+        <OneTimeLinkPanel key={created.url} link={created} headingLevel={3} />
       )}
     </div>
   );

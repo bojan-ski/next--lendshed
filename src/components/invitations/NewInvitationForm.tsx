@@ -3,6 +3,7 @@
 import { useActionState, useEffect, useRef } from "react";
 import { createInvitation } from "@/actions/invitations";
 import OneTimeLinkPanel from "@/components/feedback/OneTimeLinkPanel";
+import { useShownUntilHidden } from "@/components/feedback/one-time-link";
 import Button from "@/components/ui/Button";
 import Card from "@/components/ui/Card";
 import Field from "@/components/ui/Field";
@@ -30,6 +31,7 @@ async function createAndEcho(
 
 export default function NewInvitationForm() {
   const [state, formAction] = useActionState(createAndEcho, initialState);
+  const created = useShownUntilHidden(state.created);
   const form = useRef<HTMLFormElement>(null);
   const notice = useRef<HTMLDivElement>(null);
 
@@ -82,9 +84,7 @@ export default function NewInvitationForm() {
           </Button>
         </form>
       </Card>
-      {state.created && (
-        <OneTimeLinkPanel key={state.created.url} link={state.created} />
-      )}
+      {created && <OneTimeLinkPanel key={created.url} link={created} />}
     </div>
   );
 }

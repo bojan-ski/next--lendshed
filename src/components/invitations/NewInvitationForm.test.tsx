@@ -1,3 +1,4 @@
+import { Activity, StrictMode } from "react";
 import { act, fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { createInvitation } from "@/actions/invitations";
@@ -87,6 +88,49 @@ describe("NewInvitationForm", () => {
     );
     expect(screen.queryByText(errors.actionFailed)).toBeNull();
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  });
+});
+
+// Cache Components keeps a left page in a hidden <Activity>, state and all.
+describe("NewInvitationForm after the page is left (spec 27, W-02)", () => {
+  function inActivity(mode: "visible" | "hidden") {
+    return (
+      <StrictMode>
+        <Activity mode={mode}>
+          <NewInvitationForm />
+        </Activity>
+      </StrictMode>
+    );
+  }
+
+  test("a created link is not shown again when the page comes back", async () => {
+    vi.mocked(createInvitation).mockResolvedValue({
+      created: { url: URL_, note: null },
+    });
+    const { rerender } = render(inActivity("visible"));
+    await userEvent.click(
+      screen.getByRole("button", { name: invitations.submit }),
+    );
+    expect(await screen.findByDisplayValue(URL_)).toBeInTheDocument();
+
+    rerender(inActivity("hidden"));
+    rerender(inActivity("visible"));
+
+    expect(screen.queryByDisplayValue(URL_)).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("heading", { name: oneTimeLink.heading }),
+    ).not.toBeInTheDocument();
+  });
+
+  test("under StrictMode a fresh link stays until the page is left", async () => {
+    vi.mocked(createInvitation).mockResolvedValue({
+      created: { url: URL_, note: null },
+    });
+    render(inActivity("visible"));
+    await userEvent.click(
+      screen.getByRole("button", { name: invitations.submit }),
+    );
+    expect(await screen.findByDisplayValue(URL_)).toBeInTheDocument();
   });
 });
 
