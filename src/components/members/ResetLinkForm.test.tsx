@@ -1,3 +1,4 @@
+import { Activity, StrictMode } from "react";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { createResetLink } from "@/actions/members";
@@ -22,6 +23,43 @@ const panelHeading = () =>
   });
 const createButton = () =>
   screen.getByRole("button", { name: members.createResetLink });
+
+// Cache Components keeps a left page in a hidden <Activity>, state and all.
+describe("ResetLinkForm after the page is left (spec 27, W-02)", () => {
+  function inActivity(mode: "visible" | "hidden") {
+    return (
+      <StrictMode>
+        <Activity mode={mode}>
+          <ResetLinkForm memberId="m-1" />
+        </Activity>
+      </StrictMode>
+    );
+  }
+
+  test("a created link is not shown again when the page comes back", async () => {
+    vi.mocked(createResetLink).mockResolvedValue({
+      created: { url: linkFor("B"), note: "Mira K." },
+    });
+    const { rerender } = render(inActivity("visible"));
+    await userEvent.click(createButton());
+    expect(
+      await screen.findByRole("heading", {
+        name: t(oneTimeLink.headingFor, { note: "Mira K." }),
+      }),
+    ).toBeInTheDocument();
+
+    rerender(inActivity("hidden"));
+    rerender(inActivity("visible"));
+
+    expect(screen.queryByDisplayValue(linkFor("B"))).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("heading", {
+        name: t(oneTimeLink.headingFor, { note: "Mira K." }),
+      }),
+    ).not.toBeInTheDocument();
+    expect(createButton()).toBeInTheDocument();
+  });
+});
 
 describe("ResetLinkForm", () => {
   test("sends the member id", async () => {
