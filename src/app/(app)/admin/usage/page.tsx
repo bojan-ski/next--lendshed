@@ -6,6 +6,10 @@ import { usage } from "@/strings/usage";
 
 export const metadata: Metadata = { title: usage.title };
 
+// A member gets notFound() from the layout gate, which stops dev-time instant
+// validation and logs a console error (spec 27, W-05).
+export const instant = false;
+
 export default function UsagePage() {
   return (
     <div className="flex flex-col gap-6">
