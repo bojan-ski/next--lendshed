@@ -5,6 +5,7 @@ import ItemFormSkeleton from "@/components/items/ItemFormSkeleton";
 import NewItemSection from "@/components/items/NewItemSection";
 import { Icon } from "@/components/ui/icons";
 import { backLinkClasses } from "@/components/ui/link-styles";
+import { app } from "@/strings/app";
 import { items } from "@/strings/items";
 
 export const metadata: Metadata = { title: items.newTitle };
@@ -18,7 +19,7 @@ export default function NewItemPage() {
         className={backLinkClasses}
       >
         <Icon name="arrow-left" aria-hidden />
-        {items.back}
+        {app.back}
       </Link>
       <h1 className="type-page-title">{items.newTitle}</h1>
       <Suspense fallback={<ItemFormSkeleton />}>

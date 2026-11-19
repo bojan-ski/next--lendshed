@@ -22,9 +22,9 @@ export default function ItemGridSkeleton({
       <div aria-hidden className="flex flex-col gap-4.5">
         {withFilters && (
           <>
-            <div className="flex flex-wrap gap-2.5">
+            <div className="-mx-4 flex gap-2.5 overflow-hidden px-4 py-1 sm:mx-0 sm:flex-wrap sm:px-0">
               {[0, 1, 2, 3, 4, 5].map((chip) => (
-                <div key={chip} className={`h-11 w-24 ${BLOCK}`} />
+                <div key={chip} className={`h-11 w-24 shrink-0 ${BLOCK}`} />
               ))}
             </div>
             <div className={`h-5 w-32 ${BLOCK}`} />

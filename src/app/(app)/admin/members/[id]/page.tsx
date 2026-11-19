@@ -5,6 +5,7 @@ import MemberDetailSection from "@/components/members/MemberDetailSection";
 import MemberDetailSkeleton from "@/components/members/MemberDetailSkeleton";
 import { Icon } from "@/components/ui/icons";
 import { backLinkClasses } from "@/components/ui/link-styles";
+import { app } from "@/strings/app";
 import { members } from "@/strings/members";
 
 export const metadata: Metadata = { title: members.detailTitle };
@@ -24,7 +25,7 @@ export default function MemberPage({
         className={backLinkClasses}
       >
         <Icon name="arrow-left" aria-hidden />
-        {members.back}
+        {app.back}
       </Link>
       <Suspense fallback={<MemberDetailSkeleton />}>
         <MemberDetailSection params={params} />

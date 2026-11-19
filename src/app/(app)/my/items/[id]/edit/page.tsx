@@ -5,6 +5,7 @@ import ItemEditSection from "@/components/items/ItemEditSection";
 import ItemEditSkeleton from "@/components/items/ItemEditSkeleton";
 import { Icon } from "@/components/ui/icons";
 import { backLinkClasses } from "@/components/ui/link-styles";
+import { app } from "@/strings/app";
 import { items } from "@/strings/items";
 
 export const metadata: Metadata = { title: items.editTitle };
@@ -20,7 +21,7 @@ export default function EditItemPage({
         className={backLinkClasses}
       >
         <Icon name="arrow-left" aria-hidden />
-        {items.back}
+        {app.back}
       </Link>
       <Suspense fallback={<ItemEditSkeleton />}>
         <ItemEditSection params={params} />
