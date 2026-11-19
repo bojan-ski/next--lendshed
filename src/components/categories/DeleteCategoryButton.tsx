@@ -77,7 +77,7 @@ export default function DeleteCategoryButton({
         ref={toggle}
         variant="outline"
         aria-label={t(categories.deleteFor, { name: category.name })}
-        className="max-lg:flex-1"
+        className="max-lg:w-full"
         onClick={() => setConfirming(true)}
       >
         {categories.delete}

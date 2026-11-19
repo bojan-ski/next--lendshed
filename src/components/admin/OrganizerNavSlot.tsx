@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { Suspense } from "react";
+import NavLabel from "@/components/shell/NavLabel";
 import NavLink from "@/components/shell/NavLink";
 import { navLinkClasses } from "@/components/shell/nav-styles";
 import { getViewer } from "@/data/viewer";
@@ -16,12 +17,12 @@ export default async function OrganizerNavSlot() {
       <Suspense
         fallback={
           <Link href="/admin" className={navLinkClasses(false)}>
-            {nav.organizer}
+            <NavLabel>{nav.organizer}</NavLabel>
           </Link>
         }
       >
         <NavLink href="/admin" activePrefixes={["/admin"]}>
-          {nav.organizer}
+          <NavLabel>{nav.organizer}</NavLabel>
         </NavLink>
       </Suspense>
     </li>

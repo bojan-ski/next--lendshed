@@ -93,7 +93,7 @@ export default async function MemberDetailSection({
         <div className="flex min-w-0 flex-col gap-2.5">
           <h1 className="type-page-title">{member.displayName}</h1>
           {/* A list, so the facts aren't read as one run-on sentence. */}
-          <ul className="flex flex-wrap items-center gap-x-3.5 gap-y-1.5 text-muted">
+          <ul className="flex flex-wrap items-center gap-x-3.5 gap-y-1.5 text-muted [&>li]:flex [&>li]:items-center [&>li+li]:before:mr-3.5 [&>li+li]:before:content-['·'_/_'']">
             <li>{members.role[member.role]}</li>
             <li>
               <StatusLabel status={memberStatus[member.status]} />

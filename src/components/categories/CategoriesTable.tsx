@@ -46,10 +46,10 @@ export default function CategoriesTable({
               </span>
             </th>
             <td className={row.cell}>
-              <div className="flex flex-wrap items-start gap-2 lg:justify-end">
+              <div className="flex flex-wrap items-center gap-2 lg:justify-end">
                 <RenameCategoryForm category={category} />
                 {category.inUse ? (
-                  <p className="flex h-11 min-w-18 items-center text-sm text-muted">
+                  <p className="flex items-center text-sm text-muted lg:h-12 lg:min-w-18">
                     {categories.inUse}
                   </p>
                 ) : (

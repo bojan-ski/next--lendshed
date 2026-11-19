@@ -23,7 +23,7 @@ export default function ItemGridSkeleton({
         {withFilters && (
           <>
             <div className="flex flex-wrap gap-2.5">
-              {[0, 1, 2, 3].map((chip) => (
+              {[0, 1, 2, 3, 4, 5].map((chip) => (
                 <div key={chip} className={`h-11 w-24 ${BLOCK}`} />
               ))}
             </div>
@@ -37,9 +37,11 @@ export default function ItemGridSkeleton({
               className="flex flex-col overflow-hidden rounded-tile bg-card"
             >
               <div className="aspect-square w-full bg-neutral-soft" />
-              <div className="flex flex-col gap-2 p-3.5">
+              {/* Title, category chip, owner line: the loaded card's body. */}
+              <div className="flex flex-col gap-1.5 px-4 pt-3.5 pb-4.5">
                 <div className={`h-6 ${BLOCK}`} />
-                <div className={`h-4 w-2/3 ${BLOCK}`} />
+                <div className={`h-5.5 w-16 ${BLOCK}`} />
+                <div className={`h-5 w-2/3 ${BLOCK}`} />
               </div>
             </div>
           ))}

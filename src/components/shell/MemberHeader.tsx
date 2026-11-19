@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { Suspense, type ReactNode } from "react";
 import Container from "@/components/shell/Container";
+import NavLabel from "@/components/shell/NavLabel";
 import NavLink from "@/components/shell/NavLink";
 import { navLinkClasses } from "@/components/shell/nav-styles";
 import Wordmark from "@/components/shell/Wordmark";
@@ -39,14 +40,14 @@ export default function MemberHeader({
           aria-label={nav.label}
           className="order-last w-full sm:order-none sm:w-auto"
         >
-          <ul className="flex flex-wrap items-center gap-1.5">
+          <ul className="-mx-2.5 flex flex-wrap items-center gap-1 sm:mx-0 sm:gap-1.5">
             {entries.map((entry) => (
               <li key={entry.href}>
                 {/* usePathname suspends on routes with unknown dynamic params. */}
                 <Suspense
                   fallback={
                     <Link href={entry.href} className={navLinkClasses(false)}>
-                      {entry.label}
+                      <NavLabel>{entry.label}</NavLabel>
                     </Link>
                   }
                 >
@@ -54,7 +55,7 @@ export default function MemberHeader({
                     href={entry.href}
                     activePrefixes={entry.activePrefixes}
                   >
-                    {entry.label}
+                    <NavLabel>{entry.label}</NavLabel>
                     {entry.badge}
                   </NavLink>
                 </Suspense>
