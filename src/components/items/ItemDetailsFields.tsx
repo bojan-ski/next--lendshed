@@ -40,52 +40,54 @@ export default function ItemDetailsFields({
           />
         )}
       </Field>
-      <Field
-        id="item-category"
-        label={items.categoryLabel}
-        errors={errors?.categoryId}
-      >
-        {(control) => (
-          <select
-            key={values.categoryId}
-            {...control}
-            name="categoryId"
-            aria-required
-            defaultValue={values.categoryId}
-            className={controlClasses("h-12")}
-          >
-            <option value="">{items.categoryPlaceholder}</option>
-            {categories.map((category) => (
-              <option key={category.id} value={category.id}>
-                {category.name}
-              </option>
-            ))}
-          </select>
-        )}
-      </Field>
-      <Field
-        id="item-condition"
-        label={items.conditionLabel}
-        errors={errors?.condition}
-      >
-        {(control) => (
-          <select
-            key={values.condition}
-            {...control}
-            name="condition"
-            aria-required
-            defaultValue={values.condition}
-            className={controlClasses("h-12")}
-          >
-            <option value="">{items.conditionPlaceholder}</option>
-            {ITEM_CONDITIONS.map((condition) => (
-              <option key={condition} value={condition}>
-                {items.condition[condition]}
-              </option>
-            ))}
-          </select>
-        )}
-      </Field>
+      <div className="grid gap-5 sm:grid-cols-2">
+        <Field
+          id="item-category"
+          label={items.categoryLabel}
+          errors={errors?.categoryId}
+        >
+          {(control) => (
+            <select
+              key={values.categoryId}
+              {...control}
+              name="categoryId"
+              aria-required
+              defaultValue={values.categoryId}
+              className={controlClasses("h-13")}
+            >
+              <option value="">{items.categoryPlaceholder}</option>
+              {categories.map((category) => (
+                <option key={category.id} value={category.id}>
+                  {category.name}
+                </option>
+              ))}
+            </select>
+          )}
+        </Field>
+        <Field
+          id="item-condition"
+          label={items.conditionLabel}
+          errors={errors?.condition}
+        >
+          {(control) => (
+            <select
+              key={values.condition}
+              {...control}
+              name="condition"
+              aria-required
+              defaultValue={values.condition}
+              className={controlClasses("h-13")}
+            >
+              <option value="">{items.conditionPlaceholder}</option>
+              {ITEM_CONDITIONS.map((condition) => (
+                <option key={condition} value={condition}>
+                  {items.condition[condition]}
+                </option>
+              ))}
+            </select>
+          )}
+        </Field>
+      </div>
       <Field
         id="item-max-loan-days"
         label={items.maxLoanDaysLabel}

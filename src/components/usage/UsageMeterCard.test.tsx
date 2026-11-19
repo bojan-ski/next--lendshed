@@ -13,6 +13,7 @@ const base = {
   max: 1500,
   warn: false,
   warnText: "Warning line",
+  fill: "primary" as const,
 };
 
 describe("UsageMeterCard", () => {

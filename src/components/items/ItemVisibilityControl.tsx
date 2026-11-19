@@ -48,7 +48,7 @@ function Refusal({
         {items.needsContactBefore}
         <Link
           href="/account#contact-heading"
-          className="font-bold text-accent underline underline-offset-4"
+          className="font-bold text-accent-ink underline underline-offset-4"
         >
           {items.needsContactLink}
         </Link>
@@ -108,7 +108,7 @@ export default function ItemVisibilityControl({
         {intent === "list" ? items.list : items.hide}
       </Button>
       {needs && (
-        <p id={NEEDS_ID} className="text-sm text-muted">
+        <p id={NEEDS_ID} className="text-sm text-on-accent-highlight">
           {needs}
         </p>
       )}

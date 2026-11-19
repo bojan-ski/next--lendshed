@@ -22,8 +22,8 @@ const openLoan = () =>
   screen.getByRole("link", {
     name: `${strings.loanCard.openLoan} ${loan.item.title}`,
   });
-const accentButtons = (container: HTMLElement) =>
-  container.querySelectorAll("a.bg-accent, button.bg-accent");
+const primaryButtons = (container: HTMLElement) =>
+  container.querySelectorAll("a.bg-primary, button.bg-primary");
 
 // The party line is split into spans, so match the paragraph's whole text.
 const partyLine = (text: string) =>
@@ -123,10 +123,10 @@ describe("LoanCard", () => {
       <LoanCard loan={loan} dateRange="x" nextStep={null} />,
     );
     expect(openLoan()).toHaveAttribute("href", "/loans/loan-1");
-    expect(accentButtons(container)).toHaveLength(0);
+    expect(primaryButtons(container)).toHaveLength(0);
   });
 
-  test("a photo renders as a decorative 64 px thumb", () => {
+  test("a photo renders as a decorative 72 px thumb", () => {
     const { container } = render(
       <LoanCard
         loan={{
@@ -142,7 +142,7 @@ describe("LoanCard", () => {
     );
     const image = container.querySelector("img");
     expect(image).toHaveAttribute("alt", "");
-    expect(image).toHaveClass("size-16", "object-cover");
+    expect(image).toHaveClass("size-18", "object-cover");
     expect(screen.queryByTestId("photo-placeholder")).not.toBeInTheDocument();
   });
 
@@ -157,7 +157,7 @@ describe("LoanCard", () => {
     const { container, rerender } = render(
       <LoanCard loan={loan} dateRange="x" nextStep={null} />,
     );
-    expect(screen.getByTestId("photo-placeholder")).toHaveClass("size-16");
+    expect(screen.getByTestId("photo-placeholder")).toHaveClass("size-18");
 
     rerender(<LoanCard loan={withPhoto} dateRange="x" nextStep={null} />);
     fireEvent.error(container.querySelector("img")!);
@@ -181,7 +181,7 @@ describe("LoanCard", () => {
     expect(screen.queryByRole("heading", { level: 2 })).not.toBeInTheDocument();
   });
 
-  test("Open loan is the one accent button when the loan needs you", () => {
+  test("Open loan is the one primary button when the loan needs you", () => {
     const { container } = render(
       <LoanCard
         loan={{ ...loan, needsYou: "arrange_pickup" }}
@@ -189,7 +189,7 @@ describe("LoanCard", () => {
         nextStep={null}
       />,
     );
-    expect(accentButtons(container)).toHaveLength(1);
-    expect(accentButtons(container)[0]).toBe(openLoan());
+    expect(primaryButtons(container)).toHaveLength(1);
+    expect(primaryButtons(container)[0]).toBe(openLoan());
   });
 });

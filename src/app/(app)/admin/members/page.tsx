@@ -16,7 +16,7 @@ export default function MembersPage({
 }: PageProps<"/admin/members">) {
   return (
     <div className="flex flex-col gap-6">
-      <h1 id={MEMBERS_HEADING_ID} className="text-2xl font-bold">
+      <h1 id={MEMBERS_HEADING_ID} className="type-page-title">
         {members.title}
       </h1>
       <Suspense fallback={<MembersTableSkeleton />}>

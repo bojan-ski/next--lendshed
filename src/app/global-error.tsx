@@ -1,7 +1,7 @@
 "use client";
 
 import "./globals.css";
-import { atkinson } from "./fonts";
+import { atkinson, bricolage } from "./fonts";
 import RouteError from "@/components/feedback/RouteError";
 import Container from "@/components/shell/Container";
 import { errors } from "@/strings/errors";
@@ -14,10 +14,10 @@ export default function GlobalError({
   retry: () => void;
 }) {
   return (
-    <html lang="en" className={atkinson.variable}>
+    <html lang="en" className={`${atkinson.variable} ${bricolage.variable}`}>
       <body className="min-h-dvh bg-page text-ink antialiased">
         <title>{errors.errorTitle}</title>
-        <main id="main" className="py-8">
+        <main id="main" className="pt-8 pb-12 lg:pt-10">
           <Container>
             <RouteError retry={retry} />
           </Container>

@@ -6,7 +6,7 @@ import { toneClasses, type StatusStyle } from "@/lib/text/status";
 export default function StatusLabel({ status }: { status: StatusStyle }) {
   return (
     <span
-      className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-sm font-bold whitespace-nowrap ${toneClasses[status.tone]}`}
+      className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-sm font-bold whitespace-nowrap ${toneClasses[status.tone]}`}
     >
       <Icon name={status.icon} size={status.icon === "dot" ? 10 : 16} />
       {status.label}

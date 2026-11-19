@@ -27,8 +27,8 @@ export default function LoanGroup({
 }) {
   return (
     <section className="flex flex-col gap-3">
-      <h2 className="text-xl font-bold">{heading}</h2>
-      <ul className="flex flex-col gap-3">
+      <h2 className="type-section-title">{heading}</h2>
+      <ul className="flex flex-col gap-2.5">
         {loans.map((loan) => (
           <li key={loan.id}>
             <LoanCard

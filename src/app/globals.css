@@ -1,9 +1,9 @@
 /*
- * Lendshed design tokens (spec section 12).
+ * Lendshed design tokens ("Front Porch", context/project-design.md).
  * Tailwind CSS 4. Every colour, size and radius the app may use lives here.
  * The default Tailwind palette, type scale and shadows are switched off on
  * purpose, so only these values exist: bg-page, text-ink, bg-accent, etc.
- * All text pairs below pass WCAG 2.2 AA (ratios are in spec section 12).
+ * All text pairs below pass WCAG 2.2 AA (ratios in project-design.md).
  */
 @import "tailwindcss";
 
@@ -12,48 +12,182 @@
   --color-*: initial;
   --color-white: #ffffff;
 
-  --color-page: #faf7f2;         /* page background */
-  --color-card: #ffffff;         /* cards, fields, header */
-  --color-line: #e6e0d6;         /* card and table borders (decorative) */
-  --color-field: #8c857b;        /* input and outline-button borders, 3.65:1 on card */
-  --color-ink: #26231f;          /* text, 14.6:1 on page */
-  --color-muted: #6b655d;        /* secondary text, 5.4:1 on page */
+  --color-page: #fbf6ee; /* page background; text on accent */
+  --color-card: #ffffff; /* cards, fields, header */
+  --color-line: #e6e0d6; /* dividers, footer rule, quiet outlines */
+  --color-field: #8c857b; /* input borders, 3.6:1 on card */
+  --color-ink: #26231f; /* text, outline-button borders */
+  --color-muted: #6b655d; /* secondary text, 5.3:1 on page */
 
-  --color-accent: #2f5d46;       /* shed green: main button, links, current place */
-  --color-accent-hover: #244a37; /* main button hover and press */
-  --color-accent-soft: #e4eee7;  /* selected, Approved/Out/Listed/Active labels, initials */
+  --color-accent: oklch(
+    0.42 0.08 155
+  ); /* shed green: bands, green cards, current tab */
+  --color-accent-ink: oklch(0.36 0.09 155); /* links, text on accent-soft */
+  --color-accent-soft: oklch(
+    0.92 0.05 155
+  ); /* current nav pill, positive labels */
+  --color-on-accent-highlight: oklch(
+    0.87 0.13 85
+  ); /* subheads on green, 5.6:1 */
+  --color-on-accent-muted: oklch(0.92 0.03 155); /* body text on green */
 
-  --color-overdue: #c2410c;      /* the Overdue label and nothing else */
+  --color-primary: oklch(
+    0.82 0.15 80
+  ); /* marigold: primary buttons, ink text 10:1 */
+  --color-primary-hover: oklch(0.77 0.15 78); /* primary hover and press */
 
-  --color-neutral-soft: #efece7; /* Requested label, loading placeholders */
-  --color-done-soft: #f2f0ec;    /* finished, Hidden and Suspended labels */
-  --color-notice: #f6f1ea;       /* error notice background (dark left border) */
+  --color-free: oklch(0.62 0.15 150); /* the "Free today" dot */
+  --color-avatar: oklch(
+    0.82 0.13 75
+  ); /* the viewer's own avatar in the header */
 
-  /* Type: one family, set by next/font in src/app/fonts.ts. */
+  --color-overdue: #c2410c; /* the Overdue label and nothing else */
+  --color-overdue-soft: oklch(0.95 0.035 45); /* next-step line when overdue */
+  --color-next-soft: oklch(0.95 0.05 85); /* next-step line on a LoanCard */
+
+  --color-neutral-soft: #efece7; /* Requested label, placeholders, meter tracks */
+  --color-done-soft: #f2f0ec; /* finished, Hidden and Suspended labels */
+  --color-notice: #f6f1ea; /* info and error notices */
+
+  /* Type: body face and display face, set by next/font in src/app/fonts.ts. */
   --font-*: initial;
-  --font-sans: var(--font-atkinson), ui-sans-serif, system-ui, -apple-system,
-    "Segoe UI", Roboto, sans-serif;
+  --font-sans:
+    var(--font-atkinson), ui-sans-serif, system-ui, -apple-system, "Segoe UI",
+    Roboto, sans-serif;
+  --font-display:
+    var(--font-bricolage), var(--font-atkinson), ui-sans-serif, system-ui,
+    sans-serif;
+  /* The one-time link field only. */
+  --font-mono: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
 
   --text-*: initial;
-  --text-sm: 0.875rem;        /* 14 px: captions, table meta */
+  --text-xs: 0.8125rem; /* 13 px: chips on cards, the My loans count */
+  --text-xs--line-height: 1.125rem;
+  --text-sm: 0.875rem; /* 14 px: hints, meta, status lines */
   --text-sm--line-height: 1.25rem;
-  --text-base: 1rem;          /* 16 px: body and all form text */
+  --text-base: 1rem; /* 16 px: body */
   --text-base--line-height: 1.5rem;
-  --text-lg: 1.125rem;        /* 18 px: card titles */
-  --text-lg--line-height: 1.625rem;
-  --text-xl: 1.375rem;        /* 22 px: section headings */
+  --text-md: 1.0625rem; /* 17 px: buttons and form fields */
+  --text-md--line-height: 1.5rem;
+  --text-lg: 1.1875rem; /* 19 px: item card titles (display) */
+  --text-lg--line-height: 1.4375rem;
+  --text-xl: 1.375rem; /* 22 px: small display lines */
   --text-xl--line-height: 1.75rem;
-  --text-2xl: 1.75rem;        /* 28 px: page headings */
-  --text-2xl--line-height: 2.125rem;
-  --text-3xl: 2.25rem;        /* 36 px: "Elm Street" on Browse */
-  --text-3xl--line-height: 2.625rem;
+  --text-2xl: 1.625rem; /* 26 px: card and section headings */
+  --text-2xl--line-height: 1.875rem;
+  --text-3xl: 1.75rem; /* 28 px: hero subhead */
+  --text-3xl--line-height: 2.25rem;
+  --text-4xl: 1.875rem; /* 30 px: empty-state headings, big numbers */
+  --text-4xl--line-height: 2.0625rem;
+  --text-5xl: 2.5rem; /* 40 px: page headings under 1024 px */
+  --text-5xl--line-height: 1;
+  --text-6xl: 3.5rem; /* 56 px: the Browse title under 1024 px */
+  --text-6xl--line-height: 0.95;
+  --text-7xl: 4rem; /* 64 px: page headings */
+  --text-7xl--line-height: 0.95;
+  --text-8xl: 6rem; /* 96 px: the Browse title */
+  --text-8xl--line-height: 0.95;
+
+  --tracking-display: -0.03em;
 
   /* Shape: flat, no shadows. */
-  --radius-card: 0.75rem;     /* 12 px: cards, panels, photos */
-  --radius-control: 0.625rem; /* 10 px: buttons, fields */
+  --radius-band: 2rem; /* 32 px: hero bands, auth cards, empty states */
+  --radius-card: 1.75rem; /* 28 px: cards and panels */
+  --radius-tile: 1.375rem; /* 22 px: item cards, table rows, notices */
+  --radius-thumb: 1rem; /* 16 px: photo thumbs, inline panels */
+  --radius-control: 0.875rem; /* 14 px: fields */
+  /* Buttons, chips, tabs, nav and labels use rounded-full. */
   --shadow-*: initial;
   --inset-shadow-*: initial;
   --drop-shadow-*: initial;
+}
+
+/*
+ * Category and area colours: decorative only, the name is always shown.
+ * An element sets --hue (src/lib/text/hue.ts) and these resolve on it.
+ */
+@theme inline {
+  --color-hue-soft: oklch(0.93 0.05 var(--hue, 155)); /* chips, stripe 1 */
+  --color-hue-soft-2: oklch(0.89 0.07 var(--hue, 155)); /* stripe 2 */
+  --color-hue-ink: oklch(0.4 0.1 var(--hue, 155)); /* text on hue-soft */
+  --color-hue-strong: oklch(0.72 0.15 var(--hue, 155)); /* dots */
+  --color-hue-border: oklch(0.88 0.06 var(--hue, 155)); /* chip borders */
+  --color-hue-tint: oklch(0.9 0.08 var(--hue, 155)); /* icon circles, avatars */
+  --color-hue-deep: oklch(0.36 0.1 var(--hue, 155)); /* icons on hue-tint */
+}
+
+/*
+ * A green band or card: page-coloured text, a marigold focus ring, fields
+ * without a border, and quiet text in the on-accent tint.
+ */
+@utility surface-accent {
+  background-color: var(--color-accent);
+  color: var(--color-page);
+  --focus-ring: var(--color-primary);
+
+  & :is(input, textarea, select) {
+    border-color: transparent;
+  }
+  & .text-muted {
+    color: var(--color-on-accent-muted);
+  }
+}
+
+/* The display face's roles; body text stays in the sans face. */
+@utility type-hero {
+  font-family: var(--font-display);
+  font-size: var(--text-6xl);
+  line-height: var(--text-6xl--line-height);
+  font-weight: 800;
+  letter-spacing: var(--tracking-display);
+  overflow-wrap: break-word;
+  @media (width >= 64rem) {
+    font-size: var(--text-8xl);
+    line-height: var(--text-8xl--line-height);
+  }
+}
+
+@utility type-page-title {
+  font-family: var(--font-display);
+  font-size: var(--text-5xl);
+  line-height: var(--text-5xl--line-height);
+  font-weight: 800;
+  letter-spacing: var(--tracking-display);
+  overflow-wrap: break-word;
+  @media (width >= 64rem) {
+    font-size: var(--text-7xl);
+    line-height: var(--text-7xl--line-height);
+  }
+}
+
+@utility type-section-title {
+  font-family: var(--font-display);
+  font-size: var(--text-2xl);
+  line-height: var(--text-2xl--line-height);
+  font-weight: 800;
+}
+
+@utility type-subhead {
+  font-family: var(--font-display);
+  font-size: var(--text-xl);
+  line-height: var(--text-xl--line-height);
+  font-weight: 600;
+}
+
+@utility type-card-title {
+  font-family: var(--font-display);
+  font-size: var(--text-lg);
+  line-height: var(--text-lg--line-height);
+  font-weight: 700;
+}
+
+/* The striped photo placeholder in a category's colours. */
+@utility photo-stripes {
+  background-image: repeating-linear-gradient(
+    135deg,
+    oklch(0.93 0.05 var(--hue, 155)) 0 10px,
+    oklch(0.89 0.07 var(--hue, 155)) 10px 20px
+  );
 }
 
 @layer base {
@@ -64,9 +198,9 @@
     -webkit-text-size-adjust: 100%;
   }
 
-  /* One visible focus style for everything. */
+  /* One visible focus style for everything; marigold on green surfaces. */
   :focus-visible {
-    outline: 2px solid var(--color-accent);
+    outline: 2px solid var(--focus-ring, var(--color-accent));
     outline-offset: 2px;
   }
 

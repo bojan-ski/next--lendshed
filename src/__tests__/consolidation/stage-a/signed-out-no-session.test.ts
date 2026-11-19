@@ -54,7 +54,10 @@ vi.mock("next/server", async (importOriginal) => ({
   connection: async () => undefined,
 }));
 // next/font needs Next's compiler; the root layout reads only `variable`.
-vi.mock("@/app/fonts", () => ({ atkinson: { variable: "font-atkinson" } }));
+vi.mock("@/app/fonts", () => ({
+  atkinson: { variable: "font-atkinson" },
+  bricolage: { variable: "font-bricolage" },
+}));
 
 const ENTITIES: Record<string, string> = {
   "&amp;": "&",

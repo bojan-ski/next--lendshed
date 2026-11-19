@@ -6,6 +6,7 @@ import LoanContactCard from "@/components/loans/LoanContactCard";
 import LoanNextSteps from "@/components/loans/LoanNextSteps";
 import Card from "@/components/ui/Card";
 import { Icon } from "@/components/ui/icons";
+import { backLinkClasses } from "@/components/ui/link-styles";
 import PhotoImage from "@/components/ui/PhotoImage";
 import PhotoPlaceholder from "@/components/ui/PhotoPlaceholder";
 import StatusLabel from "@/components/ui/StatusLabel";
@@ -18,7 +19,7 @@ import { loanStatus } from "@/lib/text/status";
 import { loanPage } from "@/strings/loanPage";
 import type { LoanDetailDTO } from "@/types/loan";
 
-const THUMBNAIL = "size-24 shrink-0 rounded-control object-cover";
+const THUMBNAIL = "size-24 shrink-0 rounded-tile object-cover";
 
 function DatesLine({ loan, today }: { loan: LoanDetailDTO; today: string }) {
   const names = {
@@ -26,14 +27,14 @@ function DatesLine({ loan, today }: { loan: LoanDetailDTO; today: string }) {
     borrower: loan.borrower.displayName,
   };
   return (
-    <p className="flex min-w-0 flex-wrap items-center gap-x-2">
+    <p className="flex min-w-0 flex-wrap items-center gap-x-2 text-lg">
       <span>
         {formatDateRange(loan.startDate, loan.endDate, today)}{" "}
         {loan.lengthDays === 1
           ? loanPage.lengthOne
           : t(loanPage.lengthOther, { days: loan.lengthDays })}
       </span>
-      <span className="max-w-full min-w-0 truncate">
+      <span className="max-w-full min-w-0 truncate text-muted">
         {t(loanPage.partyLine, {
           party: t(loanPage.party[loan.viewerRole], names),
         })}
@@ -54,12 +55,12 @@ function ItemRow({ item }: { item: LoanDetailDTO["item"] }) {
       {item.viewable ? (
         <Link
           href={`/items/${item.id}`}
-          className="inline-flex min-h-11 min-w-0 items-center font-bold wrap-break-word text-accent underline underline-offset-4"
+          className="inline-flex min-h-11 min-w-0 items-center text-lg font-bold wrap-break-word text-accent-ink underline underline-offset-4"
         >
           {item.title}
         </Link>
       ) : (
-        <p className="min-w-0 font-bold wrap-break-word">{item.title}</p>
+        <p className="min-w-0 text-lg font-bold wrap-break-word">{item.title}</p>
       )}
     </div>
   );
@@ -67,13 +68,13 @@ function ItemRow({ item }: { item: LoanDetailDTO["item"] }) {
 
 function MessageCard({ loan }: { loan: LoanDetailDTO }) {
   return (
-    <Card className="flex min-w-0 flex-col gap-3 p-6">
-      <h2 className="truncate text-xl font-bold">
+    <Card className="flex min-w-0 flex-col gap-3 p-6 sm:px-8 sm:py-7.5">
+      <h2 className="truncate type-section-title">
         {loan.viewerRole === "borrower"
           ? loanPage.messageBorrower
           : t(loanPage.messageOther, { borrower: loan.borrower.displayName })}
       </h2>
-      <p className="whitespace-pre-line wrap-break-word">
+      <p className="text-lg whitespace-pre-line wrap-break-word">
         {loan.requestMessage}
       </p>
     </Card>
@@ -86,7 +87,7 @@ function BackLink({ role }: { role: LoanDetailDTO["viewerRole"] }) {
   return (
     <Link
       href={`/my/loans?tab=${role === "owner" ? "lending" : "borrowing"}`}
-      className="inline-flex min-h-11 items-center gap-2 self-start font-bold text-accent"
+      className={backLinkClasses}
     >
       <Icon name="arrow-left" aria-hidden />
       {loanPage.back}
@@ -107,14 +108,14 @@ export default async function LoanDetailSection({
   if (!loan) notFound();
 
   return (
-    <div className="flex flex-col gap-6">
+    <div className="flex flex-col gap-7">
       <BackLink role={loan.viewerRole} />
-      <div className="flex flex-col gap-3">
+      <div className="flex flex-col gap-3.5">
         <div className="flex flex-wrap items-center gap-3">
           <h1
             id={LOAN_HEADING_ID}
             tabIndex={-1}
-            className="min-w-0 text-3xl font-bold wrap-break-word"
+            className="min-w-0 type-page-title wrap-break-word"
           >
             {loan.item.title}
           </h1>
@@ -123,7 +124,7 @@ export default async function LoanDetailSection({
         <DatesLine loan={loan} today={today} />
         <ItemRow item={loan.item} />
       </div>
-      <div className="grid gap-6 lg:grid-cols-2">
+      <div className="grid items-start gap-6 lg:grid-cols-2 lg:gap-8">
         <div className="flex min-w-0 flex-col gap-6">
           {loan.actions.length > 0 && (
             <LoanActionsCard loan={loan} today={today} />

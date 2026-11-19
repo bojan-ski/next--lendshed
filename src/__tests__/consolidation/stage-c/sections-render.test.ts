@@ -94,6 +94,7 @@ const CATEGORIES = [
 const card = (n: number): ItemCardDTO => ({
   id: `item-${n}`,
   title: `Ladder ${n}`,
+  categoryId: "cat-1",
   categoryName: "Garden",
   ownerName: "Ana P.",
   ownerArea: null,
@@ -125,7 +126,7 @@ describe("CategoriesSection", () => {
 
     // Under the page's list h2, so an h3 (12a, a11y-static-auditor).
     expect(page).toContain(
-      `<h3 class="text-xl font-bold">${categories.emptyHeading}</h3>`,
+      `<h3 class="font-display text-4xl font-extrabold">${categories.emptyHeading}</h3>`,
     );
     expect(page).toContain(categories.emptyBody);
     expect(page).not.toContain("<table");
@@ -422,7 +423,7 @@ describe("MemberProfileSection", () => {
     expect(page).toContain("Ana P.");
     expect(page).toContain("Oak Lane");
     expect(page).toContain(
-      `<h3 class="text-xl font-bold">${profile.emptyHeading}</h3>`,
+      `<h3 class="font-display text-4xl font-extrabold">${profile.emptyHeading}</h3>`,
     );
     expect(page.match(/<h2/g)).toHaveLength(1);
     expect(page).not.toMatch(/<a [^>]*h-12/);
@@ -739,7 +740,7 @@ describe("LoanDetailSection — the decisions card", () => {
   });
 });
 
-// Spec 15: handover and return in the same card, one accent button at most.
+// Spec 15: handover and return in the same card, one primary button at most.
 describe("LoanDetailSection — handover and return", () => {
   beforeEach(() => {
     vi.mocked(getViewer).mockResolvedValue(member);
@@ -747,8 +748,8 @@ describe("LoanDetailSection — handover and return", () => {
 
   const button = (label: string) =>
     new RegExp(`<button[^>]*>${label}</button>`);
-  const accentButtons = (page: string) =>
-    page.match(/<button[^>]*class="[^"]*\bbg-accent\b/g) ?? [];
+  const primaryButtons = (page: string) =>
+    page.match(/<button[^>]*class="[^"]*\bbg-primary\b/g) ?? [];
 
   test("hand_over: Your loan, Handed over beside Cancel loan, no notice", async () => {
     const page = await loanPageOf({
@@ -763,7 +764,7 @@ describe("LoanDetailSection — handover and return", () => {
     expect(page).toMatch(button(loanActions.handOver));
     expect(page).toMatch(button(loanActions.cancelLoan));
     expect(page).not.toContain(loanActions.notBack);
-    expect(accentButtons(page)).toHaveLength(1);
+    expect(primaryButtons(page)).toHaveLength(1);
   });
 
   test("handOverBlocked: the not-back notice and Cancel loan only", async () => {
@@ -802,7 +803,7 @@ describe("LoanDetailSection — handover and return", () => {
       }
       expect(page).toMatch(button(loanActions.markBack));
       expect(page).not.toMatch(button(loanActions.cancelLoan));
-      expect(accentButtons(page)).toHaveLength(1);
+      expect(primaryButtons(page)).toHaveLength(1);
     },
   );
 
@@ -886,10 +887,10 @@ describe("MyLoansSection", () => {
 
     expect(getMyLoans).toHaveBeenCalledWith("u1", "lending", communityToday());
     expect(page).toContain(
-      `<h2 class="text-xl font-bold">${myLoans.groups.needs_you}</h2>`,
+      `<h2 class="type-section-title">${myLoans.groups.needs_you}</h2>`,
     );
     expect(page).toContain(
-      `<h2 class="text-xl font-bold">${myLoans.groups.past}</h2>`,
+      `<h2 class="type-section-title">${myLoans.groups.past}</h2>`,
     );
     expect(page).not.toContain(myLoans.groups.active);
     expect(page.match(/<h3 /g)).toHaveLength(2);

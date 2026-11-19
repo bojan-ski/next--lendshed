@@ -27,9 +27,9 @@ export default function ItemReadOnly({
   ];
 
   return (
-    <div className="flex flex-col gap-4">
+    <div className="flex max-w-190 flex-col gap-4">
       <p className="text-muted">{items.retiredLine}</p>
-      <dl className="flex flex-col gap-4 rounded-card border border-line bg-card p-6">
+      <dl className="flex flex-col gap-4 rounded-card bg-card p-6 sm:px-8 sm:py-7.5">
         {facts.map(([label, value]) => (
           <div key={label} className="flex flex-col gap-1">
             <dt className="font-bold">{label}</dt>

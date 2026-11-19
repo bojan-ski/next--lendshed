@@ -9,7 +9,7 @@ export default function TextInput({
   return (
     <input
       type={type}
-      className={controlClasses("h-12", className)}
+      className={controlClasses("h-13", className)}
       {...props}
     />
   );

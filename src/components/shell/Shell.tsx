@@ -14,7 +14,7 @@ export default function Shell({ header, children }: ShellProps) {
     <div className="flex min-h-dvh flex-col">
       <SkipLink />
       {header}
-      <main id="main" tabIndex={-1} className="flex-1 py-8">
+      <main id="main" tabIndex={-1} className="flex-1 pt-8 pb-12 lg:pt-10">
         <Container>{children}</Container>
       </main>
       <Footer />

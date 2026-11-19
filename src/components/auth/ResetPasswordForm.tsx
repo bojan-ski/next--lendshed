@@ -2,6 +2,11 @@
 
 import { useActionState, useEffect, useRef } from "react";
 import { resetPasswordWithGrant } from "@/actions/reset";
+import {
+  AUTH_BAND,
+  AUTH_BODY,
+  AUTH_TITLE,
+} from "@/components/auth/auth-card-styles";
 import LinkBroken from "@/components/auth/LinkBroken";
 import Button from "@/components/ui/Button";
 import Field from "@/components/ui/Field";
@@ -38,14 +43,11 @@ export default function ResetPasswordForm({ token }: { token: string }) {
   if (state.linkBroken) return <LinkBroken headingRef={brokenHeading} />;
 
   return (
-    <div className="flex flex-col gap-6">
-      <h1 className="text-2xl font-bold">{resetPassword.heading}</h1>
-      <form
-        ref={form}
-        action={formAction}
-        noValidate
-        className="flex flex-col gap-4"
-      >
+    <>
+      <div className={AUTH_BAND}>
+        <h1 className={AUTH_TITLE}>{resetPassword.heading}</h1>
+      </div>
+      <form ref={form} action={formAction} noValidate className={AUTH_BODY}>
         {state.formError && (
           <div ref={notice} tabIndex={-1}>
             <Notice tone="error" alert={false}>
@@ -73,6 +75,6 @@ export default function ResetPasswordForm({ token }: { token: string }) {
           {resetPassword.submit}
         </Button>
       </form>
-    </div>
+    </>
   );
 }

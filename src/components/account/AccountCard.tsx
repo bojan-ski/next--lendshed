@@ -17,9 +17,9 @@ export default function AccountCard({
     <Card
       role="region"
       aria-labelledby={headingId}
-      className="flex flex-col gap-4 p-6"
+      className="flex flex-col gap-5 p-6 sm:px-8 sm:py-7.5"
     >
-      <h2 id={headingId} className="text-xl font-bold">
+      <h2 id={headingId} className="type-section-title">
         {heading}
       </h2>
       {children}

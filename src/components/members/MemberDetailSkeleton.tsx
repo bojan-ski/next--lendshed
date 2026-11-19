@@ -12,7 +12,7 @@ export default function MemberDetailSkeleton() {
         </div>
       </div>
       {[0, 1, 2, 3].map((card) => (
-        <Card key={card} className="flex flex-col gap-4 p-6">
+        <Card key={card} className="flex flex-col gap-4 p-6 sm:px-8 sm:py-7.5">
           <div className="h-7 w-40 rounded-control bg-neutral-soft" />
           <div className="h-12 rounded-control bg-neutral-soft" />
         </Card>

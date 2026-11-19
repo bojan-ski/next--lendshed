@@ -13,6 +13,7 @@ const TODAY = "2030-06-15";
 const item = (requestBlock: ItemDetailDTO["requestBlock"]): ItemDetailDTO => ({
   id: "item-1",
   title: "Step ladder",
+  categoryId: "cat-1",
   categoryName: "Garden",
   ownerName: "Olga M.",
   ownerArea: null,

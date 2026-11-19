@@ -13,7 +13,7 @@ export const instant = false;
 export default function UsagePage() {
   return (
     <div className="flex flex-col gap-6">
-      <h1 className="text-2xl font-bold">{usage.title}</h1>
+      <h1 className="type-page-title">{usage.title}</h1>
       <Suspense fallback={<UsageSkeleton />}>
         <UsageSection />
       </Suspense>

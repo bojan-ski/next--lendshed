@@ -35,6 +35,7 @@ export default async function UsageSection() {
           max={uploads.cap}
           warn={uploads.warn}
           warnText={capWarning}
+          fill="primary"
         />
         <UsageMeterCard
           id="usage-storage"
@@ -46,6 +47,7 @@ export default async function UsageSection() {
           max={storedBytes.cap}
           warn={storedBytes.warn}
           warnText={capWarning}
+          fill="accent"
         />
         <UsageMeterCard
           id="usage-listed"
@@ -59,13 +61,14 @@ export default async function UsageSection() {
           warnText={t(usage.listedWarning, {
             limit: formatCount(listedItems.warnAt),
           })}
+          fill="sky"
         />
       </div>
-      <Notice tone="info">
+      <Notice tone="info" className="p-6">
         <p>{usage.note}</p>
         <a
           href={VERCEL_USAGE_URL}
-          className="inline-flex min-h-11 items-center gap-1 font-bold text-accent underline underline-offset-4 hover:text-accent-hover"
+          className="inline-flex min-h-11 items-center gap-1 font-bold text-accent-ink underline underline-offset-4"
         >
           {usage.link}
           <Icon name="external-link" aria-hidden className="shrink-0" />

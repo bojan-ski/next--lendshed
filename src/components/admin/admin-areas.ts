@@ -10,6 +10,8 @@ export const ADMIN_AREAS: readonly {
   label: string;
   description: string;
   icon: IconName;
+  // The landing card's icon tint (decorative).
+  hue: number;
   activePrefixes?: readonly string[];
 }[] = [
   {
@@ -17,12 +19,14 @@ export const ADMIN_AREAS: readonly {
     label: invitations.title,
     description: invitations.description,
     icon: "mail",
+    hue: 75,
   },
   {
     href: "/admin/members",
     label: members.title,
     description: members.description,
     icon: "users",
+    hue: 155,
     activePrefixes: ["/admin/members"],
   },
   {
@@ -30,6 +34,7 @@ export const ADMIN_AREAS: readonly {
     label: categories.title,
     description: categories.description,
     icon: "tag",
+    hue: 30,
     activePrefixes: ["/admin/categories"],
   },
   {
@@ -37,5 +42,6 @@ export const ADMIN_AREAS: readonly {
     label: usage.title,
     description: usage.description,
     icon: "gauge",
+    hue: 230,
   },
 ];

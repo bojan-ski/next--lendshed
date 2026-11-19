@@ -53,13 +53,13 @@ export default function OneTimeLinkPanel({
   }
 
   return (
-    <section className="flex flex-col gap-3 rounded-card bg-accent-soft p-4">
-      <Heading ref={heading} tabIndex={-1} className="text-lg font-bold">
+    <section className="surface-accent flex flex-col gap-3.5 rounded-card p-6 sm:px-7.5 sm:py-7">
+      <Heading ref={heading} tabIndex={-1} className="type-section-title">
         {link.note
           ? t(oneTimeLink.headingFor, { note: link.note })
           : oneTimeLink.heading}
       </Heading>
-      <div className="flex flex-col gap-1.5">
+      <div className="flex flex-col gap-2">
         <label htmlFor={fieldId} className="font-bold">
           {oneTimeLink.fieldLabel}
         </label>
@@ -74,9 +74,9 @@ export default function OneTimeLinkPanel({
               status === "failed" ? `${statusId} ${warningId}` : warningId
             }
             // flex-1 only in the row: in the stacked column it would override h-12.
-            className="min-w-0 sm:flex-1"
+            className="min-w-0 font-mono text-base sm:flex-1"
           />
-          <Button variant="outline" onClick={copy} className="shrink-0">
+          <Button onClick={copy} className="shrink-0">
             <Icon name={status === "copied" ? "check" : "copy"} aria-hidden />
             {status === "copied" ? oneTimeLink.copied : oneTimeLink.copy}
           </Button>
@@ -90,7 +90,7 @@ export default function OneTimeLinkPanel({
         {status === "copied" && oneTimeLink.copiedAnnouncement}
         {status === "failed" && oneTimeLink.copyFailed}
       </p>
-      <p id={warningId} className="text-sm">
+      <p id={warningId} className="text-sm font-bold text-on-accent-highlight">
         {oneTimeLink.warning}
       </p>
     </section>

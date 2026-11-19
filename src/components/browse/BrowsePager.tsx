@@ -1,12 +1,12 @@
 import Link from "next/link";
+import { buttonClasses } from "@/components/ui/button-styles";
 import { Icon } from "@/components/ui/icons";
 import { browseHref } from "@/lib/browse/href";
 import type { BrowseQuery } from "@/lib/schemas/browse";
 import { t } from "@/lib/text/interpolate";
 import { home } from "@/strings/home";
 
-const LINK =
-  "inline-flex min-h-11 items-center gap-1 font-bold text-accent underline underline-offset-4";
+const LINK = buttonClasses("outline", "gap-1 px-5");
 
 type BrowsePagerProps = {
   page: number;
@@ -25,7 +25,7 @@ export default function BrowsePager({
   if (!hasPrevious && !hasNext) return null;
   return (
     <nav aria-label={home.pagesLabel}>
-      <div className="flex items-center justify-between gap-4">
+      <div className="flex items-center justify-between gap-4 pt-4">
         <div className="flex-1">
           {hasPrevious && (
             <Link

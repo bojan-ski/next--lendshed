@@ -11,7 +11,7 @@ export type Tone = "neutral" | "positive" | "overdue" | "done";
 
 export const toneClasses: Record<Tone, string> = {
   neutral: "bg-neutral-soft text-ink",
-  positive: "bg-accent-soft text-accent",
+  positive: "bg-accent-soft text-accent-ink",
   overdue: "bg-overdue text-white",
   done: "bg-done-soft text-muted",
 };

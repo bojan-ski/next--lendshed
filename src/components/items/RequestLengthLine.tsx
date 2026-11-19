@@ -17,7 +17,7 @@ export default function RequestLengthLine({
   maxLoanDays,
 }: RequestLengthLineProps) {
   return (
-    <p id={id} className="flex items-center gap-2 text-sm text-muted">
+    <p id={id} className="flex items-center gap-2 text-sm text-on-accent-highlight">
       <Icon name="calendar" aria-hidden className="shrink-0" />
       {t(requestForm.lengthLine, {
         length:

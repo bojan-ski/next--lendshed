@@ -4,7 +4,7 @@ export default function SkipLink() {
   return (
     <a
       href="#main"
-      className="sr-only rounded-control border border-field bg-card font-bold text-accent focus:not-sr-only focus:absolute focus:top-2 focus:left-4 focus:z-50 focus:px-4 focus:py-3"
+      className="sr-only rounded-full border-2 border-ink bg-card font-bold text-accent-ink focus:not-sr-only focus:absolute focus:top-2 focus:left-4 focus:z-50 focus:px-4 focus:py-3"
     >
       {app.skipLink}
     </a>

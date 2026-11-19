@@ -8,7 +8,7 @@ export default function ItemFormSkeleton() {
   return (
     <div aria-hidden className="flex flex-col gap-6">
       <div className="h-6 w-40 rounded-control bg-neutral-soft" />
-      <Card className="flex flex-col gap-4 p-4 sm:p-6">
+      <Card className="flex flex-col gap-4 p-5 sm:px-8 sm:py-7.5">
         {FIELDS.map((height, field) => (
           <div key={field} className="flex flex-col gap-1.5">
             <div className="h-6 w-32 rounded-control bg-neutral-soft" />

@@ -50,7 +50,7 @@ function cardSelect(today: string) {
     photoUrl: true,
     photoWidth: true,
     photoHeight: true,
-    category: { select: { name: true } },
+    category: { select: { id: true, name: true } },
     owner: { select: { name: true, area: true } },
     _count: { select: { loans: { where: notFreeTodayLoanWhere(today) } } },
   } satisfies Prisma.ItemSelect;
@@ -64,6 +64,7 @@ function toItemCardDTO(row: CardRow): ItemCardDTO {
   return {
     id: row.id,
     title: row.title,
+    categoryId: row.category.id,
     categoryName: row.category.name,
     ownerName: personName(row.owner),
     ownerArea: row.owner?.area ?? null,

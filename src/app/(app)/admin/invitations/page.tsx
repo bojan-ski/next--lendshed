@@ -15,7 +15,7 @@ export const instant = false;
 export default function InvitationsPage() {
   return (
     <div className="flex flex-col gap-6">
-      <h1 className="text-2xl font-bold">{invitations.title}</h1>
+      <h1 className="type-page-title">{invitations.title}</h1>
       <NewInvitationForm />
       <section
         aria-labelledby={OPEN_INVITATIONS_HEADING_ID}
@@ -24,7 +24,7 @@ export default function InvitationsPage() {
         <h2
           id={OPEN_INVITATIONS_HEADING_ID}
           tabIndex={-1}
-          className="text-xl font-bold"
+          className="type-section-title"
         >
           {invitations.openHeading}
         </h2>

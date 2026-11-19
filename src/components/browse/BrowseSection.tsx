@@ -1,3 +1,4 @@
+import BrowseHero from "@/components/browse/BrowseHero";
 import BrowsePager from "@/components/browse/BrowsePager";
 import BrowseSearchForm from "@/components/browse/BrowseSearchForm";
 import CategoryChips from "@/components/browse/CategoryChips";
@@ -11,6 +12,7 @@ import { browseHref } from "@/lib/browse/href";
 import { requestToday } from "@/lib/dates/request-today";
 import { env } from "@/lib/env/server";
 import { browseQuerySchema, type BrowseQuery } from "@/lib/schemas/browse";
+import { categoryHues } from "@/lib/text/hue";
 import { t } from "@/lib/text/interpolate";
 import { home } from "@/strings/home";
 
@@ -83,8 +85,10 @@ export default async function BrowseSection({
   const page = await getBrowseItems(viewer.id, query, today);
 
   return (
-    <div className="flex flex-col gap-4">
-      <BrowseSearchForm q={query.q} category={query.category} />
+    <div className="flex flex-col gap-4.5">
+      <BrowseHero
+        search={<BrowseSearchForm q={query.q} category={query.category} />}
+      />
       <CategoryChips categories={categories} query={query} />
       {/* The search doesn't move focus, so its outcome is announced (WCAG 4.1.3). */}
       <p role="status" className="text-sm text-muted">
@@ -96,7 +100,10 @@ export default async function BrowseSection({
         <Empty query={query} />
       ) : (
         <>
-          <ItemGrid items={page.items} />
+          <ItemGrid
+            items={page.items}
+            categoryHues={categoryHues(categories)}
+          />
           <BrowsePager
             page={page.page}
             hasPrevious={page.hasPrevious}

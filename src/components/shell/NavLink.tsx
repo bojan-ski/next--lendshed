@@ -8,12 +8,14 @@ import { isCurrentPath, navLinkClasses } from "@/components/shell/nav-styles";
 type NavLinkProps = {
   href: string;
   activePrefixes?: readonly string[];
+  className?: string;
   children: ReactNode;
 };
 
 export default function NavLink({
   href,
   activePrefixes,
+  className,
   children,
 }: NavLinkProps) {
   const pathname = usePathname();
@@ -24,7 +26,7 @@ export default function NavLink({
     <Link
       href={href}
       aria-current={current ? (pathname === href ? "page" : "true") : undefined}
-      className={navLinkClasses(current)}
+      className={navLinkClasses(current, className)}
     >
       {children}
     </Link>

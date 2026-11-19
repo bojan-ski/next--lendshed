@@ -9,7 +9,7 @@ export default function TextArea({
   return (
     <textarea
       rows={rows}
-      className={controlClasses("py-2", className)}
+      className={controlClasses("py-3", className)}
       {...props}
     />
   );

@@ -17,12 +17,12 @@ export default function LoanDetailSkeleton() {
         </div>
       </div>
       <div className="grid gap-6 lg:grid-cols-2">
-        <Card className="flex flex-col gap-3 p-6">
+        <Card className="flex flex-col gap-3 p-6 sm:px-8 sm:py-7.5">
           <div className="h-7 w-48 rounded-control bg-neutral-soft" />
           <div className="h-5 w-full rounded-control bg-neutral-soft" />
           <div className="h-5 w-3/4 rounded-control bg-neutral-soft" />
         </Card>
-        <Card className="flex flex-col gap-3 p-6">
+        <Card className="flex flex-col gap-3 p-6 sm:px-8 sm:py-7.5">
           <div className="h-7 w-40 rounded-control bg-neutral-soft" />
           <div className="h-16 rounded-control bg-neutral-soft" />
         </Card>

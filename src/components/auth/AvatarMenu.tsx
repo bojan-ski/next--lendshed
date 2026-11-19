@@ -16,28 +16,32 @@ export default function AvatarMenu({ viewer }: AvatarMenuProps) {
     <details className="group relative">
       <summary
         aria-label={t(avatarMenu.label, { name: viewer.displayName })}
-        className="flex min-h-11 cursor-pointer list-none items-center gap-1 rounded-control [&::-webkit-details-marker]:hidden"
+        className="flex min-h-11 cursor-pointer list-none items-center gap-2 rounded-full [&::-webkit-details-marker]:hidden"
       >
-        <Avatar initials={viewer.initials} aria-hidden />
+        <Avatar
+          initials={viewer.initials}
+          aria-hidden
+          className="size-10.5 bg-avatar text-ink"
+        />
         <Icon
           name="chevron-down"
           aria-hidden
           className="text-ink group-open:rotate-180"
         />
       </summary>
-      <Card className="absolute top-full right-0 z-10 mt-2 w-48 p-1">
+      <Card className="absolute top-full right-0 z-10 mt-2 w-52 rounded-tile border border-line p-1.5">
         {/* A plain link: the full load closes this disclosure, which a soft
             navigation would leave open over the next page. */}
         <a
           href="/account"
-          className="flex h-11 w-full items-center rounded-control px-3 text-ink"
+          className="flex h-11 w-full items-center rounded-full px-4 text-ink motion-safe:transition-[background-color] motion-safe:duration-150 hover:bg-page"
         >
           {avatarMenu.account}
         </a>
         <form action={signOut}>
           <button
             type="submit"
-            className="flex h-11 w-full items-center rounded-control px-3 text-left text-ink"
+            className="flex h-11 w-full items-center rounded-full px-4 text-left text-ink motion-safe:transition-[background-color] motion-safe:duration-150 hover:bg-page"
           >
             {avatarMenu.signOut}
           </button>

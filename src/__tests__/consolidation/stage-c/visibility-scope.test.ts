@@ -23,6 +23,11 @@ import { addDays, communityToday } from "@/lib/dates/dates";
 import type { ViewerDTO } from "@/types/viewer";
 
 vi.mock("@/data/viewer", () => ({ getViewer: vi.fn() }));
+// The item page and profile read the cached category list (their hues).
+vi.mock(
+  "next/cache",
+  async () => (await import("@/__tests__/support/next-cache")).nextCacheModule,
+);
 
 vi.setConfig({ testTimeout: 60_000, hookTimeout: 60_000 });
 

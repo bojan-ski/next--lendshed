@@ -14,7 +14,7 @@ export default function AdminLayout({
   return (
     <Suspense fallback={<ContentSkeleton />}>
       <OrganizerGate>
-        <div className="md:grid md:grid-cols-[12rem_minmax(0,1fr)] md:gap-8">
+        <div className="md:grid md:grid-cols-[13rem_minmax(0,1fr)] md:items-start md:gap-10">
           <AdminMenu />
           <div className="min-w-0">{children}</div>
         </div>

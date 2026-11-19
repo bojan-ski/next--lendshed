@@ -100,9 +100,9 @@ function ToastCard({ toast }: { toast: ActiveToast }) {
         if (!event.currentTarget.contains(event.relatedTarget))
           setFocused(false);
       }}
-      className="pointer-events-auto flex w-full max-w-sm items-center gap-3 rounded-card border border-line bg-card py-1 pr-1 pl-4 text-ink motion-safe:transition-opacity motion-safe:duration-200 motion-safe:starting:opacity-0"
+      className="pointer-events-auto flex w-full max-w-sm items-center gap-3 rounded-tile border border-line bg-card py-1.5 pr-1.5 pl-4.5 text-ink motion-safe:transition-opacity motion-safe:duration-200 motion-safe:starting:opacity-0"
     >
-      <Icon name="check" aria-hidden className="shrink-0 text-accent" />
+      <Icon name="check" aria-hidden className="shrink-0 text-accent-ink" />
       <p className="flex-1">
         {t(flash[toast.key], { appName: publicEnv.NEXT_PUBLIC_APP_NAME })}
       </p>
@@ -110,7 +110,7 @@ function ToastCard({ toast }: { toast: ActiveToast }) {
         type="button"
         onClick={close}
         aria-label={toastStrings.close}
-        className="inline-flex size-11 shrink-0 items-center justify-center rounded-control"
+        className="inline-flex size-11 shrink-0 items-center justify-center rounded-full hover:bg-page"
       >
         <Icon name="close" aria-hidden />
       </button>

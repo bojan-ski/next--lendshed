@@ -41,7 +41,7 @@ export default async function MyLoansSection({
   const groups = GROUPS.filter((group) => loans[group].length > 0);
 
   return (
-    <div className="flex flex-col gap-6">
+    <div className="flex flex-col gap-7">
       <MyLoansTabs tab={tab} />
       {groups.length === 0 ? (
         <EmptyState

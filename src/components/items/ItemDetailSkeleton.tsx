@@ -20,7 +20,7 @@ export default function ItemDetailSkeleton() {
           <div className="h-16 rounded-control bg-neutral-soft" />
         </div>
       </div>
-      <Card className="flex flex-col gap-3 p-6 lg:w-1/2">
+      <Card className="flex flex-col gap-3 p-6 sm:px-8 sm:py-7.5 lg:w-1/2">
         <div className="h-7 w-40 rounded-control bg-neutral-soft" />
         <div className="h-5 w-48 rounded-control bg-neutral-soft" />
       </Card>
