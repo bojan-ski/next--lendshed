@@ -4,10 +4,10 @@ import path from "node:path";
 import sharp from "sharp";
 import { assertMigrated, createTestScope } from "@/__tests__/support/test-db";
 import { db } from "@/db";
-import { createDiskStorage } from "@/lib/storage/disk";
+import { createDiskStorage, DISK_URL_PREFIX } from "@/lib/storage/disk";
 import { SEED_ITEMS, type SeedItem } from "./items";
 import { SEED_PEOPLE } from "./people";
-import { ensureItemPhotos } from "./photos";
+import { ensureItemPhotos, seedPhotoStorage } from "./photos";
 
 vi.setConfig({ testTimeout: 30_000, hookTimeout: 60_000 });
 
@@ -120,6 +120,57 @@ describe("ensureItemPhotos", () => {
     ).toEqual(before);
   });
 
+  test("a photo under replacePrefix moves to the new store, the item keeps its status, and a re-run converges", async () => {
+    const storage = createDiskStorage({
+      root,
+      urlPrefix: "https://store.example.test/",
+    });
+    const ana = await scope.createTestUser({ contactDetails: "Phone 3" });
+    const listed = await scope.createItem({
+      ownerId: ana.id,
+      title: "Wheelbarrow",
+      status: "listed",
+      photo: await scope.createStoredPhoto(),
+    });
+    const hidden = await scope.createItem({
+      ownerId: ana.id,
+      title: "Hedge trimmer",
+      photo: await scope.createStoredPhoto(),
+    });
+    const elsewhere = await scope.createItem({
+      ownerId: ana.id,
+      title: "Tile cutter",
+      photo: true,
+    });
+    const entries = [
+      entry(ana.email, "Wheelbarrow"),
+      entry(ana.email, "Hedge trimmer"),
+      entry(ana.email, "Tile cutter"),
+    ];
+    const untouched = await row(elsewhere.id);
+
+    expect(
+      await ensureItemPhotos(db, storage, entries, DISK_URL_PREFIX),
+    ).toEqual({ photographed: 2, listed: 0 });
+
+    for (const [{ id }, status] of [
+      [listed, "listed"],
+      [hidden, "hidden"],
+    ] as const) {
+      const moved = await row(id);
+      expect(moved.status).toBe(status);
+      expect(moved.photoUrl).toBe(
+        `https://store.example.test/${moved.photoKey}`,
+      );
+      expect(moved.photoWidth).toBe(1200);
+    }
+    expect(await row(elsewhere.id)).toEqual(untouched);
+
+    expect(
+      await ensureItemPhotos(db, storage, entries, DISK_URL_PREFIX),
+    ).toEqual({ photographed: 0, listed: 0 });
+  });
+
   test("a retired item is left alone", async () => {
     const storage = createDiskStorage({ root, urlPrefix: "/uploads/" });
     const ana = await scope.createTestUser({ contactDetails: "Phone 2" });
@@ -134,6 +185,36 @@ describe("ensureItemPhotos", () => {
     ).toEqual({ photographed: 0, listed: 0 });
     expect((await row(id)).photoKey).toBeNull();
   });
+});
+
+describe("seedPhotoStorage", () => {
+  const blob = {
+    STORAGE_DRIVER: "blob",
+    BLOB_READ_WRITE_TOKEN: "vercel_blob_rw_test_token",
+    BLOB_PUBLIC_HOST: "abc123.public.blob.vercel-storage.com",
+  };
+
+  test.each([undefined, "", "disk"])(
+    "STORAGE_DRIVER=%s seeds to disk and replaces nothing",
+    (driver) => {
+      expect(
+        seedPhotoStorage({ STORAGE_DRIVER: driver }).replacePrefix,
+      ).toBeUndefined();
+    },
+  );
+
+  test("blob seeds to the store and moves disk-stored photos", () => {
+    expect(seedPhotoStorage(blob).replacePrefix).toBe(DISK_URL_PREFIX);
+  });
+
+  test.each(["BLOB_READ_WRITE_TOKEN", "BLOB_PUBLIC_HOST"] as const)(
+    "blob without %s is refused",
+    (name) => {
+      expect(() => seedPhotoStorage({ ...blob, [name]: "" })).toThrow(
+        "Blob seeding needs BLOB_READ_WRITE_TOKEN and BLOB_PUBLIC_HOST",
+      );
+    },
+  );
 });
 
 describe("seedPhotos's cast", () => {
