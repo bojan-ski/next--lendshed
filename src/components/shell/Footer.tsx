@@ -1,5 +1,7 @@
 import Link from "next/link";
+import { Suspense } from "react";
 import Container from "@/components/shell/Container";
+import Copyright from "@/components/shell/Copyright";
 import { footer } from "@/strings/footer";
 
 const linkClasses =
@@ -8,7 +10,7 @@ const linkClasses =
 export default function Footer() {
   return (
     <footer className="mt-auto border-t border-line">
-      <Container className="py-4">
+      <Container className="flex flex-col gap-2 py-4 lg:flex-row lg:items-center lg:justify-between lg:gap-6">
         <nav aria-label={footer.label}>
           <ul className="flex flex-wrap items-center gap-x-3">
             <li>
@@ -26,6 +28,12 @@ export default function Footer() {
             </li>
           </ul>
         </nav>
+        <div className="min-h-5">
+          {/* The year is read at request time; static shells stream it in. */}
+          <Suspense fallback={null}>
+            <Copyright />
+          </Suspense>
+        </div>
       </Container>
     </footer>
   );
