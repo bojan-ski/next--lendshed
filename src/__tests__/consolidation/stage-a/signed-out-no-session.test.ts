@@ -47,6 +47,12 @@ vi.mock("next/headers", () => ({
 vi.mock("@/data/viewer", () => ({ getViewer: () => forbidden("getViewer()") }));
 vi.mock("@/lib/auth/auth", () => ({ auth: throwingObject("auth") }));
 vi.mock("@/db", () => ({ db: throwingObject("db") }));
+// connection() reads nothing; outside Next it has no request scope, so it
+// stands for request time here (the footer's copyright year waits on it).
+vi.mock("next/server", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("next/server")>()),
+  connection: async () => undefined,
+}));
 // next/font needs Next's compiler; the root layout reads only `variable`.
 vi.mock("@/app/fonts", () => ({ atkinson: { variable: "font-atkinson" } }));
 
