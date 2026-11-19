@@ -1,6 +1,7 @@
 import sharp from "sharp";
 import type { PrismaClient } from "@/generated/prisma/client";
 import { STORED_PHOTO_MAX_EDGE } from "@/lib/photos/limits";
+import { createBlobStorage } from "@/lib/storage/blob";
 import {
   createDiskStorage,
   DISK_URL_PREFIX,
@@ -36,11 +37,14 @@ function placeholderPhoto(index: number): Promise<Buffer> {
 // Gives every photo-less seed item a placeholder and lists it when its owner
 // has contact details (the suspended member's too, for spec 12a's scope
 // sweep). An item that already has a photo is left alone, so a manual hide
-// survives re-runs. No UploadLog rows: these aren't member uploads.
+// survives re-runs, unless its URL starts with `replacePrefix`: that photo
+// moves to `storage` and the item keeps its status. No UploadLog rows: these
+// aren't member uploads.
 export async function ensureItemPhotos(
   client: PrismaClient,
   storage: PhotoStorage,
   entries: readonly SeedItem[],
+  replacePrefix?: string,
 ): Promise<{ photographed: number; listed: number }> {
   let photographed = 0;
   let listed = 0;
@@ -51,16 +55,23 @@ export async function ensureItemPhotos(
         id: true,
         status: true,
         photoKey: true,
+        photoUrl: true,
         owner: { select: { contactDetails: true } },
       },
     });
-    if (!item || item.photoKey !== null || item.status === "retired") continue;
+    if (!item || item.status === "retired") continue;
+    const replace =
+      replacePrefix !== undefined &&
+      item.photoUrl?.startsWith(replacePrefix) === true;
+    if (item.photoKey !== null && !replace) continue;
 
     const bytes = await placeholderPhoto(index);
     const key = newPhotoKey();
     const { url } = await storage.put(key, bytes, "image/webp");
     const list =
-      item.status === "hidden" && Boolean(item.owner?.contactDetails);
+      !replace &&
+      item.status === "hidden" &&
+      Boolean(item.owner?.contactDetails);
     await client.item.update({
       where: { id: item.id },
       data: {
@@ -78,12 +89,37 @@ export async function ensureItemPhotos(
   return { photographed, listed };
 }
 
+// The app's driver choice, read from the process env (tsx can't load the
+// server-only env module). With blob, disk-stored seed photos move to the
+// store, so a deployment on this database can show them.
+export function seedPhotoStorage(source: Record<string, string | undefined>): {
+  storage: PhotoStorage;
+  replacePrefix?: string;
+} {
+  if (source.STORAGE_DRIVER !== "blob") {
+    return {
+      storage: createDiskStorage({
+        root: diskStorageRoot(),
+        urlPrefix: DISK_URL_PREFIX,
+      }),
+    };
+  }
+  const token = source.BLOB_READ_WRITE_TOKEN;
+  const publicHost = source.BLOB_PUBLIC_HOST;
+  if (!token || !publicHost) {
+    throw new Error(
+      "Blob seeding needs BLOB_READ_WRITE_TOKEN and BLOB_PUBLIC_HOST",
+    );
+  }
+  return {
+    storage: createBlobStorage({ token, publicHost }),
+    replacePrefix: DISK_URL_PREFIX,
+  };
+}
+
 export async function seedPhotos(
   client: PrismaClient,
 ): Promise<{ photographed: number; listed: number }> {
-  const storage = createDiskStorage({
-    root: diskStorageRoot(),
-    urlPrefix: DISK_URL_PREFIX,
-  });
-  return ensureItemPhotos(client, storage, SEED_ITEMS);
+  const { storage, replacePrefix } = seedPhotoStorage(process.env);
+  return ensureItemPhotos(client, storage, SEED_ITEMS, replacePrefix);
 }
