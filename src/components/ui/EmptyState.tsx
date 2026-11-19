@@ -19,11 +19,15 @@ export default function EmptyState({
   headingLevel: Heading = "h2",
 }: EmptyStateProps) {
   return (
-    <Card className="flex flex-col items-center gap-3 px-6 py-10 text-center">
-      <Icon name={icon} size={48} aria-hidden className="text-muted" />
-      <Heading className="text-xl font-bold">{heading}</Heading>
+    <Card className="flex flex-col items-center gap-3.5 rounded-band px-6 py-12 text-center sm:px-8 sm:py-14">
+      <span className="flex size-22 items-center justify-center rounded-full bg-accent-soft text-accent-ink">
+        <Icon name={icon} size={44} aria-hidden />
+      </span>
+      <Heading className="font-display text-4xl font-extrabold">
+        {heading}
+      </Heading>
       <p className="text-muted">{body}</p>
-      {action}
+      {action && <div className="mt-1.5">{action}</div>}
     </Card>
   );
 }

@@ -3,6 +3,11 @@
 import Link from "next/link";
 import { useActionState, useEffect, useRef } from "react";
 import { joinWithInvitation } from "@/actions/invitations";
+import {
+  AUTH_BAND,
+  AUTH_BODY,
+  AUTH_TITLE,
+} from "@/components/auth/auth-card-styles";
 import LinkBroken from "@/components/auth/LinkBroken";
 import Button from "@/components/ui/Button";
 import Field from "@/components/ui/Field";
@@ -49,20 +54,21 @@ export default function JoinForm({
     (state.fieldErrors !== undefined || state.formError !== undefined) &&
     !houseRulesError;
 
+  // The community's name stands out in the band; the heading reads as one line.
+  const [lead, tail = ""] = t(join.heading, {
+    appName: publicEnv.NEXT_PUBLIC_APP_NAME,
+  }).split("{community}");
+
   return (
-    <div className="flex flex-col gap-6">
-      <h1 className="text-2xl font-bold">
-        {t(join.heading, {
-          appName: publicEnv.NEXT_PUBLIC_APP_NAME,
-          community,
-        })}
-      </h1>
-      <form
-        ref={form}
-        action={formAction}
-        noValidate
-        className="flex flex-col gap-4"
-      >
+    <>
+      <div className={AUTH_BAND}>
+        <h1 className={AUTH_TITLE}>
+          {lead}
+          <span className="text-on-accent-highlight">{community}</span>
+          {tail}
+        </h1>
+      </div>
+      <form ref={form} action={formAction} noValidate className={AUTH_BODY}>
         {state.formError && (
           <div ref={notice} tabIndex={-1}>
             <Notice tone="error" alert={false}>
@@ -119,7 +125,7 @@ export default function JoinForm({
           )}
         </Field>
         <div className="flex flex-col gap-1.5">
-          <label className="flex min-h-11 items-center gap-3">
+          <label className="flex min-h-12 items-center gap-3 rounded-thumb bg-page px-4 py-2">
             <input
               type="checkbox"
               name="acceptHouseRules"
@@ -133,7 +139,10 @@ export default function JoinForm({
             />
             <span>
               {join.houseRulesBefore}
-              <Link href="/house-rules" className="text-accent underline">
+              <Link
+                href="/house-rules"
+                className="font-bold text-accent-ink underline underline-offset-4"
+              >
                 {join.houseRulesLink}
               </Link>
             </span>
@@ -148,6 +157,6 @@ export default function JoinForm({
           {join.submit}
         </Button>
       </form>
-    </div>
+    </>
   );
 }

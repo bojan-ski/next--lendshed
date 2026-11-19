@@ -6,11 +6,11 @@ export type ButtonVariant = "primary" | "outline";
 // file gets a reference, not this function.
 export function buttonClasses(variant: ButtonVariant, className?: string) {
   return cn(
-    "inline-flex h-12 items-center justify-center gap-2 rounded-control px-5 font-bold",
+    "inline-flex h-12 items-center justify-center gap-2 rounded-full px-6 text-md font-bold motion-safe:transition-[background-color] motion-safe:duration-150",
     "disabled:cursor-not-allowed disabled:opacity-60",
     variant === "primary"
-      ? "bg-accent text-white hover:bg-accent-hover disabled:hover:bg-accent"
-      : "border border-field bg-card text-ink",
+      ? "bg-primary text-ink hover:bg-primary-hover disabled:hover:bg-primary"
+      : "border-2 border-ink bg-card text-ink hover:bg-page disabled:hover:bg-card",
     className,
   );
 }

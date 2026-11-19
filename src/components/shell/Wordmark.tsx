@@ -8,8 +8,8 @@ export default function Wordmark() {
       <Image
         src="/wordmark.svg"
         alt={publicEnv.NEXT_PUBLIC_APP_NAME}
-        width={145}
-        height={24}
+        width={170}
+        height={28}
         unoptimized
         loading="eager"
       />

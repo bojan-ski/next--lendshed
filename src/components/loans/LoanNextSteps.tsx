@@ -80,13 +80,16 @@ export default function LoanNextSteps({ loan, today }: LoanNextStepsProps) {
   };
 
   return (
-    <Card className="flex flex-col gap-3 p-6">
-      <h2 className="text-xl font-bold">{loanPage.nextHeading}</h2>
+    <Card className="flex flex-col gap-3 p-6 sm:px-8 sm:py-7.5">
+      <h2 className="type-section-title">{loanPage.nextHeading}</h2>
       {isOpen(loan.status) ? (
-        <ol className="flex flex-col gap-2">
+        <ol className="flex flex-col gap-3">
           {loanPage.steps[loan.status][loan.viewerRole].map((step, index) => (
-            <li key={step} className="flex gap-3">
-              <span aria-hidden className="shrink-0 font-bold text-accent">
+            <li key={step} className="flex items-center gap-3.5">
+              <span
+                aria-hidden
+                className="flex size-8 shrink-0 items-center justify-center rounded-full bg-primary font-bold"
+              >
                 {index + 1}
               </span>
               <span className="min-w-0 wrap-break-word">{t(step, names)}</span>

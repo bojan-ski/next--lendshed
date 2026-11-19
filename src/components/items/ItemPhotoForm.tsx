@@ -110,7 +110,7 @@ export default function ItemPhotoForm({
   }
 
   return (
-    <div className="flex flex-col gap-4 sm:flex-row sm:items-start">
+    <div className="flex flex-col gap-5 sm:flex-row sm:items-start">
       <ItemPhotoPreview
         photo={photo}
         pendingUrl={saving ? previewUrl : null}

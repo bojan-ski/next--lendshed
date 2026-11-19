@@ -15,7 +15,7 @@ export const instant = false;
 export default function CategoriesPage() {
   return (
     <div className="flex flex-col gap-6">
-      <h1 className="text-2xl font-bold">{categories.title}</h1>
+      <h1 className="type-page-title">{categories.title}</h1>
       <NewCategoryForm />
       <section
         aria-labelledby={CATEGORIES_HEADING_ID}
@@ -24,7 +24,7 @@ export default function CategoriesPage() {
         <h2
           id={CATEGORIES_HEADING_ID}
           tabIndex={-1}
-          className="text-xl font-bold"
+          className="type-section-title"
         >
           {categories.listHeading}
         </h2>

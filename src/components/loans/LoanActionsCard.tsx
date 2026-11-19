@@ -30,8 +30,8 @@ export default function LoanActionsCard({
   const handOver = loan.actions.includes("hand_over");
   const cancel = loan.actions.includes("cancel");
   return (
-    <Card className="flex flex-col gap-3 p-6">
-      <h2 className="text-xl font-bold">{headingFor(loan)}</h2>
+    <Card className="flex flex-col gap-4.5 p-6 sm:px-8 sm:py-7.5">
+      <h2 className="type-section-title">{headingFor(loan)}</h2>
       {loan.actions.includes("approve") && count > 0 && (
         <Notice tone="info">
           {count === 1

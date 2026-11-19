@@ -31,6 +31,8 @@ const eslintConfig = defineConfig([
     "next-env.d.ts",
     // Prisma's generated client (gitignored, written by `prisma generate`)
     "src/generated/**",
+    // The design handoff's HTML-mock runtime: reference, not app code.
+    "context/redesign/**",
   ]),
 ]);
 

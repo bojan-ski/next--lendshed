@@ -16,7 +16,7 @@ export default function RequestRefusal({
       return (
         <>
           {requestForm.needsContactDetails}{" "}
-          <Link href="/account" className="font-bold text-accent underline">
+          <Link href="/account" className="font-bold text-accent-ink underline">
             {requestForm.accountLink}
           </Link>
         </>

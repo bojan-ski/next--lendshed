@@ -11,8 +11,8 @@ export default function OrganizerRetireCard({
   title: string;
 }) {
   return (
-    <Card className="flex flex-col gap-3 p-6">
-      <h2 className="text-xl font-bold">{itemPage.retireHeading}</h2>
+    <Card className="flex flex-col gap-3 p-6 sm:px-8 sm:py-7.5">
+      <h2 className="type-section-title">{itemPage.retireHeading}</h2>
       <p className="text-sm text-muted">{itemPage.retireLine}</p>
       <OrganizerRetireForm itemId={itemId} title={title} />
     </Card>

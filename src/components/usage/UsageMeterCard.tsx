@@ -1,5 +1,6 @@
 import Card from "@/components/ui/Card";
 import { Icon } from "@/components/ui/icons";
+import { cn } from "@/lib/text/cn";
 import { t } from "@/lib/text/interpolate";
 import { usage } from "@/strings/usage";
 
@@ -13,6 +14,13 @@ type UsageMeterCardProps = {
   max: number;
   warn: boolean;
   warnText: string;
+  fill: "primary" | "accent" | "sky";
+};
+
+const FILL = {
+  primary: "bg-primary",
+  accent: "bg-accent",
+  sky: "bg-hue-strong [--hue:230]",
 };
 
 export default function UsageMeterCard({
@@ -25,15 +33,16 @@ export default function UsageMeterCard({
   max,
   warn,
   warnText,
+  fill,
 }: UsageMeterCardProps) {
   return (
-    <Card className="flex flex-col gap-3 p-4">
+    <Card className="flex flex-col gap-3.5 p-6 sm:px-6.5 sm:pt-6.5 sm:pb-7">
       <h2 id={id} className="text-base font-bold">
         {title}
       </h2>
-      <p className="text-lg">
+      <p className="font-display text-4xl font-extrabold">
         {t(usage.usedOf, { used: usedText, limit: limitText })}{" "}
-        <span className="text-muted">{t(usage.percent, { percent })}</span>
+        <span className="font-sans text-md font-normal text-muted">{t(usage.percent, { percent })}</span>
       </p>
       <div
         role="meter"
@@ -46,11 +55,11 @@ export default function UsageMeterCard({
           limit: limitText,
           percent,
         })}
-        className="h-2 overflow-hidden rounded-full bg-line"
+        className="h-3 overflow-hidden rounded-full bg-neutral-soft"
       >
         {/* A computed width, not a theme value: no utility can express it. */}
         <div
-          className="h-full rounded-full bg-accent"
+          className={cn("h-full rounded-full", FILL[fill])}
           style={{ width: `${Math.min(percent, 100)}%` }}
         />
       </div>

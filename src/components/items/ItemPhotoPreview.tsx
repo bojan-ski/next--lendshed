@@ -16,7 +16,7 @@ export default function ItemPhotoPreview({
   alt,
 }: ItemPhotoPreviewProps) {
   return (
-    <div className="relative aspect-square w-full shrink-0 overflow-hidden rounded-card sm:w-48">
+    <div className="relative aspect-square w-full shrink-0 overflow-hidden rounded-tile sm:w-38">
       {pendingUrl ? (
         <Image
           src={pendingUrl}

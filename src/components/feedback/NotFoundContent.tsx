@@ -5,7 +5,7 @@ import { errors } from "@/strings/errors";
 export default function NotFoundContent() {
   return (
     <div className="flex flex-col gap-6">
-      <h1 className="text-2xl font-bold">{errors.notFoundTitle}</h1>
+      <h1 className="type-page-title">{errors.notFoundTitle}</h1>
       <EmptyState
         icon="search"
         heading={errors.notFoundHeading}

@@ -1,4 +1,5 @@
 import ItemDetailsForm from "@/components/items/ItemDetailsForm";
+import StepLine from "@/components/items/StepLine";
 import ButtonLink from "@/components/ui/ButtonLink";
 import Card from "@/components/ui/Card";
 import Notice from "@/components/ui/Notice";
@@ -38,8 +39,8 @@ export default async function NewItemSection() {
 
   return (
     <>
-      <p className="text-muted">{items.stepDetails}</p>
-      <Card className="p-4 sm:p-6">
+      <StepLine step={1} text={items.stepDetails} />
+      <Card className="p-5 sm:px-8 sm:py-7.5">
         <ItemDetailsForm categories={categories} />
       </Card>
     </>

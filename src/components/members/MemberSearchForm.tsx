@@ -16,12 +16,12 @@ export default function MemberSearchForm({ q }: { q: string }) {
       <Form
         action="/admin/members"
         role="search"
-        className="flex flex-col gap-2 sm:flex-row sm:items-end"
+        className="flex max-w-155 flex-col gap-2"
       >
-        <div className="flex flex-col gap-1.5 sm:flex-1">
-          <label htmlFor={FIELD_ID} className="font-bold">
-            {members.searchLabel}
-          </label>
+        <label htmlFor={FIELD_ID} className="font-bold">
+          {members.searchLabel}
+        </label>
+        <div className="flex gap-1.5 rounded-full border-[1.5px] border-field bg-card p-1.5">
           <TextInput
             id={FIELD_ID}
             type="search"
@@ -29,16 +29,17 @@ export default function MemberSearchForm({ q }: { q: string }) {
             defaultValue={q}
             maxLength={NAME_MAX}
             autoComplete="off"
+            className="h-12 min-w-0 flex-1 rounded-full border-0 bg-transparent px-4"
           />
+          <Button type="submit" className="shrink-0 px-6">
+            {members.search}
+          </Button>
         </div>
-        <Button type="submit" className="sm:w-auto">
-          {members.search}
-        </Button>
       </Form>
       {q && (
         <Link
           href="/admin/members"
-          className="inline-flex min-h-11 items-center self-start font-bold text-accent underline underline-offset-4"
+          className="inline-flex min-h-11 items-center self-start font-bold text-accent-ink underline underline-offset-4"
         >
           {members.showEveryone}
         </Link>

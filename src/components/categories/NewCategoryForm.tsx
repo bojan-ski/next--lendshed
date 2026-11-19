@@ -44,7 +44,7 @@ export default function NewCategoryForm() {
   }, [state]);
 
   return (
-    <Card className="p-4 sm:p-6">
+    <Card className="p-5 sm:px-8 sm:py-7.5">
       <form
         ref={form}
         action={formAction}

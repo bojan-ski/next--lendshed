@@ -95,12 +95,12 @@ export default function OrganizerCloseForm({
         aria-describedby={asLentError ? AS_LENT_ERROR_ID : undefined}
         className="flex flex-col gap-1.5"
       >
-        <legend className="mb-1.5 font-bold">{loanActions.asLentLegend}</legend>
-        <div className="flex flex-col sm:flex-row sm:gap-6">
+        <legend className="mb-2 font-bold">{loanActions.asLentLegend}</legend>
+        <div className="flex flex-col gap-2.5 sm:flex-row">
           {choices.map((choice) => (
             <label
               key={choice.value}
-              className="flex min-h-11 cursor-pointer items-center gap-3"
+              className="flex min-h-12 cursor-pointer items-center gap-2.5 rounded-full border-2 border-line px-5 motion-safe:transition-[background-color] motion-safe:duration-150 has-checked:border-accent"
             >
               <input
                 type="radio"

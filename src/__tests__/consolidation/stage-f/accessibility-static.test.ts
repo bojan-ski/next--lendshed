@@ -206,12 +206,19 @@ const baseLayer = /@layer base\s*\{([\s\S]*)\}\s*$/.exec(css)?.[1] ?? "";
 const themeBlock = /@theme\s*\{([\s\S]*?)\n\}/.exec(css)?.[1] ?? "";
 
 describe("focus", () => {
-  test("@layer base holds the one :focus-visible rule: 2px solid accent, 2px offset", () => {
+  // Accent by default; a green surface swaps in marigold, or the ring would
+  // vanish against it (Front Porch redesign).
+  test("@layer base holds the one :focus-visible rule: 2px solid accent (marigold on green), 2px offset", () => {
     expect(css.match(/:focus-visible\s*\{/g)).toHaveLength(1);
     const rule = /:focus-visible\s*\{([^}]*)\}/.exec(baseLayer)?.[1] ?? "";
-    expect(rule).toMatch(/outline:\s*2px solid var\(--color-accent\);/);
+    expect(rule).toMatch(
+      /outline:\s*2px solid var\(--focus-ring, var\(--color-accent\)\);/,
+    );
     expect(rule).toMatch(/outline-offset:\s*2px;/);
-    expect(themeBlock).toMatch(/--color-accent:\s*#[0-9a-f]{6};/i);
+    expect(themeBlock).toMatch(/--color-accent:\s*oklch\([^)]*\);/);
+    const surface =
+      /@utility surface-accent\s*\{([\s\S]*?)\n\}/.exec(css)?.[1] ?? "";
+    expect(surface).toMatch(/--focus-ring:\s*var\(--color-primary\);/);
   });
 
   test("no CSS sets outline: none or 0", () => {

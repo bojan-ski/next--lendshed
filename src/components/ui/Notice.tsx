@@ -20,10 +20,9 @@ export default function Notice({
     <div
       role={alert ? "alert" : undefined}
       className={cn(
-        "flex items-start gap-2 bg-notice text-ink",
-        tone === "error"
-          ? "rounded-control border-l-[3px] border-ink p-3"
-          : "rounded-card p-4",
+        // Its own focus ring, also inside a green card.
+        "flex items-start gap-3 rounded-tile bg-notice px-5 py-4 text-ink [--focus-ring:var(--color-accent)]",
+        tone === "error" && "border-2 border-ink",
         className,
       )}
     >

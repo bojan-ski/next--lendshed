@@ -90,7 +90,7 @@ export default function ProfileForm({ name, area, email }: ProfileFormProps) {
           />
         )}
       </Field>
-      <div className="flex flex-col gap-1">
+      <div className="flex flex-col gap-1 rounded-thumb bg-page px-4.5 py-4">
         <p className="font-bold">{account.emailLabel}</p>
         <p className="wrap-break-word">{email}</p>
         <p className="text-sm text-muted">{account.emailNote}</p>

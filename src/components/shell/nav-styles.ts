@@ -1,9 +1,13 @@
 import { cn } from "@/lib/text/cn";
 
-export function navLinkClasses(current: boolean) {
+// Nav items are pills; the current one is filled.
+export function navLinkClasses(current: boolean, className?: string) {
   return cn(
-    "inline-flex min-h-11 items-center px-2 font-bold",
-    current ? "text-accent underline underline-offset-4" : "text-ink",
+    "inline-flex min-h-11 items-center rounded-full px-4 motion-safe:transition-[background-color] motion-safe:duration-150",
+    current
+      ? "bg-accent-soft font-bold text-accent-ink"
+      : "text-ink hover:bg-page",
+    className,
   );
 }
 

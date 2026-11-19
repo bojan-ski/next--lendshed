@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Suspense } from "react";
 import JoinForm from "@/components/auth/JoinForm";
 import JoinFormSkeleton from "@/components/auth/JoinFormSkeleton";
+import { AUTH_CARD } from "@/components/auth/auth-card-styles";
 import Card from "@/components/ui/Card";
 import { env } from "@/lib/env/server";
 import { join } from "@/strings/join";
@@ -14,7 +15,7 @@ export const metadata: Metadata = {
 // No session and no database read on render: the token is checked on submit.
 export default function InvitePage({ params }: PageProps<"/invite/[token]">) {
   return (
-    <Card className="mx-auto max-w-104 p-6">
+    <Card className={AUTH_CARD}>
       <Suspense fallback={<JoinFormSkeleton />}>
         <JoinFormForToken params={params} />
       </Suspense>

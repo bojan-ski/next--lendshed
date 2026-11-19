@@ -17,6 +17,7 @@ import { getAdminMemberDetail } from "@/data/members";
 import { requireOrganizer } from "@/lib/auth/guards";
 import { formatDate } from "@/lib/dates/dates";
 import { requestToday } from "@/lib/dates/request-today";
+import { hueFor } from "@/lib/text/hue";
 import { t } from "@/lib/text/interpolate";
 import { memberStatus } from "@/lib/text/status";
 import { members } from "@/strings/members";
@@ -82,18 +83,17 @@ export default async function MemberDetailSection({
 
   return (
     <>
-      <header className="flex items-center gap-4">
+      <header className="flex items-center gap-5">
         <Avatar
           initials={member.initials}
+          hue={hueFor(member.id)}
           aria-hidden
-          className="size-12 text-lg"
+          className="size-16 font-display text-2xl font-extrabold sm:size-20 sm:text-3xl"
         />
-        <div className="flex min-w-0 flex-col gap-1">
-          <h1 className="text-2xl font-bold wrap-break-word">
-            {member.displayName}
-          </h1>
+        <div className="flex min-w-0 flex-col gap-2.5">
+          <h1 className="type-page-title">{member.displayName}</h1>
           {/* A list, so the facts aren't read as one run-on sentence. */}
-          <ul className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-muted">
+          <ul className="flex flex-wrap items-center gap-x-3.5 gap-y-1.5 text-muted">
             <li>{members.role[member.role]}</li>
             <li>
               <StatusLabel status={memberStatus[member.status]} />
@@ -108,51 +108,67 @@ export default async function MemberDetailSection({
         </div>
       </header>
 
-      <MemberCard id={LOANS_HEADING_ID} heading={members.loansHeading}>
-        <MemberOpenLoans
-          loans={member.openLoans}
-          suspended={member.status === "suspended"}
-          today={today}
-        />
-      </MemberCard>
+      {/* Two columns from 1024 px, in reading order: loans, access and
+          delete on the left; role and reset on the right. */}
+      <div className="grid items-start gap-6 lg:grid-cols-2">
+        <div className="flex min-w-0 flex-col gap-6">
+          <MemberCard id={LOANS_HEADING_ID} heading={members.loansHeading}>
+            <MemberOpenLoans
+              loans={member.openLoans}
+              suspended={member.status === "suspended"}
+              today={today}
+            />
+          </MemberCard>
 
-      {member.isSelf ? (
-        <p className="text-sm text-muted">
-          {members.ownRecordBefore}
-          <Link href="/account" className="text-accent underline">
-            {members.ownRecordLink}
-          </Link>
-          {members.ownRecordAfter}
-        </p>
-      ) : (
-        <>
-          <MemberCard id={ACCESS_HEADING_ID} heading={members.accessHeading}>
-            <AccessControl member={member} />
-          </MemberCard>
-          {member.status === "suspended" && (
-            <MemberCard id="delete-heading" heading={members.deleteHeading}>
-              {member.canDelete ? (
-                <>
-                  <p className="text-sm text-muted">{members.deleteBody}</p>
-                  <DeleteMemberButton
-                    memberId={member.id}
-                    memberName={member.displayName}
-                  />
-                </>
-              ) : (
-                <p className="text-sm text-muted">{members.deleteStillOut}</p>
+          {member.isSelf ? (
+            <p className="text-sm text-muted">
+              {members.ownRecordBefore}
+              <Link href="/account" className="text-accent-ink underline">
+                {members.ownRecordLink}
+              </Link>
+              {members.ownRecordAfter}
+            </p>
+          ) : (
+            <>
+              <MemberCard
+                id={ACCESS_HEADING_ID}
+                heading={members.accessHeading}
+                green
+              >
+                <AccessControl member={member} />
+              </MemberCard>
+              {member.status === "suspended" && (
+                <MemberCard id="delete-heading" heading={members.deleteHeading}>
+                  {member.canDelete ? (
+                    <>
+                      <p className="text-sm text-muted">{members.deleteBody}</p>
+                      <DeleteMemberButton
+                        memberId={member.id}
+                        memberName={member.displayName}
+                      />
+                    </>
+                  ) : (
+                    <p className="text-sm text-muted">
+                      {members.deleteStillOut}
+                    </p>
+                  )}
+                </MemberCard>
               )}
-            </MemberCard>
+            </>
           )}
-          <MemberCard id={ROLE_HEADING_ID} heading={members.roleHeading}>
-            <RoleControl member={member} />
-          </MemberCard>
-          <MemberCard id="reset-heading" heading={members.resetHeading}>
-            <p className="text-sm text-muted">{members.resetBody}</p>
-            <ResetLinkForm memberId={member.id} />
-          </MemberCard>
-        </>
-      )}
+        </div>
+        {!member.isSelf && (
+          <div className="flex min-w-0 flex-col gap-6">
+            <MemberCard id={ROLE_HEADING_ID} heading={members.roleHeading}>
+              <RoleControl member={member} />
+            </MemberCard>
+            <MemberCard id="reset-heading" heading={members.resetHeading}>
+              <p className="text-sm text-muted">{members.resetBody}</p>
+              <ResetLinkForm memberId={member.id} />
+            </MemberCard>
+          </div>
+        )}
+      </div>
     </>
   );
 }

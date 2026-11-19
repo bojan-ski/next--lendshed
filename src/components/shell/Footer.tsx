@@ -2,15 +2,15 @@ import Link from "next/link";
 import { Suspense } from "react";
 import Container from "@/components/shell/Container";
 import Copyright from "@/components/shell/Copyright";
+import { textLinkClasses } from "@/components/ui/link-styles";
 import { footer } from "@/strings/footer";
 
-const linkClasses =
-  "inline-flex min-h-11 items-center font-bold text-accent underline underline-offset-4";
+const linkClasses = `inline-flex min-h-11 items-center ${textLinkClasses}`;
 
 export default function Footer() {
   return (
     <footer className="mt-auto border-t border-line">
-      <Container className="flex flex-col gap-2 py-4 lg:flex-row lg:items-center lg:justify-between lg:gap-6">
+      <Container className="flex flex-col gap-2 py-5 lg:flex-row lg:items-center lg:justify-between lg:gap-6">
         <nav aria-label={footer.label}>
           <ul className="flex flex-wrap items-center gap-x-3">
             <li>

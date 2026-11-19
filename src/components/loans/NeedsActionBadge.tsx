@@ -18,7 +18,7 @@ export default async function NeedsActionBadge() {
     <>
       <span
         aria-hidden
-        className="ml-2 inline-flex min-w-6 items-center justify-center rounded-full bg-accent px-1.5 text-sm font-bold text-white"
+        className="ml-2 inline-flex h-5.5 min-w-5.5 items-center justify-center rounded-full bg-primary px-1.5 text-xs font-bold text-ink"
       >
         {count}
       </span>{" "}

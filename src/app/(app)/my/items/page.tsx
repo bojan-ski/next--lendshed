@@ -10,7 +10,7 @@ export const metadata: Metadata = { title: items.myItemsTitle };
 export default function MyItemsPage() {
   return (
     <div className="flex flex-col gap-6">
-      <h1 id={MY_ITEMS_HEADING_ID} className="text-2xl font-bold">
+      <h1 id={MY_ITEMS_HEADING_ID} className="type-page-title">
         {items.myItemsTitle}
       </h1>
       <Suspense fallback={<OwnItemsTableSkeleton />}>

@@ -17,14 +17,14 @@ export default function PasswordInput({
     <div className="relative">
       <input
         type={visible ? "text" : "password"}
-        className={controlClasses("h-12 pr-14", className)}
+        className={controlClasses("h-13 pr-14", className)}
         {...props}
       />
       <button
         type="button"
         onClick={() => setVisible((v) => !v)}
         aria-label={visible ? fields.hidePassword : fields.showPassword}
-        className="absolute inset-y-0 right-0 inline-flex w-12 items-center justify-center rounded-control text-ink"
+        className="absolute inset-y-0 right-0 inline-flex w-13 items-center justify-center rounded-control text-ink"
       >
         <Icon name={visible ? "eye-off" : "eye"} aria-hidden />
       </button>

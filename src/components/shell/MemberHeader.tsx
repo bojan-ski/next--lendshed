@@ -32,14 +32,14 @@ export default function MemberHeader({
   ];
 
   return (
-    <header className="border-b border-line bg-card">
-      <Container className="flex flex-wrap items-center gap-x-6 py-2">
+    <header className="bg-card">
+      <Container className="flex flex-wrap items-center gap-x-7 gap-y-2 py-3 lg:py-4">
         <Wordmark />
         <nav
           aria-label={nav.label}
           className="order-last w-full sm:order-none sm:w-auto"
         >
-          <ul className="-mx-2 flex flex-wrap items-center gap-x-2">
+          <ul className="flex flex-wrap items-center gap-1.5">
             {entries.map((entry) => (
               <li key={entry.href}>
                 {/* usePathname suspends on routes with unknown dynamic params. */}

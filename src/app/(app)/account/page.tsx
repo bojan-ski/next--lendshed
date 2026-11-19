@@ -8,8 +8,8 @@ export const metadata: Metadata = { title: account.title };
 
 export default function AccountPage() {
   return (
-    <div className="flex max-w-160 flex-col gap-6">
-      <h1 className="text-2xl font-bold">{account.title}</h1>
+    <div className="flex flex-col gap-7">
+      <h1 className="type-page-title">{account.title}</h1>
       <Suspense fallback={<AccountSkeleton />}>
         <AccountSections />
       </Suspense>

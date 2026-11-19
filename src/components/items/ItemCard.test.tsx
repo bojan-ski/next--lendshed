@@ -6,6 +6,7 @@ import ItemCard from "./ItemCard";
 const item: ItemCardDTO = {
   id: "item-1",
   title: "Cordless drill",
+  categoryId: "cat-1",
   categoryName: "Tools",
   ownerName: "Marko J.",
   ownerArea: "north end",

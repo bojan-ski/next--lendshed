@@ -51,7 +51,7 @@ describe("ItemPhotoForm", () => {
     expect(screen.getByTestId("photo-placeholder")).toBeInTheDocument();
     expect(control()).toHaveAttribute("type", "file");
     expect(control()).toHaveAttribute("accept", "image/*");
-    expect(control().closest("label")).toHaveClass("bg-accent");
+    expect(control().closest("label")).toHaveClass("bg-primary");
     expect(screen.getByText(photos.guidance)).toBeInTheDocument();
   });
 
@@ -64,7 +64,7 @@ describe("ItemPhotoForm", () => {
       }),
     ).toBeInTheDocument();
     expect(control(photos.chooseAnother).closest("label")).not.toHaveClass(
-      "bg-accent",
+      "bg-primary",
     );
   });
 

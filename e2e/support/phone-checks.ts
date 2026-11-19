@@ -138,7 +138,7 @@ type FocusStop = {
   appeared: boolean;
   label: string;
   outline: string;
-  accent: string;
+  ring: string;
   box: { width: number; height: number };
 };
 
@@ -178,7 +178,7 @@ function focusStop(page: Page): Promise<FocusStop> {
         appeared: false,
         label: "",
         outline: "",
-        accent: "",
+        ring: "",
         box: { width: 0, height: 0 },
       };
     }
@@ -188,29 +188,42 @@ function focusStop(page: Page): Promise<FocusStop> {
     const labelled = el instanceof HTMLInputElement && el.labels?.[0];
     if (hidden && labelled) target = labelled;
     const style = getComputedStyle(target);
-    const probe = document.createElement("span");
-    probe.style.color = "var(--color-accent)";
-    document.body.append(probe);
-    const accent = getComputedStyle(probe).color;
-    probe.remove();
+    // The ring this spot should have: accent, or marigold inside a green
+    // surface (its --focus-ring), read by a probe that inherits from there.
+    // Anything other than those two tokens is wrong in itself.
+    const colourOf = (value: string, parent: Element) => {
+      const probe = document.createElement("span");
+      probe.style.color = value;
+      parent.append(probe);
+      const colour = getComputedStyle(probe).color;
+      probe.remove();
+      return colour;
+    };
+    const ring = colourOf(
+      "var(--focus-ring, var(--color-accent))",
+      target.parentElement ?? document.body,
+    );
+    const allowed = ["var(--color-accent)", "var(--color-primary)"].map(
+      (token) => colourOf(token, document.body),
+    );
     const box = target.getBoundingClientRect();
     return {
       done: false,
       appeared: hidden && !labelled,
       label: `${target.tagName.toLowerCase()} "${(target.textContent ?? "").trim().slice(0, 40)}"`,
       outline: `${style.outlineStyle} ${style.outlineWidth} ${style.outlineOffset} ${style.outlineColor}`,
-      accent,
+      ring: allowed.includes(ring) ? ring : `${ring} (not a ring token)`,
       box: { width: box.width, height: box.height },
     };
   });
 }
 
-// One stop's problems: the 2 px accent ring at a 2 px offset, and a target
+// One stop's problems: the 2 px ring (accent; marigold on green) at a 2 px offset, and a target
 // size when it only appears on focus.
 function stopViolations(info: FocusStop) {
   const outline: string[] = [];
   const appearing: string[] = [];
-  const expected = `solid 2px 2px ${info.accent}`;
+  const expected = `solid 2px 2px ${info.ring}`;
   if (info.outline !== expected) {
     outline.push(`${info.label}: ${info.outline} (want ${expected})`);
   }
@@ -223,7 +236,7 @@ function stopViolations(info: FocusStop) {
   return { outline, appearing };
 }
 
-// Rule 3: Tab from the top; every stop shows the 2 px accent ring at a 2 px
+// Rule 3: Tab from the top; every stop shows the 2 px ring (accent; marigold on green) at a 2 px
 // offset, and a stop that only appears on focus is target-sized (rule 2).
 export async function focusViolations(page: Page) {
   await page.evaluate(() => {

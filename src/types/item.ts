@@ -6,6 +6,8 @@ export type PhotoDTO = { url: string; width: number; height: number };
 export type ItemCardDTO = {
   id: string;
   title: string;
+  // The id only colours the category chip and placeholder (hueFor).
+  categoryId: string;
   categoryName: string;
   ownerName: string;
   ownerArea: string | null;

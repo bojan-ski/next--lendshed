@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { ADMIN_AREAS } from "@/components/admin/admin-areas";
 import { Icon } from "@/components/ui/icons";
+import { hueStyle } from "@/lib/text/hue";
 import { admin } from "@/strings/admin";
 
 export const metadata: Metadata = { title: admin.title };
@@ -13,18 +14,23 @@ export const instant = false;
 // Static links only: no organizer data, so the layout's guard is enough here.
 export default function AdminPage() {
   return (
-    <div className="flex flex-col gap-6">
-      <h1 className="text-2xl font-bold">{admin.title}</h1>
-      <ul className="flex flex-col gap-3">
+    <div className="flex flex-col gap-7">
+      <h1 className="type-page-title">{admin.title}</h1>
+      <ul className="grid gap-4 lg:grid-cols-2">
         {ADMIN_AREAS.map((area) => (
           <li key={area.href}>
             <Link
               href={area.href}
-              className="flex min-h-11 items-center gap-4 rounded-card border border-line bg-card p-4"
+              className="flex h-full min-h-11 items-center gap-4.5 rounded-card bg-card p-5 sm:p-6"
             >
-              <Icon name={area.icon} aria-hidden className="shrink-0" />
-              <span className="flex min-w-0 flex-1 flex-col">
-                <span className="text-base font-bold">{area.label}</span>
+              <span
+                style={hueStyle(area.hue)}
+                className="flex size-14 shrink-0 items-center justify-center rounded-full bg-hue-tint text-hue-deep"
+              >
+                <Icon name={area.icon} size={26} aria-hidden />
+              </span>
+              <span className="flex min-w-0 flex-1 flex-col gap-1">
+                <span className="type-subhead font-bold">{area.label}</span>
                 <span className="text-sm text-muted">{area.description}</span>
               </span>
               <Icon

@@ -58,7 +58,7 @@ describe("NeedsActionBadge", () => {
       const { container } = await renderBadge();
       const pill = container.querySelector('[aria-hidden="true"]');
       expect(pill).toHaveTextContent(String(count));
-      expect(pill).toHaveClass("bg-accent", "rounded-full");
+      expect(pill).toHaveClass("bg-primary", "rounded-full");
       expect(container.querySelector(".sr-only")).toHaveTextContent(sentence);
       expect(container.textContent).toBe(`${count} ${sentence}`);
     },

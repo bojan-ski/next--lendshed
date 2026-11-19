@@ -7,9 +7,9 @@ const CARDS = [2, 1, 2, 0, 0];
 
 export default function AccountSkeleton() {
   return (
-    <div aria-hidden className="flex flex-col gap-6">
+    <div aria-hidden className="grid items-start gap-6 lg:grid-cols-2 lg:gap-7">
       {CARDS.map((fields, card) => (
-        <Card key={card} className="flex flex-col gap-4 p-6">
+        <Card key={card} className="flex flex-col gap-4 p-6 sm:px-8 sm:py-7.5">
           <div className="h-7 w-40 rounded-control bg-neutral-soft" />
           {Array.from({ length: fields }, (_, field) => (
             <div key={field} className="flex flex-col gap-1.5">

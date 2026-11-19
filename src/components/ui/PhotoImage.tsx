@@ -3,6 +3,7 @@
 import Image from "next/image";
 import { useState } from "react";
 import PhotoPlaceholder from "@/components/ui/PhotoPlaceholder";
+import type { Hue } from "@/lib/text/hue";
 import type { PhotoDTO } from "@/types/item";
 
 type PhotoImageProps = {
@@ -11,6 +12,7 @@ type PhotoImageProps = {
   className?: string;
   fallbackClassName?: string;
   unoptimized?: boolean;
+  hue?: Hue;
 };
 
 // The photo's own size, so next/image only ever asks for the one 640 variant.
@@ -22,11 +24,14 @@ export default function PhotoImage({
   className,
   fallbackClassName,
   unoptimized,
+  hue,
 }: PhotoImageProps) {
   const [failedUrl, setFailedUrl] = useState<string | null>(null);
 
   if (failedUrl === photo.url) {
-    return <PhotoPlaceholder className={fallbackClassName ?? className} />;
+    return (
+      <PhotoPlaceholder className={fallbackClassName ?? className} hue={hue} />
+    );
   }
   return (
     <Image

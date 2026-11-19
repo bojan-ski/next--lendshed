@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import "./globals.css";
-import { atkinson } from "./fonts";
+import { atkinson, bricolage } from "./fonts";
 import { t } from "@/lib/text/interpolate";
 import { publicEnv } from "@/lib/env/public";
 import { app } from "@/strings/app";
@@ -18,7 +18,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en" className={atkinson.variable}>
+    <html lang="en" className={`${atkinson.variable} ${bricolage.variable}`}>
       <body className="min-h-dvh bg-page text-ink antialiased">{children}</body>
     </html>
   );

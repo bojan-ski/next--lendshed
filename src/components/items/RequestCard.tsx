@@ -1,6 +1,5 @@
 import Link from "next/link";
 import RequestLoanForm from "@/components/items/RequestLoanForm";
-import Card from "@/components/ui/Card";
 import Notice from "@/components/ui/Notice";
 import { addDays } from "@/lib/dates/dates";
 import { REQUEST_AHEAD_DAYS, REQUEST_LIMITS } from "@/lib/loans/limits";
@@ -19,7 +18,7 @@ function BlockedLine({
     return (
       <>
         {requestForm.blockedContactDetails}{" "}
-        <Link href="/account" className="font-bold text-accent underline">
+        <Link href="/account" className="font-bold text-accent-ink underline">
           {requestForm.accountLink}
         </Link>
       </>
@@ -33,8 +32,8 @@ function BlockedLine({
 // Another member's item only: the form, or why it can't be requested now.
 export default function RequestCard({ item, today }: RequestCardProps) {
   return (
-    <Card className="flex flex-col gap-4 p-6">
-      <h2 className="text-xl font-bold">{requestForm.heading}</h2>
+    <div className="surface-accent flex flex-col gap-4.5 rounded-card p-6 sm:p-8">
+      <h2 className="type-section-title lg:text-4xl">{requestForm.heading}</h2>
       {item.requestBlock === null ? (
         <RequestLoanForm
           itemId={item.id}
@@ -48,6 +47,6 @@ export default function RequestCard({ item, today }: RequestCardProps) {
           <BlockedLine block={item.requestBlock} />
         </Notice>
       )}
-    </Card>
+    </div>
   );
 }

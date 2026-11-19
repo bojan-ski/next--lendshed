@@ -26,42 +26,50 @@ export default async function AccountSections() {
   const details = await getAccount(viewer.id, requestToday());
 
   return (
-    <>
-      <AccountCard id="profile" heading={account.profileHeading}>
-        <ProfileForm
-          name={details.displayName}
-          area={details.area}
-          email={details.email}
-        />
-      </AccountCard>
-      <AccountCard id="contact" heading={account.contactHeading}>
-        <ContactDetailsForm
-          contactDetails={details.contactDetails}
-          locked={details.contactDetailsLocked}
-        />
-      </AccountCard>
-      <AccountCard id="password" heading={account.passwordHeading}>
-        <ChangePasswordForm />
-      </AccountCard>
-      <AccountCard id="sign-out" heading={account.signOutHeading}>
-        <form action={signOut}>
-          <Button type="submit" variant="outline" className="w-full sm:w-auto">
-            {account.signOut}
-          </Button>
-        </form>
-      </AccountCard>
-      <AccountCard id="delete-account" heading={account.deleteHeading}>
-        {details.deletion.reason ? (
-          <p className="text-sm text-muted">
-            {blockedText[details.deletion.reason]}
-          </p>
-        ) : (
-          <>
-            <p className="text-sm text-muted">{account.deleteBody}</p>
-            <DeleteAccountButton isOrganizer={viewer.role === "organizer"} />
-          </>
-        )}
-      </AccountCard>
-    </>
+    <div className="grid items-start gap-6 lg:grid-cols-2 lg:gap-7">
+      <div className="flex min-w-0 flex-col gap-6">
+        <AccountCard id="profile" heading={account.profileHeading}>
+          <ProfileForm
+            name={details.displayName}
+            area={details.area}
+            email={details.email}
+          />
+        </AccountCard>
+        <AccountCard id="contact" heading={account.contactHeading}>
+          <ContactDetailsForm
+            contactDetails={details.contactDetails}
+            locked={details.contactDetailsLocked}
+          />
+        </AccountCard>
+      </div>
+      <div className="flex min-w-0 flex-col gap-6">
+        <AccountCard id="password" heading={account.passwordHeading}>
+          <ChangePasswordForm />
+        </AccountCard>
+        <AccountCard id="sign-out" heading={account.signOutHeading}>
+          <form action={signOut}>
+            <Button
+              type="submit"
+              variant="outline"
+              className="w-full sm:w-auto"
+            >
+              {account.signOut}
+            </Button>
+          </form>
+        </AccountCard>
+        <AccountCard id="delete-account" heading={account.deleteHeading}>
+          {details.deletion.reason ? (
+            <p className="text-sm text-muted">
+              {blockedText[details.deletion.reason]}
+            </p>
+          ) : (
+            <>
+              <p className="text-sm text-muted">{account.deleteBody}</p>
+              <DeleteAccountButton isOrganizer={viewer.role === "organizer"} />
+            </>
+          )}
+        </AccountCard>
+      </div>
+    </div>
   );
 }
