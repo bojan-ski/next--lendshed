@@ -170,10 +170,10 @@ describe("indexing: the derived segment walk", () => {
     ]);
   });
 
-  test("the root layout has no openGraph, twitter or metadataBase", () => {
+  test("the root layout owns the one share card: openGraph, twitter and metadataBase", () => {
     const { properties } = inspect(ROOT_LAYOUT);
-    for (const key of ["openGraph", "twitter", "metadataBase"]) {
-      expect(properties.has(key), key).toBe(false);
+    for (const key of ["openGraph", "twitter", "metadataBase", "description"]) {
+      expect(properties.has(key), key).toBe(true);
     }
   });
 
