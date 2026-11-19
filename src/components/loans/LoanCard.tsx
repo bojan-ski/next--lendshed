@@ -1,6 +1,5 @@
 import ButtonLink from "@/components/ui/ButtonLink";
 import Card from "@/components/ui/Card";
-import { Icon } from "@/components/ui/icons";
 import PhotoImage from "@/components/ui/PhotoImage";
 import PhotoPlaceholder from "@/components/ui/PhotoPlaceholder";
 import StatusLabel from "@/components/ui/StatusLabel";
@@ -45,8 +44,8 @@ export default function LoanCard({
               {loan.item.title}
             </Heading>
             {loan.changed && (
-              <span className="inline-flex shrink-0 text-accent">
-                <Icon name="dot" size={10} aria-hidden />
+              <span className="inline-flex shrink-0">
+                <span aria-hidden className="size-2.5 rounded-full bg-accent" />
                 <span className="sr-only">{loanCard.changed}</span>
               </span>
             )}

@@ -8,7 +8,7 @@ type LoanContactCardProps = { contact: { name: string; details: string } };
 export default function LoanContactCard({ contact }: LoanContactCardProps) {
   return (
     <div className="surface-accent flex min-w-0 flex-col gap-4 rounded-card p-6 sm:px-8 sm:py-7.5">
-      <h2 className="truncate type-section-title">
+      <h2 className="type-section-title wrap-break-word">
         {t(loanPage.contactHeading, { name: contact.name })}
       </h2>
       <p className="flex min-w-0 items-center gap-3.5">

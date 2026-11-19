@@ -42,7 +42,9 @@ export default function UsageMeterCard({
       </h2>
       <p className="font-display text-4xl font-extrabold">
         {t(usage.usedOf, { used: usedText, limit: limitText })}{" "}
-        <span className="font-sans text-md font-normal text-muted">{t(usage.percent, { percent })}</span>
+        <span className="block font-sans text-md font-normal text-muted">
+          {t(usage.percent, { percent })}
+        </span>
       </p>
       <div
         role="meter"

@@ -60,7 +60,9 @@ function ItemRow({ item }: { item: LoanDetailDTO["item"] }) {
           {item.title}
         </Link>
       ) : (
-        <p className="min-w-0 text-lg font-bold wrap-break-word">{item.title}</p>
+        <p className="min-w-0 text-lg font-bold wrap-break-word">
+          {item.title}
+        </p>
       )}
     </div>
   );
@@ -69,7 +71,7 @@ function ItemRow({ item }: { item: LoanDetailDTO["item"] }) {
 function MessageCard({ loan }: { loan: LoanDetailDTO }) {
   return (
     <Card className="flex min-w-0 flex-col gap-3 p-6 sm:px-8 sm:py-7.5">
-      <h2 className="truncate type-section-title">
+      <h2 className="type-section-title wrap-break-word">
         {loan.viewerRole === "borrower"
           ? loanPage.messageBorrower
           : t(loanPage.messageOther, { borrower: loan.borrower.displayName })}

@@ -43,7 +43,9 @@ export default function ItemCard({
         <PhotoPlaceholder iconSize={48} className={PHOTO_BOX} hue={hue} />
       )}
       <div className="flex min-w-0 flex-col gap-1.5 px-4 pt-3.5 pb-4.5">
-        <Heading className="truncate type-card-title">{item.title}</Heading>
+        <Heading className="line-clamp-2 type-card-title wrap-break-word sm:line-clamp-1">
+          {item.title}
+        </Heading>
         <p
           style={hue === undefined ? undefined : hueStyle(hue)}
           className={cn(
