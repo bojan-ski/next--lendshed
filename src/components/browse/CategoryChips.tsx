@@ -9,7 +9,7 @@ import type { CategoryDTO } from "@/types/categories";
 // The dot is a pseudo-element, so the link's text stays the category name.
 function chipClasses(current: boolean, hasHue: boolean) {
   return cn(
-    "inline-flex min-h-11 items-center gap-2.5 rounded-full border-2 px-4.5 motion-safe:transition-[background-color] motion-safe:duration-150",
+    "inline-flex min-h-11 items-center gap-2.5 rounded-full whitespace-nowrap border-2 px-4.5 motion-safe:transition-[background-color] motion-safe:duration-150",
     "before:size-2.5 before:shrink-0 before:rounded-full before:content-['']",
     hasHue ? "before:bg-hue-strong" : "before:bg-current",
     current
@@ -21,7 +21,9 @@ function chipClasses(current: boolean, hasHue: boolean) {
   );
 }
 
-// A chip keeps the search and resets the page.
+// A chip keeps the search and resets the page. Under 640 px the chips scroll
+// sideways in one row, bleeding to the screen edges past the 16 px gutter; the
+// vertical padding keeps the focus ring inside the scroller's clip.
 export default function CategoryChips({
   categories,
   query,
@@ -36,11 +38,11 @@ export default function CategoryChips({
   ];
   return (
     <nav aria-label={home.categoriesLabel}>
-      <ul className="flex flex-wrap gap-2.5">
+      <ul className="-mx-4 flex gap-2.5 overflow-x-auto px-4 py-1 scrollbar-none sm:mx-0 sm:flex-wrap sm:overflow-visible sm:px-0">
         {chips.map((chip) => {
           const current = chip.id === query.category;
           return (
-            <li key={chip.id ?? "all"}>
+            <li key={chip.id ?? "all"} className="shrink-0">
               <Link
                 href={browseHref({ q: query.q, category: chip.id })}
                 aria-current={current ? "page" : undefined}

@@ -24,7 +24,6 @@ export const members = {
   },
   emptyHeading: "No one matches “{q}”",
   emptyBody: "Check the spelling, or search for part of a name.",
-  back: "Members",
   backLabel: "Back to members",
   memberSince: "Member since {date}",
   loansHeading: "Loans still open",

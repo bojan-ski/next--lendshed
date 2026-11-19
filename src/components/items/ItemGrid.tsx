@@ -3,7 +3,7 @@ import type { Hue } from "@/lib/text/hue";
 import type { ItemCardDTO } from "@/types/item";
 
 export const ITEM_GRID =
-  "grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4 lg:gap-5";
+  "grid grid-cols-1 gap-4 sm:grid-cols-3 lg:grid-cols-4 lg:gap-5";
 
 type ItemGridProps = {
   items: ItemCardDTO[];

@@ -16,6 +16,7 @@ import { formatDateRange } from "@/lib/dates/dates";
 import { requestToday } from "@/lib/dates/request-today";
 import { t } from "@/lib/text/interpolate";
 import { loanStatus } from "@/lib/text/status";
+import { app } from "@/strings/app";
 import { loanPage } from "@/strings/loanPage";
 import type { LoanDetailDTO } from "@/types/loan";
 
@@ -89,10 +90,11 @@ function BackLink({ role }: { role: LoanDetailDTO["viewerRole"] }) {
   return (
     <Link
       href={`/my/loans?tab=${role === "owner" ? "lending" : "borrowing"}`}
+      aria-label={loanPage.back}
       className={backLinkClasses}
     >
       <Icon name="arrow-left" aria-hidden />
-      {loanPage.back}
+      {app.back}
     </Link>
   );
 }

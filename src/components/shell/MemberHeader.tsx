@@ -38,7 +38,7 @@ export default function MemberHeader({
         <Wordmark />
         <nav
           aria-label={nav.label}
-          className="order-last w-full sm:order-none sm:w-auto"
+          className="order-last w-full sm:order-0 sm:w-auto"
         >
           <ul className="-mx-2.5 flex flex-wrap items-center gap-1 sm:mx-0 sm:gap-1.5">
             {entries.map((entry) => (
